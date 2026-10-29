@@ -1,0 +1,21 @@
+{
+  "name": "crd-model-api-stub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "모델 API 계약(contracts/model-api.openapi.yaml)의 결정적 스텁 — 개발·CI 용",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^4.22.3"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.25",
+    "@types/node": "^20.19.43",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

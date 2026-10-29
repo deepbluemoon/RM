@@ -1,0 +1,952 @@
+{
+  "load": {
+    "sec": 5.67,
+    "rss_mb_after_load": 358,
+    "m1": {
+      "class": "TorchLoophole",
+      "id": "M1",
+      "name": "loophole-klue-roberta-base",
+      "base": "klue/roberta-base",
+      "path": "loophole-klue-roberta-base",
+      "model_version": "loophole-klue-roberta-base@2026-09-29",
+      "trained_data_date": "2026-09-29"
+    },
+    "m2": {
+      "class": "TorchIllegal",
+      "id": "M2",
+      "name": "illegal-klue-roberta-base",
+      "base": "klue/roberta-base",
+      "path": "illegal-klue-roberta-base",
+      "model_version": "illegal-klue-roberta-base@2026-09-29",
+      "trained_data_date": "2026-09-29"
+    }
+  },
+  "reproduce": {
+    "eval": {
+      "m1": {
+        "n": 363,
+        "pos": 72,
+        "tp": 54,
+        "fp": 15,
+        "fn": 18,
+        "tn": 276,
+        "accuracy": 0.9091,
+        "precision": 0.7826,
+        "recall": 0.75,
+        "f1": 0.766,
+        "auc": 0.9382
+      },
+      "m2": {
+        "n": 363,
+        "pos": 36,
+        "tp": 26,
+        "fp": 16,
+        "fn": 10,
+        "tn": 311,
+        "accuracy": 0.9284,
+        "precision": 0.619,
+        "recall": 0.7222,
+        "f1": 0.6667,
+        "auc": 0.9473
+      },
+      "sec": {
+        "m1": 19.6,
+        "m2": 19.9
+      },
+      "m1_threshold": {
+        "0.2": {
+          "precision": 0.6703,
+          "recall": 0.8472,
+          "f1": 0.7485
+        },
+        "0.3": {
+          "precision": 0.7179,
+          "recall": 0.7778,
+          "f1": 0.7467
+        },
+        "0.5": {
+          "precision": 0.7826,
+          "recall": 0.75,
+          "f1": 0.766
+        },
+        "0.7": {
+          "precision": 0.8136,
+          "recall": 0.6667,
+          "f1": 0.7328
+        },
+        "0.9": {
+          "precision": 0.814,
+          "recall": 0.4861,
+          "f1": 0.6087
+        }
+      },
+      "m2_threshold": {
+        "0.2": {
+          "precision": 0.5273,
+          "recall": 0.8056,
+          "f1": 0.6374
+        },
+        "0.3": {
+          "precision": 0.5686,
+          "recall": 0.8056,
+          "f1": 0.6667
+        },
+        "0.5": {
+          "precision": 0.619,
+          "recall": 0.7222,
+          "f1": 0.6667
+        },
+        "0.7": {
+          "precision": 0.6486,
+          "recall": 0.6667,
+          "f1": 0.6575
+        },
+        "0.9": {
+          "precision": 0.8333,
+          "recall": 0.4167,
+          "f1": 0.5556
+        }
+      },
+      "by_group": {
+        "ftc/dispute": {
+          "n": 10,
+          "m1_pos_rate": 0.7,
+          "m2_pos_rate": 0.5
+        },
+        "ftc/illegal": {
+          "n": 36,
+          "m1_pos_rate": 0.778,
+          "m2_pos_rate": 0.722
+        },
+        "ftc/unfair": {
+          "n": 26,
+          "m1_pos_rate": 0.731,
+          "m2_pos_rate": 0.231
+        },
+        "ftc_corrected/normal": {
+          "n": 13,
+          "m1_pos_rate": 0.462,
+          "m2_pos_rate": 0.077
+        },
+        "terms/normal": {
+          "n": 278,
+          "m1_pos_rate": 0.032,
+          "m2_pos_rate": 0.014
+        }
+      },
+      "m1_type_acc_on_risky": 0.708,
+      "m2_law_top1_acc_on_illegal": 1.0,
+      "m2_related_laws_seen": [
+        "약관의 규제에 관한 법률"
+      ]
+    },
+    "dev": {
+      "m1": {
+        "n": 253,
+        "pos": 99,
+        "tp": 85,
+        "fp": 7,
+        "fn": 14,
+        "tn": 147,
+        "accuracy": 0.917,
+        "precision": 0.9239,
+        "recall": 0.8586,
+        "f1": 0.8901,
+        "auc": 0.9737
+      },
+      "m2": {
+        "n": 253,
+        "pos": 62,
+        "tp": 48,
+        "fp": 16,
+        "fn": 14,
+        "tn": 175,
+        "accuracy": 0.8814,
+        "precision": 0.75,
+        "recall": 0.7742,
+        "f1": 0.7619,
+        "auc": 0.9423
+      },
+      "sec": {
+        "m1": 10.9,
+        "m2": 10.9
+      },
+      "m1_threshold": {
+        "0.2": {
+          "precision": 0.89,
+          "recall": 0.899,
+          "f1": 0.8945
+        },
+        "0.3": {
+          "precision": 0.8878,
+          "recall": 0.8788,
+          "f1": 0.8832
+        },
+        "0.5": {
+          "precision": 0.9239,
+          "recall": 0.8586,
+          "f1": 0.8901
+        },
+        "0.7": {
+          "precision": 0.9286,
+          "recall": 0.7879,
+          "f1": 0.8525
+        },
+        "0.9": {
+          "precision": 0.9583,
+          "recall": 0.4646,
+          "f1": 0.6259
+        }
+      },
+      "m2_threshold": {
+        "0.2": {
+          "precision": 0.7324,
+          "recall": 0.8387,
+          "f1": 0.782
+        },
+        "0.3": {
+          "precision": 0.7353,
+          "recall": 0.8065,
+          "f1": 0.7692
+        },
+        "0.5": {
+          "precision": 0.75,
+          "recall": 0.7742,
+          "f1": 0.7619
+        },
+        "0.7": {
+          "precision": 0.7458,
+          "recall": 0.7097,
+          "f1": 0.7273
+        },
+        "0.9": {
+          "precision": 0.88,
+          "recall": 0.3548,
+          "f1": 0.5057
+        }
+      },
+      "by_group": {
+        "ftc/dispute": {
+          "n": 11,
+          "m1_pos_rate": 0.818,
+          "m2_pos_rate": 0.545
+        },
+        "ftc/illegal": {
+          "n": 62,
+          "m1_pos_rate": 0.919,
+          "m2_pos_rate": 0.774
+        },
+        "ftc/unfair": {
+          "n": 26,
+          "m1_pos_rate": 0.731,
+          "m2_pos_rate": 0.269
+        },
+        "ftc_corrected/normal": {
+          "n": 3,
+          "m1_pos_rate": 1.0,
+          "m2_pos_rate": 0.333
+        },
+        "standard_terms/normal": {
+          "n": 52,
+          "m1_pos_rate": 0.058,
+          "m2_pos_rate": 0.038
+        },
+        "terms/normal": {
+          "n": 99,
+          "m1_pos_rate": 0.01,
+          "m2_pos_rate": 0.0
+        }
+      },
+      "m1_type_acc_on_risky": 0.646,
+      "m2_law_top1_acc_on_illegal": 0.984,
+      "m2_related_laws_seen": [
+        "약관의 규제에 관한 법률"
+      ]
+    }
+  },
+  "determinism": {
+    "m1_identical": true,
+    "m2_identical": true
+  },
+  "batch_invariance": {
+    "m1": {
+      "n": 96,
+      "max_abs_diff": 0.0,
+      "rows_differ": 0,
+      "label_flips": 0
+    },
+    "m2": {
+      "n": 96,
+      "max_abs_diff": 0.0,
+      "rows_differ": 0,
+      "label_flips": 0
+    }
+  },
+  "latency": {
+    "eval_token_len": {
+      "median": 171,
+      "p90": 490,
+      "max": 1700,
+      "over_512": 32
+    },
+    "m1_eval363_sec": 19.6,
+    "m1_clauses_per_sec": 18.5,
+    "m2_eval363_sec": 19.9,
+    "m2_clauses_per_sec": 18.2,
+    "by_length_batch16": {
+      "short(<150자)": {
+        "n": 48,
+        "m1_ms_per_clause": 10.6
+      },
+      "mid(150~400자)": {
+        "n": 48,
+        "m1_ms_per_clause": 22.1
+      },
+      "long(>=400자)": {
+        "n": 48,
+        "m1_ms_per_clause": 57.1
+      }
+    },
+    "single_clause_ms_median": 34.0,
+    "doc100_serial_sec": 7.6,
+    "rss_mb_peak": 2132
+  },
+  "probes": {
+    "pairs": [
+      {
+        "name": "면책",
+        "m1_bad": 0.9157,
+        "m1_fixed": 0.8786,
+        "m2_bad": 0.8988,
+        "m2_fixed": 0.6678
+      },
+      {
+        "name": "환불불가",
+        "m1_bad": 0.9579,
+        "m1_fixed": 0.9507,
+        "m2_bad": 0.789,
+        "m2_fixed": 0.0964
+      },
+      {
+        "name": "일방변경",
+        "m1_bad": 0.9499,
+        "m1_fixed": 0.9572,
+        "m2_bad": 0.9273,
+        "m2_fixed": 0.04
+      },
+      {
+        "name": "위약금",
+        "m1_bad": 0.9802,
+        "m1_fixed": 0.9781,
+        "m2_bad": 0.8857,
+        "m2_fixed": 0.5457
+      },
+      {
+        "name": "권리제한",
+        "m1_bad": 0.8541,
+        "m1_fixed": 0.8224,
+        "m2_bad": 0.8848,
+        "m2_fixed": 0.0882
+      },
+      {
+        "name": "청약철회",
+        "m1_bad": 0.9695,
+        "m1_fixed": 0.9755,
+        "m2_bad": 0.8157,
+        "m2_fixed": 0.02
+      }
+    ],
+    "length_padding": [
+      {
+        "name": "면책",
+        "m1_alone": 0.9157,
+        "m1_neutral_before": 0.0213,
+        "m1_neutral_after": 0.0229,
+        "m2_alone": 0.8988,
+        "m2_neutral_before": 0.0131,
+        "m2_neutral_after": 0.0139
+      },
+      {
+        "name": "환불불가",
+        "m1_alone": 0.9579,
+        "m1_neutral_before": 0.0397,
+        "m1_neutral_after": 0.0473,
+        "m2_alone": 0.789,
+        "m2_neutral_before": 0.01,
+        "m2_neutral_after": 0.01
+      },
+      {
+        "name": "일방변경",
+        "m1_alone": 0.9499,
+        "m1_neutral_before": 0.0192,
+        "m1_neutral_after": 0.0261,
+        "m2_alone": 0.9273,
+        "m2_neutral_before": 0.01,
+        "m2_neutral_after": 0.0101
+      },
+      {
+        "name": "위약금",
+        "m1_alone": 0.9802,
+        "m1_neutral_before": 0.0431,
+        "m1_neutral_after": 0.0958,
+        "m2_alone": 0.8857,
+        "m2_neutral_before": 0.0101,
+        "m2_neutral_after": 0.0101
+      },
+      {
+        "name": "권리제한",
+        "m1_alone": 0.8541,
+        "m1_neutral_before": 0.0183,
+        "m1_neutral_after": 0.0186,
+        "m2_alone": 0.8848,
+        "m2_neutral_before": 0.0104,
+        "m2_neutral_after": 0.0105
+      },
+      {
+        "name": "청약철회",
+        "m1_alone": 0.9695,
+        "m1_neutral_before": 0.0245,
+        "m1_neutral_after": 0.0402,
+        "m2_alone": 0.8157,
+        "m2_neutral_before": 0.0099,
+        "m2_neutral_after": 0.0097
+      }
+    ],
+    "contract_type": {
+      "ecommerce": {
+        "m1_bad_mean": 0.938,
+        "m1_fixed_mean": 0.927,
+        "m2_bad_mean": 0.867,
+        "m2_fixed_mean": 0.243
+      },
+      "subscription": {
+        "m1_bad_mean": 0.955,
+        "m1_fixed_mean": 0.942,
+        "m2_bad_mean": 0.867,
+        "m2_fixed_mean": 0.292
+      },
+      "installment": {
+        "m1_bad_mean": 0.956,
+        "m1_fixed_mean": 0.944,
+        "m2_bad_mean": 0.854,
+        "m2_fixed_mean": 0.274
+      },
+      "door_to_door": {
+        "m1_bad_mean": 0.952,
+        "m1_fixed_mean": 0.941,
+        "m2_bad_mean": 0.882,
+        "m2_fixed_mean": 0.304
+      },
+      "general_consumer": {
+        "m1_bad_mean": 0.952,
+        "m1_fixed_mean": 0.94,
+        "m2_bad_mean": 0.903,
+        "m2_fixed_mean": 0.51
+      },
+      "out_of_scope": {
+        "m1_bad_mean": 0.957,
+        "m1_fixed_mean": 0.945,
+        "m2_bad_mean": 0.873,
+        "m2_fixed_mean": 0.289
+      }
+    },
+    "title": [
+      {
+        "name": "면책",
+        "m1": [
+          0.9157,
+          0.9131,
+          0.9131
+        ],
+        "m2": [
+          0.8988,
+          0.8844,
+          0.8974
+        ]
+      },
+      {
+        "name": "환불불가",
+        "m1": [
+          0.9579,
+          0.9562,
+          0.9545
+        ],
+        "m2": [
+          0.789,
+          0.709,
+          0.7691
+        ]
+      },
+      {
+        "name": "일방변경",
+        "m1": [
+          0.9499,
+          0.9459,
+          0.935
+        ],
+        "m2": [
+          0.9273,
+          0.9262,
+          0.9262
+        ]
+      }
+    ],
+    "truncation": {
+      "neutral_tokens": 590,
+      "m1": {
+        "alone": 0.9157,
+        "risk_at_end": 0.0173,
+        "risk_at_start": 0.0175
+      },
+      "m2": {
+        "alone": 0.8988,
+        "risk_at_end": 0.0095,
+        "risk_at_start": 0.0099
+      }
+    },
+    "edge": {
+      "empty": {
+        "m1": 0.1579,
+        "m2": 0.0749
+      },
+      "one_char": {
+        "m1": 0.1361,
+        "m2": 0.0863
+      },
+      "english_disclaimer": {
+        "m1": 0.5515,
+        "m2": 0.3682
+      },
+      "heading_only": {
+        "m1": 0.1652,
+        "m2": 0.2824
+      },
+      "neutral_only": {
+        "m1": 0.0188,
+        "m2": 0.0104
+      }
+    },
+    "padding_curve": {
+      "면책": [
+        {
+          "k": 0,
+          "chars": 51,
+          "m1": 0.9157,
+          "m2": 0.8988
+        },
+        {
+          "k": 1,
+          "chars": 92,
+          "m1": 0.649,
+          "m2": 0.3125
+        },
+        {
+          "k": 2,
+          "chars": 136,
+          "m1": 0.0713,
+          "m2": 0.0233
+        },
+        {
+          "k": 3,
+          "chars": 171,
+          "m1": 0.0244,
+          "m2": 0.0141
+        },
+        {
+          "k": 4,
+          "chars": 205,
+          "m1": 0.0211,
+          "m2": 0.0114
+        },
+        {
+          "k": 5,
+          "chars": 230,
+          "m1": 0.0199,
+          "m2": 0.0112
+        },
+        {
+          "k": 6,
+          "chars": 268,
+          "m1": 0.0187,
+          "m2": 0.0106
+        }
+      ],
+      "환불불가": [
+        {
+          "k": 0,
+          "chars": 28,
+          "m1": 0.9579,
+          "m2": 0.789
+        },
+        {
+          "k": 1,
+          "chars": 69,
+          "m1": 0.9092,
+          "m2": 0.0591
+        },
+        {
+          "k": 2,
+          "chars": 113,
+          "m1": 0.3751,
+          "m2": 0.0117
+        },
+        {
+          "k": 3,
+          "chars": 148,
+          "m1": 0.0914,
+          "m2": 0.0099
+        },
+        {
+          "k": 4,
+          "chars": 182,
+          "m1": 0.0427,
+          "m2": 0.0093
+        },
+        {
+          "k": 5,
+          "chars": 207,
+          "m1": 0.0281,
+          "m2": 0.0093
+        },
+        {
+          "k": 6,
+          "chars": 245,
+          "m1": 0.02,
+          "m2": 0.0093
+        }
+      ],
+      "일방변경": [
+        {
+          "k": 0,
+          "chars": 42,
+          "m1": 0.9499,
+          "m2": 0.9273
+        },
+        {
+          "k": 1,
+          "chars": 83,
+          "m1": 0.7084,
+          "m2": 0.1443
+        },
+        {
+          "k": 2,
+          "chars": 127,
+          "m1": 0.0435,
+          "m2": 0.0118
+        },
+        {
+          "k": 3,
+          "chars": 162,
+          "m1": 0.0221,
+          "m2": 0.0099
+        },
+        {
+          "k": 4,
+          "chars": 196,
+          "m1": 0.0247,
+          "m2": 0.0093
+        },
+        {
+          "k": 5,
+          "chars": 221,
+          "m1": 0.0222,
+          "m2": 0.0093
+        },
+        {
+          "k": 6,
+          "chars": 259,
+          "m1": 0.0189,
+          "m2": 0.0093
+        }
+      ],
+      "multi_paragraph": {
+        "chars": 113,
+        "m1": 0.099,
+        "m2": 0.0654
+      }
+    }
+  },
+  "d06_validation_m2": {
+    "note": "target 정의 다름(06=법적위험있음, v0=직접형). contract_type 은 ecommerce 로 고정. TEST 는 쓰지 않음",
+    "all": {
+      "n": 68,
+      "pos": 44,
+      "tp": 33,
+      "fp": 10,
+      "fn": 11,
+      "tn": 14,
+      "accuracy": 0.6912,
+      "precision": 0.7674,
+      "recall": 0.75,
+      "f1": 0.7586,
+      "auc": 0.715
+    },
+    "leak_rows": 35,
+    "no_leak": {
+      "n": 33,
+      "pos": 9,
+      "tp": 5,
+      "fp": 10,
+      "fn": 4,
+      "tn": 14,
+      "accuracy": 0.5758,
+      "precision": 0.3333,
+      "recall": 0.5556,
+      "f1": 0.4167,
+      "auc": 0.6389
+    },
+    "contract_type_values_in_06": [
+      "금융",
+      "중개",
+      "플랫폼"
+    ]
+  },
+  "gateway_e2e": {
+    "v1_models": {
+      "models": [
+        {
+          "id": "M1",
+          "name": "loophole-klue-roberta-base",
+          "base": "klue/roberta-base",
+          "path": "loophole-klue-roberta-base",
+          "model_version": "loophole-klue-roberta-base@2026-09-29",
+          "trained_data_date": "2026-09-29"
+        },
+        {
+          "id": "M2",
+          "name": "illegal-klue-roberta-base",
+          "base": "klue/roberta-base",
+          "path": "illegal-klue-roberta-base",
+          "model_version": "illegal-klue-roberta-base@2026-09-29",
+          "trained_data_date": "2026-09-29"
+        },
+        {
+          "id": "M3",
+          "name": "qwen3:4b-instruct-2507-q4_K_M",
+          "base": "Qwen/Qwen3-4B-Instruct-2507",
+          "path": "var/gguf/m3-bf16.gguf",
+          "model_version": "ollama:qwen3:4b-instruct-2507-q4_K_M",
+          "trained_data_date": null,
+          "ollama_digest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+          "state": "cold"
+        },
+        {
+          "id": "M4",
+          "name": "qwen3:4b-instruct-2507-q4_K_M",
+          "base": "Qwen/Qwen3-1.7B",
+          "path": "var/gguf/m4-bf16.gguf",
+          "model_version": "ollama:qwen3:4b-instruct-2507-q4_K_M",
+          "trained_data_date": null,
+          "ollama_digest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+          "state": "cold"
+        }
+      ],
+      "model_version": "crd-model-server@0.1.0",
+      "knowledge_date": null
+    },
+    "detect_loophole": {
+      "results": [
+        {
+          "clause_id": "c1",
+          "label": "loophole",
+          "type": "liability_avoid",
+          "score": 0.9157
+        },
+        {
+          "clause_id": "c2",
+          "label": "loophole",
+          "type": "liability_avoid",
+          "score": 0.8786
+        }
+      ],
+      "model_version": "loophole-klue-roberta-base@2026-09-29",
+      "knowledge_date": null
+    },
+    "detect_illegal": {
+      "results": [
+        {
+          "clause_id": "c1",
+          "label": "illegal",
+          "type": "약관의 규제에 관한 법률",
+          "related_laws": [
+            "약관의 규제에 관한 법률"
+          ],
+          "score": 0.8988
+        },
+        {
+          "clause_id": "c2",
+          "label": "illegal",
+          "type": "약관의 규제에 관한 법률",
+          "related_laws": [
+            "약관의 규제에 관한 법률"
+          ],
+          "score": 0.6678
+        }
+      ],
+      "model_version": "illegal-klue-roberta-base@2026-09-29",
+      "knowledge_date": null
+    },
+    "job40": {
+      "status": "done",
+      "done": 40,
+      "total": 40,
+      "sec": 1.6,
+      "model_versions": {
+        "M1": "loophole-klue-roberta-base@2026-09-29",
+        "M2": "illegal-klue-roberta-base@2026-09-29"
+      },
+      "errors": 0
+    },
+    "unauthorized_status": 401
+  },
+  "segment_max_experiment": {
+    "dev": {
+      "m1": {
+        "segments": 1177,
+        "sec": 18.5,
+        "all": {
+          "p": 0.426,
+          "r": 0.929,
+          "f1": 0.584,
+          "fp": 124,
+          "fn": 7
+        },
+        "long400": {
+          "p": 0.056,
+          "r": 1.0,
+          "f1": 0.105,
+          "fp": 85,
+          "fn": 0
+        },
+        "terms_normal_fp_rate": 0.808
+      },
+      "m2": {
+        "segments": 1177,
+        "sec": 19.1,
+        "all": {
+          "p": 0.285,
+          "r": 0.855,
+          "f1": 0.427,
+          "fp": 133,
+          "fn": 9
+        },
+        "long400": {
+          "p": 0.045,
+          "r": 1.0,
+          "f1": 0.087,
+          "fp": 84,
+          "fn": 0
+        },
+        "terms_normal_fp_rate": 0.768
+      },
+      "m1_whole": {
+        "all": {
+          "p": 0.924,
+          "r": 0.859,
+          "f1": 0.89,
+          "fp": 7,
+          "fn": 14
+        },
+        "long400": {
+          "p": 1.0,
+          "r": 1.0,
+          "f1": 1.0,
+          "fp": 0,
+          "fn": 0
+        },
+        "terms_normal_fp_rate": 0.01
+      },
+      "m2_whole": {
+        "all": {
+          "p": 0.75,
+          "r": 0.774,
+          "f1": 0.762,
+          "fp": 16,
+          "fn": 14
+        },
+        "long400": {
+          "p": 1.0,
+          "r": 0.75,
+          "f1": 0.857,
+          "fp": 0,
+          "fn": 1
+        },
+        "terms_normal_fp_rate": 0.0
+      }
+    },
+    "eval": {
+      "m1": {
+        "segments": 2020,
+        "sec": 26.3,
+        "all": {
+          "p": 0.224,
+          "r": 0.917,
+          "f1": 0.36,
+          "fp": 229,
+          "fn": 6
+        },
+        "long400": {
+          "p": 0.065,
+          "r": 1.0,
+          "f1": 0.122,
+          "fp": 130,
+          "fn": 0
+        },
+        "terms_normal_fp_rate": 0.777
+      },
+      "m2": {
+        "segments": 2020,
+        "sec": 28.0,
+        "all": {
+          "p": 0.13,
+          "r": 0.917,
+          "f1": 0.228,
+          "fp": 220,
+          "fn": 3
+        },
+        "long400": {
+          "p": 0.024,
+          "r": 1.0,
+          "f1": 0.048,
+          "fp": 120,
+          "fn": 0
+        },
+        "terms_normal_fp_rate": 0.665
+      },
+      "m1_whole": {
+        "all": {
+          "p": 0.783,
+          "r": 0.75,
+          "f1": 0.766,
+          "fp": 15,
+          "fn": 18
+        },
+        "long400": {
+          "p": 0.5,
+          "r": 0.222,
+          "f1": 0.308,
+          "fp": 2,
+          "fn": 7
+        },
+        "terms_normal_fp_rate": 0.032
+      },
+      "m2_whole": {
+        "all": {
+          "p": 0.619,
+          "r": 0.722,
+          "f1": 0.667,
+          "fp": 16,
+          "fn": 10
+        },
+        "long400": {
+          "p": 0.5,
+          "r": 0.333,
+          "f1": 0.4,
+          "fp": 1,
+          "fn": 2
+        },
+        "terms_normal_fp_rate": 0.014
+      }
+    }
+  }
+}

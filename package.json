@@ -1,0 +1,20 @@
+{
+  "name": "crd-workspace",
+  "private": true,
+  "description": "계약위험탐지서비스 — 루트 공용 도구(lint·format)만 둔다. 앱은 backend/·frontend/·tools/model-api-stub/",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint backend/src backend/scripts tools/model-api-stub/src frontend/src",
+    "format": "prettier --write \"backend/{src,scripts,tests}/**/*.ts\" \"tools/model-api-stub/src/**/*.ts\" \"frontend/src/**/*.{ts,vue,css}\"",
+    "secrets:scan": "node scripts/scan-secrets.mjs"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "eslint-plugin-vue": "^9.33.0",
+    "globals": "^15.15.0",
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1",
+    "vue-eslint-parser": "^9.4.3"
+  }
+}

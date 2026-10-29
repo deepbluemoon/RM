@@ -1,0 +1,1506 @@
+openapi: 3.0.3
+info:
+  title: 계약위험탐지서비스 웹 API (Vue 프론트엔드 ↔ Express 백엔드)
+  version: 0.2.0
+  description: |
+    화면 S0~S9(SD_02)가 호출하는 백엔드 REST API. 각 operation 의 `x-ipo` 는 SD_01 IPO 단계,
+    `x-gates` 는 그 호출에서 판정·발생할 수 있는 게이트다.
+
+    규약
+    - 기본 경로 `/api`. 화면 인증은 세션 쿠키(`crd.sid`, 아이디·비밀번호 로그인 — 전 화면 로그인 필수). 기기 쿠키 `crd_device` 는 폐기(2026-09-29).
+    - 외부 프로그램은 `/model/{path}` 를 발급 키(`Authorization: Bearer crd_…`)로 부른다(로그인 세션 불필요).
+    - 이용 한도(G4)는 없다(2026-09-29 로컬 사업자 모드부터). `Quota` 스키마는 이력으로만 남긴다.
+    - 갱신 2026-10-01(v0.2.0): 한도·취소 차감·소셜 전용 표현 정리, 외부 모델 API 의 허용 경로·요청 제한·근거 검색 없음 명시, 태그 추가.
+    - 게이트 차단은 항상 `GateError` 본문으로 응답한다. HTTP 코드 규약(SD_01 §14-2):
+      입력 게이트 G2·G3·G6 → 400/422, 자원 게이트 G5 → 503(G4 이용 한도는 현재 미사용),
+      권한 게이트 G8 → 401/403/404, G14 → 403, 일관성 게이트 G7 → 409.
+      부분 차단 게이트(G1·G9·G10·G11·G12·G13)는 200 응답 안의 `gates[]` 로 전달한다.
+    - 응답에 비식별화 전 텍스트·API 키를 싣지 않는다(BR-PRV-01·04, BR-API-02).
+    - 결과 계열 응답은 항상 `disclaimer` 와 `knowledgeDate` 를 포함한다(FR-030, C4).
+servers:
+  - url: /api
+
+tags:
+  - name: session
+  - name: intake
+    description: P1 분석 접수·사전검증 (S1)
+  - name: analysis
+    description: P2·P3 진행 (S2·S3)
+  - name: results
+    description: P4 결과 조회·설명 열람 (S4)
+  - name: feedback
+    description: P5 판정 피드백 (S5)
+  - name: history
+    description: P6 분석 기록·재분석 (S6)
+  - name: admin-knowledge
+    description: P0 근거 데이터 갱신 (S0)
+  - name: admin-eval
+    description: P7 탐지 품질 평가 (S7-O, S7-E)
+  - name: admin-feedback
+    description: P8 사용자 피드백 검토 (S8)
+  - name: admin-model-api
+    description: P9 API 활용 안내·서버 상태 (S9)
+  - name: model-api-public
+    description: 외부 프로그램용 모델 API 프록시 — 발급 키로 호출(2026-09-30)
+  - name: api-keys
+    description: 이용자별 API 키 발급·폐기(2026-09-30)
+  - name: admin-rbac
+    description: 역할 × 권한 표(화면 S10 은 2026-09-30 삭제, API 만 유지)
+
+paths:
+  # ------------------------------------------------------------------ session
+  /session:
+    get:
+      tags: [session]
+      summary: 현재 사용자·역할·권한 목록·로그인 화면 제공자(이용 한도 없음)
+      x-ipo: ['1.1']
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionInfo' }
+  /auth/{provider}/start:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { type: string, enum: [kakao, naver, dev] } }
+      - { name: returnTo, in: query, schema: { type: string }, description: 로그인 후 돌아갈 앱 내부 경로(/ 로 시작) }
+    get:
+      tags: [session]
+      summary: 소셜 로그인 시작(FR-043) — 화면에서는 숨김(2026-09-30, 기본 로그인 = /auth/login). state 쿠키 발급 후 제공자 인가 화면으로 302. dev 는 AUTH_DEV_PROVIDER=true 이고 production 이 아닐 때만(아니면 404)
+      responses:
+        '302': { description: 제공자 인가 URL 로 이동 }
+        '404': { description: 비활성 제공자, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /auth/{provider}/callback:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { type: string, enum: [kakao, naver, dev] } }
+      - { name: code, in: query, schema: { type: string } }
+      - { name: state, in: query, schema: { type: string } }
+    get:
+      tags: [session]
+      summary: 인가 코드 교환 → 제공자 식별자만 조회 → auth_identity 조회·생성(role=user) → 세션 재발급 후 returnTo 로 302. 비밀번호·토큰은 저장하지 않는다
+      responses:
+        '302': { description: 로그인 완료 후 앱으로 이동 }
+        '400': { description: state 불일치·코드 누락, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /auth/login:
+    post:
+      tags: [session]
+      summary: 아이디·비밀번호 로그인(2026-09-30) — 세션 재발급. 틀리면 어느 쪽이 틀렸는지 알리지 않는다
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [loginId, password]
+              properties:
+                loginId: { type: string }
+                password: { type: string, format: password }
+                returnTo: { type: string, description: 로그인 후 돌아갈 앱 내부 경로 }
+      responses:
+        '200': { description: 로그인됨, content: { application/json: { schema: { $ref: '#/components/schemas/LoginResult' } } } }
+        '401': { description: 아이디 또는 비밀번호 불일치, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /auth/signup:
+    post:
+      tags: [session]
+      summary: 회원가입(2026-09-30) — 사용자(user) 역할로 계정을 만들고 바로 로그인. 운영자 계정은 npm run admin:create-account 로만
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [loginId, password, name]
+              properties:
+                loginId: { type: string, description: '영문 소문자·숫자로 시작하는 4~32자(영문·숫자·. _ -)' }
+                password: { type: string, format: password, description: 8~72자, 영문과 숫자 포함 }
+                name: { type: string, maxLength: 20, description: 화면에 보일 이름 }
+                returnTo: { type: string }
+      responses:
+        '201': { description: 가입·로그인됨, content: { application/json: { schema: { $ref: '#/components/schemas/LoginResult' } } } }
+        '400': { description: 입력 형식 오류, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '409': { description: 이미 쓰는 아이디, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /auth/logout:
+    post:
+      tags: [session]
+      responses:
+        '204': { description: No Content }
+  /meta/codes:
+    get:
+      tags: [session]
+      summary: 코드 값·화면 표기 사전(위험 분류·유형·위험도·신뢰도·계약 유형·가림 유형)과 게이트 문구 사전(SD_02 §14-2)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+  /meta/privacy-notice:
+    get:
+      tags: [session]
+      summary: 개인정보 처리 방식 고지(FR-010) — 비식별화 대상 8종, 원본 24시간 보관, 삭제 방법
+      x-ipo: ['1.1']
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { html: { type: string } } } } } }
+  /model-server/status:
+    get:
+      tags: [session]
+      summary: 사용자 화면용 모델 서버 상태(C11) — ready/loading/unreachable 만. 코드별 구분은 S9 전용
+      x-ipo: ['1.6']
+      x-gates: [G5]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state, checkedAt]
+                properties:
+                  state: { type: string, enum: [ready, loading, unreachable] }
+                  checkedAt: { type: string, format: date-time }
+                  coldStart:
+                    type: boolean
+                    description: |
+                      공유 Ollama 는 keep_alive 5분 뒤 모델을 내린다. true 이면 M3·M4 중 메모리에 올라와 있지 않은
+                      모델이 있어 첫 호출에 적재 시간이 더 걸린다(분석은 가능 — G5 아님)
+                  warmupEstimateSec: { type: integer, nullable: true, description: '콜드 스타트 예상 추가 시간(초). ready 이고 모두 상주면 null' }
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, enum: [M1, M2, M3, M4] }
+                        state: { type: string, enum: [ready, loading, cold, missing, error] }
+
+  # ------------------------------------------------------------------ intake (P1)
+  /intake/uploads:
+    post:
+      tags: [intake]
+      summary: 파일 업로드 + 사전 검사(형식·크기·쪽수·암호화·손상). 원본은 임시 보관(분석 요청 미생성 시 1시간 후 삭제)
+      x-ipo: ['1.2', '1.3']
+      x-gates: [G2]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: 사전 검사 통과
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PrecheckResult' }
+        '400':
+          description: G2 파일 조건 미충족(검사 항목별 결과 포함)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/GateError'
+                  - type: object
+                    properties:
+                      checks: { type: array, items: { $ref: '#/components/schemas/PrecheckItem' } }
+        '413': { description: 50MB 초과(G2), content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /intake/url-fetches:
+    post:
+      tags: [intake]
+      summary: 약관 게시 웹페이지 본문 수집(원본 URL·수집 시각 기록)
+      x-ipo: ['1.4']
+      x-gates: [G3]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri, maxLength: 1000 }
+      responses:
+        '201':
+          description: 본문 수집 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sourceToken, sourceUrl, collectedAt, charCount]
+                properties:
+                  sourceToken: { type: string }
+                  sourceUrl: { type: string }
+                  collectedAt: { type: string, format: date-time }
+                  charCount: { type: integer }
+        '422': { description: G3 로그인 필요·접근 차단·본문 없음, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /analyses:
+    post:
+      tags: [intake]
+      summary: 분석 시작 — 업로드·URL 토큰(G2·G3)과 서버 상태(G5) 확인 후 분석 요청(H1) 생성, 지식 기준일 고정, P2 비동기 시작
+      description: |
+        G2→G3→G5 를 요청 행을 만들기 **전에** 판정한다(SD_01 §4-3, `intake.service.ts`). 이용 한도(G4)는 확인하지 않는다. 성공 시 진행 상태 "수신".
+        관점은 여기서 한 번만 정한다(U7) — 이후 변경 API 는 없다.
+      x-ipo: ['1.5', '1.6', '1.7']
+      x-gates: [G2, G3, G5]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [perspective, source]
+              properties:
+                perspective: { $ref: '#/components/schemas/Perspective' }
+                source:
+                  oneOf:
+                    - type: object
+                      required: [kind, uploadToken]
+                      properties: { kind: { type: string, enum: [file] }, uploadToken: { type: string } }
+                    - type: object
+                      required: [kind, sourceToken]
+                      properties: { kind: { type: string, enum: [url] }, sourceToken: { type: string } }
+                    - type: object
+                      required: [kind, text]
+                      properties: { kind: { type: string, enum: [text] }, text: { type: string, minLength: 1, maxLength: 2000000 } }
+      responses:
+        '201':
+          description: 분석 요청 생성
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId, knowledgeDate]
+                properties:
+                  requestId: { type: integer }
+                  knowledgeDate: { type: string, format: date }
+        '400': { description: 'invalid_body(형식 오류) 또는 G2·G3(만료·없는 토큰)', content: { application/json: { schema: { oneOf: [ { $ref: '#/components/schemas/GateError' }, { $ref: '#/components/schemas/Problem' } ] } } } }
+        '503': { description: G5 모델 서버 불가, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+
+  # ------------------------------------------------------------------ analysis (P2·P3)
+  /analyses/{requestId}:
+    parameters: [ { $ref: '#/components/parameters/RequestId' } ]
+    get:
+      tags: [analysis]
+      summary: 진행 상태 폴링(2초) — 레일(C1)·세부 줄(FR-024)·문서별 계약 유형 후보·열린 게이트
+      x-ipo: ['2.1-2.6', '3.1-3.8']
+      x-gates: [G5, G6, G7, G8]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AnalysisStatus' } } } }
+        '404': { description: G8 요청 없음·세션 불일치, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /analyses/{requestId}/documents/{documentId}/contract-type:
+    parameters:
+      - { $ref: '#/components/parameters/RequestId' }
+      - { name: documentId, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [analysis]
+      summary: 계약 유형 확인·수정·확정(H2 완성). 요청의 모든 문서가 확정되면 P3 분석 실행 시작
+      x-ipo: ['2.6', '3.1']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contractType]
+              properties:
+                contractType: { $ref: '#/components/schemas/ContractType' }
+      responses:
+        '200': { description: 확정, content: { application/json: { schema: { $ref: '#/components/schemas/AnalysisStatus' } } } }
+        '409': { description: 이미 확정됨 또는 G6 으로 중단된 요청, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /analyses/{requestId}/runs/{runId}/save:
+    parameters:
+      - { $ref: '#/components/parameters/RequestId' }
+      - { $ref: '#/components/parameters/RunId' }
+    post:
+      tags: [analysis]
+      summary: "\"결과 보기\" — 결과 저장(H3) + 사용 기록 usage_charge 1건(최초 분석만, 같은 트랜잭션). 한도 확인은 없다"
+      x-ipo: ['3.9', '6.7']
+      x-gates: [G7, G8]
+      responses:
+        '200':
+          description: 저장됨(멱등 — 이미 saved 이면 그대로 200)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [runId, resultUrl]
+                properties:
+                  runId: { type: integer }
+                  resultUrl: { type: string, example: /results/42 }
+        '409': { description: 'G7 결과 제공 보류(GateError) 또는 실행 미완료(Problem, code=run_not_completed — 게이트 아님)', content: { application/json: { schema: { oneOf: [ { $ref: '#/components/schemas/GateError' }, { $ref: '#/components/schemas/Problem' } ] } } } }
+
+  /analyses/{requestId}/cancel:
+    parameters: [ { $ref: '#/components/parameters/RequestId' } ]
+    post:
+      tags: [analysis]
+      summary: 사용자 분석 취소(FR-035(b)) — received~explaining 단계에서만. 요청 stopped·실행 aborted·대기 조항 unanalyzable, 원본 즉시 삭제 예약(같은 트랜잭션). 취소 차감(cancel_charge)은 기록하지 않는다
+      x-ipo: ['INC1']
+      x-gates: [G8]
+      responses:
+        '200':
+          description: 취소됨
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId]
+                properties:
+                  requestId: { type: integer }
+        '409': { description: 이미 completed·saved·stopped — 취소할 수 없음, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+
+  # ------------------------------------------------------------------ results (P4)
+  /results/{runId}:
+    parameters: [ { $ref: '#/components/parameters/RunId' } ]
+    get:
+      tags: [results]
+      summary: 결과 화면 진입 — 고지·기준일·관점·요약·계약 유형·위험도별 개수·근거 변경 안내·원문(조항 트리)·위험도순 목록
+      x-ipo: ['4.1', '4.2', '4.3']
+      x-gates: [G8]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ResultView' } } } }
+        '401': { description: G8 로그인 필요, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+        '403': { description: G8 본인 기록 아님, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+        '404': { description: G8 세션 만료·결과 없음, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /results/{runId}/clauses/{assessmentId}:
+    parameters:
+      - { $ref: '#/components/parameters/RunId' }
+      - { $ref: '#/components/parameters/AssessmentId' }
+    get:
+      tags: [results]
+      summary: 조항 판정 상세(C5) + 근거 목록(C6, 6항목)
+      x-ipo: ['4.4', '4.6']
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ClauseDetail' } } } }
+  /results/{runId}/clauses/{assessmentId}/explanation:
+    parameters:
+      - { $ref: '#/components/parameters/RunId' }
+      - { $ref: '#/components/parameters/AssessmentId' }
+    get:
+      tags: [results]
+      summary: 쉬운 설명(관점별) — 2차 단정 표현 검사, 근거 없는 주장 제외, 필요 시 같은 캐시 키로 1회 재생성
+      x-ipo: ['4.8', '4.9']
+      x-gates: [G9]
+      responses:
+        '200':
+          description: 설명 또는 G9(부분 차단 — 판정·근거는 계속 제공)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Explanation' }
+  /results/{runId}/clauses/{assessmentId}/comparison:
+    parameters:
+      - { $ref: '#/components/parameters/RunId' }
+      - { $ref: '#/components/parameters/AssessmentId' }
+    get:
+      tags: [results]
+      summary: 원문 대 법령 조문 / 원문 대 표준약관 비교 보기
+      x-ipo: ['4.10']
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Comparison' } } } }
+  /results/{runId}/clauses/{assessmentId}/similar-cases:
+    parameters:
+      - { $ref: '#/components/parameters/RunId' }
+      - { $ref: '#/components/parameters/AssessmentId' }
+    get:
+      tags: [results]
+      summary: 유사 공정위 사례 — 사실관계·판단·판단 근거 3구분(FR-028)
+      x-ipo: ['4.11']
+      responses:
+        '200':
+          description: OK (없으면 빈 배열 → 화면 "유사 사례 없음")
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/FtcCase' } }
+  /results/{runId}/clauses/{assessmentId}/rejudge:
+    parameters:
+      - { $ref: '#/components/parameters/RunId' }
+      - { $ref: '#/components/parameters/AssessmentId' }
+    post:
+      tags: [results]
+      summary: "\"분석 불가\" 조항 1건 다시 분석 — 당시 지식 기준일로(FR-039)"
+      x-ipo: ['4.5']
+      x-gates: [G5]
+      responses:
+        '200': { description: 새 판정, content: { application/json: { schema: { $ref: '#/components/schemas/ClauseDetail' } } } }
+        '409': { description: 분석 불가 조항이 아님, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '503': { description: G5 — 분석 불가 유지, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /results/{runId}/impacts:
+    parameters: [ { $ref: '#/components/parameters/RunId' } ]
+    get:
+      tags: [results, history]
+      summary: 분석 이후 근거 변경 내용(개정·폐지·신규 사례·표준약관 개정) — C9 [변경 내용 보기]
+      x-ipo: ['6.3']
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ResultImpact' } } } } }
+  /evidence/{evidenceVersionId}:
+    parameters:
+      - { name: evidenceVersionId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [results]
+      summary: 출처 드로어(D1) — 근거 6항목 + 사례 3구분
+      x-ipo: ['4.6', '4.7']
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Evidence' } } } }
+
+  # ------------------------------------------------------------------ feedback (P5)
+  /feedback/preview:
+    post:
+      tags: [feedback]
+      summary: 의견 비식별화 미리보기(저장 전 — SD_01 §8-3)
+      x-ipo: ['5.3']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [opinion], properties: { opinion: { type: string, maxLength: 2000 } } }
+      responses:
+        '200':
+          description: 가림 적용 미리보기
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  opinionDeid: { type: string }
+                  maskedTypes: { type: array, items: { $ref: '#/components/schemas/PiiType' } }
+  /feedback:
+    post:
+      tags: [feedback]
+      summary: 판정 피드백 제출(H4) — 대상 조항·판정·지식 기준일 연결, 상태=미검토. 판정은 바뀌지 않는다
+      x-ipo: ['5.1', '5.2', '5.4', '5.5']
+      x-gates: [G8]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assessmentId, feedbackType]
+              properties:
+                assessmentId: { type: integer }
+                feedbackType: { type: string, enum: [false_positive, false_negative] }
+                opinion: { type: string, maxLength: 2000, description: 선택. 서버가 다시 비식별화 후 저장 }
+      responses:
+        '201': { description: 접수, content: { application/json: { schema: { type: object, properties: { feedbackId: { type: integer }, notice: { type: string } } } } } }
+        '400': { description: '유형이 대상 판정과 맞지 않음(위험 판정→오탐만, 정상·분석 불가→미탐만)', content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '404': { description: G8 대상 결과 없음·세션 만료, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+
+  # ------------------------------------------------------------------ history (P6)
+  /history:
+    get:
+      tags: [history]
+      summary: 내 분석 기록 목록(최신순, 근거 변경 표시) — 로그인 필요
+      x-ipo: ['6.1']
+      x-gates: [G8]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/HistoryItem' } }
+                  nextCursor: { type: string, nullable: true }
+        '401': { description: G8 로그인 필요, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /history/{requestId}:
+    parameters: [ { $ref: '#/components/parameters/RequestId' } ]
+    get:
+      tags: [history]
+      summary: 기록 열람 — 요청의 실행(최초·재분석) 목록과 각 결과의 당시 지식 기준일
+      x-ipo: ['6.2']
+      x-gates: [G8]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/HistoryDetail' } } } }
+        '403': { description: G8 본인 기록 아님, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+    delete:
+      tags: [history]
+      summary: 문서와 결과 영구 삭제(FR-008) — 사용량 원장은 유지(run_id 만 NULL). 이 결과에 달린 피드백은 user_id·session_id·judgment_id 를 NULL 로 익명화해 보존(A16). 비로그인 소유자도 가능
+      x-ipo: ['6.4']
+      x-gates: [G8]
+      responses:
+        '204': { description: 삭제됨 }
+  /history/{requestId}/reanalyses:
+    parameters: [ { $ref: '#/components/parameters/RequestId' } ]
+    post:
+      tags: [history]
+      summary: 최신 지식 기준일로 재분석 — 서버 확인(G5)만 하고 보관된 비식별 조항으로 P3 재분석 모드(M4 미호출). 한도를 차감하지 않으며 한도를 다 쓴 사용자도 가능(FR-034·035(e))
+      x-ipo: ['6.5', '6.6']
+      x-gates: [G5, G8]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [prevRunId], properties: { prevRunId: { type: integer } } }
+      responses:
+        '202': { description: 재분석 실행 시작, content: { application/json: { schema: { type: object, properties: { runId: { type: integer }, knowledgeDate: { type: string, format: date } } } } } }
+        '503': { description: G5, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+
+  # ------------------------------------------------------------------ admin: knowledge (P0)
+  /admin/knowledge/versions:
+    get:
+      tags: [admin-knowledge]
+      summary: 지식 기준일 목록(활성·대체됨), 분석 기준 버전
+      x-gates: [G14]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/KnowledgeVersion' } } } } }
+  /admin/knowledge/ingest-batches:
+    post:
+      tags: [admin-knowledge]
+      summary: 근거 데이터 갱신 개시 — 기준일 이후 변경분 수집(4개 기관 병렬)
+      x-ipo: ['0.1', '0.2', '0.3']
+      x-gates: [G0, G1, G14]
+      responses:
+        '202': { description: 수집 시작, content: { application/json: { schema: { type: object, properties: { batchId: { type: integer } } } } } }
+  /admin/knowledge/ingest-batches/{batchId}:
+    parameters: [ { $ref: '#/components/parameters/BatchId' } ]
+    get:
+      tags: [admin-knowledge]
+      summary: 갱신 진행(레일)·기관별 수집 결과(G0)·반영 대상 판정 라벨(v_ingest_item_status)·검토 목록(G1)·반영 경과일
+      x-ipo: ['0.1-0.6']
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/IngestBatch' } } } }
+  /admin/knowledge/ingest-batches/{batchId}/retry:
+    parameters: [ { $ref: '#/components/parameters/BatchId' } ]
+    post:
+      tags: [admin-knowledge]
+      summary: G0 해제 — 다시 수집
+      responses:
+        '202': { description: 재수집 시작 }
+  /admin/knowledge/ingest-batches/{batchId}/items/{itemId}:
+    parameters:
+      - { $ref: '#/components/parameters/BatchId' }
+      - { name: itemId, in: path, required: true, schema: { type: integer } }
+    patch:
+      tags: [admin-knowledge]
+      summary: 항목 반영 포함 여부(include_flag) — 분리 실패(G1) 항목은 포함 불가(DB 거부)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [include], properties: { include: { type: boolean } } }
+      responses:
+        '200': { description: OK }
+        '409': { description: G1 분리 실패 항목, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /admin/knowledge/ingest-batches/{batchId}/approve:
+    parameters: [ { $ref: '#/components/parameters/BatchId' } ]
+    post:
+      tags: [admin-knowledge]
+      summary: 반영 승인 — 새 지식 기준일 생성·활성화(H0), 영향 결과 식별(H0b), 반영 기한 점검
+      x-ipo: ['0.4', '0.5', '0.6']
+      x-gates: [G0]
+      responses:
+        '200':
+          description: 새 기준일
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  knowledgeVersion: { $ref: '#/components/schemas/KnowledgeVersion' }
+                  impactedResultCount: { type: integer }
+                  deadlineWarnings: { type: array, items: { type: object, properties: { itemId: { type: integer }, elapsedDays: { type: integer } } } }
+        '409': { description: G0 수집 실패 상태, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+
+  # ------------------------------------------------------------------ admin: evaluation (P7)
+  /admin/eval/overview:
+    get:
+      tags: [admin-eval]
+      summary: 평가 화면 진입 — 검수 완료 평가 데이터 수(유형별), 지식 기준일·분석 기준 버전, 현재 model_version·학습 기준일
+      x-ipo: ['7.1']
+      x-gates: [G14]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+  /admin/eval/items:
+    get:
+      tags: [admin-eval]
+      summary: 평가 데이터 목록(검수 상태·출처·H5 후보 포함)
+      parameters:
+        - { name: reviewStatus, in: query, schema: { type: string, enum: [pending, accepted, rejected] } }
+        - { name: contractType, in: query, schema: { $ref: '#/components/schemas/ContractType' } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/EvalItem' } } } } }
+    post:
+      tags: [admin-eval]
+      summary: 평가 데이터 등록(새 라벨·H5 후보 승격) — 검수 전 pending
+      x-ipo: ['7.2']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clauseTextDeid, contractType, goldCategory, origin]
+              properties:
+                clauseTextDeid: { type: string }
+                contractType: { $ref: '#/components/schemas/ContractType' }
+                goldCategory: { $ref: '#/components/schemas/RiskCategory' }
+                origin: { type: string, enum: [new_label, feedback_candidate, synthetic] }
+                candidateId: { type: integer }
+                goldEvidenceItemIds: { type: array, items: { type: integer } }
+      responses:
+        '201': { description: Created }
+  /admin/eval/items/{evalItemId}/review:
+    parameters: [ { name: evalItemId, in: path, required: true, schema: { type: integer } } ]
+    post:
+      tags: [admin-eval]
+      summary: 법률 전문가 검수(S7-E) — 채택·반려. 인위적 변형·학습 중복은 채택 불가(G10, DB 거부)
+      x-ipo: ['7.2']
+      x-gates: [G10]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [decision], properties: { decision: { type: string, enum: [accepted, rejected] } } }
+      responses:
+        '200': { description: OK }
+        '409': { description: G10 해제 불가 조항, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /admin/eval/runs:
+    post:
+      tags: [admin-eval]
+      summary: 평가 시작 — 적격성 검사(G10·G12) → P3 평가 모드 일괄 추론 → 재현율·정밀도 계산
+      x-ipo: ['7.4', '7.5', '7.6']
+      x-gates: [G5, G10, G12]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                evalItemIds: { type: array, items: { type: integer }, description: 비우면 검수 완료 전체 }
+      responses:
+        '202': { description: 평가 실행 시작, content: { application/json: { schema: { type: object, properties: { evalRunId: { type: integer } } } } } }
+        '503': { description: G5, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /admin/eval/runs/{evalRunId}:
+    parameters: [ { $ref: '#/components/parameters/EvalRunId' } ]
+    get:
+      tags: [admin-eval]
+      summary: 평가 진행·유형별 지표(v_eval_metric_live 또는 기록된 eval_metric)·편향 경고(15%p)·미달 경고·확정 가능 여부
+      x-ipo: ['7.6', '7.8']
+      x-gates: [G11, G12]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/EvalRun' } } } }
+  /admin/eval/runs/{evalRunId}/evidence-reviews:
+    parameters: [ { $ref: '#/components/parameters/EvalRunId' } ]
+    get:
+      tags: [admin-eval]
+      summary: 근거 적합성 표본 목록(전문가 판정 대상)
+      x-ipo: ['7.7']
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+  /admin/eval/runs/{evalRunId}/evidence-reviews/{evalItemId}/{evidenceVersionId}:
+    parameters:
+      - { $ref: '#/components/parameters/EvalRunId' }
+      - { name: evalItemId, in: path, required: true, schema: { type: integer } }
+      - { name: evidenceVersionId, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [admin-eval]
+      summary: 근거 적합성 판정 회신(G11 해제 — 법률 전문가, 또는 운영자 대리 입력)
+      x-ipo: ['7.7']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [verdict], properties: { verdict: { type: string, enum: [relevant, irrelevant] } } }
+      responses:
+        '200': { description: OK }
+  /admin/eval/runs/{evalRunId}/record:
+    parameters: [ { $ref: '#/components/parameters/EvalRunId' } ]
+    post:
+      tags: [admin-eval]
+      summary: 평가 기록(H6) — 지표를 기준일·분석 기준 버전·M1~M3 model_version 과 고정 저장
+      x-ipo: ['7.9']
+      responses:
+        '200': { description: 기록됨 }
+        '409': { description: 중단(aborted)된 평가는 기록 불가, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /admin/eval/runs/{evalRunId}/confirm:
+    parameters: [ { $ref: '#/components/parameters/EvalRunId' } ]
+    post:
+      tags: [admin-eval]
+      summary: 성공 기준 확정(SD_02 U-4) — 판정 대기(G11)·측정 불가(G12)가 남으면 DB 트리거가 거부
+      x-gates: [G11, G12]
+      responses:
+        '200': { description: 확정 }
+        '409': { description: G11/G12, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /admin/eval/compare:
+    get:
+      tags: [admin-eval]
+      summary: 기록된 두 평가의 지표 비교(새 평가 없이)
+      x-ipo: ['7.3']
+      parameters:
+        - { name: a, in: query, required: true, schema: { type: integer } }
+        - { name: b, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  # ------------------------------------------------------------------ admin: feedback review (P8)
+  /admin/feedback:
+    get:
+      tags: [admin-feedback]
+      summary: 피드백 목록(조항·판정·지식 기준일별) + 필터
+      x-ipo: ['8.1', '8.2']
+      x-gates: [G14]
+      parameters:
+        - { name: type, in: query, schema: { type: string, enum: [false_positive, false_negative] } }
+        - { name: kvId, in: query, schema: { type: integer } }
+        - { name: reviewStatus, in: query, schema: { type: string, enum: [unreviewed, reviewed] } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/FeedbackRow' } } } } }
+  /admin/feedback/summary:
+    get:
+      tags: [admin-feedback]
+      summary: 기준일별 검토 현황(v_feedback_summary)
+      x-ipo: ['8.6']
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+  /admin/feedback/{feedbackId}:
+    parameters: [ { $ref: '#/components/parameters/FeedbackId' } ]
+    get:
+      tags: [admin-feedback]
+      summary: 피드백 상세 — 대상 조항·당시 판정·근거, 이후 근거 변경, 결과 삭제됨(대상 표시 불가). 표시 직전 PII 재검사(G13)
+      x-ipo: ['8.3']
+      x-gates: [G13]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/FeedbackDetail' } } } }
+  /admin/feedback/{feedbackId}/review:
+    parameters: [ { $ref: '#/components/parameters/FeedbackId' } ]
+    post:
+      tags: [admin-feedback]
+      summary: 검토 판단 기록(타당·부당·전문가 확인 필요). 판정 변경 기능 없음(U6)
+      x-ipo: ['8.4']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [decision], properties: { decision: { type: string, enum: [valid, invalid, needs_expert] } } }
+      responses:
+        '200': { description: OK }
+  /admin/feedback/{feedbackId}/eval-candidate:
+    parameters: [ { $ref: '#/components/parameters/FeedbackId' } ]
+    post:
+      tags: [admin-feedback]
+      summary: 평가 데이터 후보 지정(H5) — 타당 판단 피드백만(DB 트리거)
+      x-ipo: ['8.5']
+      responses:
+        '201': { description: 후보 생성 }
+        '409': { description: 타당 판단이 아님 또는 이미 후보, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+
+  # ------------------------------------------------------------------ admin: model API (P9)
+  /admin/model-api/status:
+    get:
+      tags: [admin-model-api]
+      summary: 서버 상태·모델별 로드·통합 메모리(있을 때만)·model_version·학습 기준일 + 조회 시각. 503/504/401 도 200 으로 상태만 표시(화면을 막지 않음). ?refresh=1 = 캐시 무시. 운영자(modelApi.manage)
+      x-ipo: ['9.5', '9.6']
+      x-gates: [G14]
+      parameters:
+        - { name: refresh, in: query, schema: { type: string, enum: ['1'] } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModelApiStatus' } } } }
+        '403': { description: G14, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+  /admin/model-api/openapi:
+    get:
+      tags: [admin-model-api]
+      summary: 모델 API 서버 /openapi.json 백엔드 프록시(9.7 A1). API 키는 응답에 싣지 않는다
+      x-ipo: ['9.7']
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '502': { description: 모델 서버 연결 불가 }
+  /admin/model-api/docs/{name}:
+    get:
+      tags: [admin-model-api]
+      summary: 모델 서버 운영 문서 열람 — 가이드라인·사용자 매뉴얼·서비스 점검 결과·모델 테스트 보고서(model-server/docs, reports). 정해진 이름만
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string, enum: [guideline, manual, test-result, model-test] } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, title, format, updatedAt, content]
+                properties:
+                  name: { type: string }
+                  title: { type: string }
+                  format: { type: string, enum: [markdown, json] }
+                  updatedAt: { type: string, format: date-time }
+                  content: { description: 'markdown 이면 문자열, json 이면 점검 결과 객체' }
+        '404': { description: 없는 문서, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /admin/model-api/try/{path}:
+    parameters:
+      - { name: path, in: path, required: true, description: '모델 API 경로(health, v1/models, v1/jobs/{id} …) — model-api 계약 경로만', schema: { type: string } }
+    get:
+      tags: [admin-model-api]
+      summary: 웹 Swagger UI "Try it out" 프록시(GET). 발급받은 API 키(Bearer crd_…)를 확인한 뒤 서버 키로 넘긴다 — /model/{path} 와 같다
+      responses:
+        '200': { description: 모델 서버 응답 그대로, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '404': { description: 허용되지 않은 경로, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    post:
+      tags: [admin-model-api]
+      summary: 웹 Swagger UI "Try it out" 프록시(POST). 본문은 기록하지 않는다
+      responses:
+        '200': { description: 모델 서버 응답 그대로, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { description: 발급 키 없음·불일치·폐기, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /model/{path}:
+    description: |
+      외부 프로그램용 모델 API 프록시(`admin.modelApi.routes.ts` tryHandler, `tryProxy.service.ts`). 처리 순서 = 허용 경로 확인(404) → 발급 키 확인(401, sha256 대조) → 조항 본문 재비식별화 → 서버 키(MODEL_API_KEY)로 모델 서버에 전달(제한 330초). 응답 상태·본문은 모델 서버 그대로(400 입력 검증·413 조항 2,000개 초과·503 적재 중 등).
+      허용 경로 7종: GET health · GET v1/models · POST v1/detect/loophole·illegal · POST v1/jobs · GET v1/jobs/{job_id} · POST v1/judge · POST v1/summarize (v1/embed·docs 는 404). 요청 제한 = 접속 주소당 1분 60회(draft-7 RateLimit 헤더).
+      아래 responses 에는 계약 테스트로 검증하는 코드만 적는다. 그 밖에 나올 수 있는 코드: 429 `rate_limited`(요청 제한, 테스트 모드에서는 꺼짐) · 502 `model_api_unreachable`(모델 서버 연결 불가) · 모델 서버가 낸 400(입력 검증)·413(조항 2,000개 초과)·503(적재 중)·504(제한 시간) 그대로.
+      **v1/judge 근거 검색(2026-10-01)**: `evidence` 가 없거나 빈 배열이면 백엔드가 활성 지식 버전에서 웹 분석(P3)과 같은 하이브리드 검색으로 근거 5건을 찾아 넣고 `knowledge_date` 를 그 기준일로 맞춘다. 응답(200 JSON)에 `evidence_source`(server_search · caller · search_failed), `search_mode`(hybrid · bm25), `evidence[]`({id, source_type, title, text, source_url, cited})를 덧붙인다. 근거를 보내면(최대 10) 검색 없이 그 안에서만 인용하고 `evidence_source: caller` 만 붙는다. 검색이 실패하면 근거 없이 넘기고(설명 빈 배열) `search_failed` 로 알린다.
+    parameters:
+      - { name: path, in: path, required: true, description: '모델 API 경로(health, v1/models, v1/detect/loophole …) — model-api 계약 경로만', schema: { type: string } }
+    get:
+      tags: [model-api-public]
+      summary: 외부 프로그램용 모델 API(2026-09-30). 로그인 없이 발급받은 API 키(Authorization Bearer crd_…)로 부른다. 백엔드가 서버 키로 모델 서버에 넘긴다
+      security: [{ apiKey: [] }]
+      responses:
+        '200': { description: 모델 서버 응답 그대로, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { description: 키 없음·불일치·폐기, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '404': { description: 허용되지 않은 경로, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    post:
+      tags: [model-api-public]
+      summary: 외부 프로그램용 모델 API(POST). 조항 본문(clauses[].text · clause)은 넘기기 전에 백엔드가 다시 비식별화한다. 본문은 기록하지 않는다. v1/judge 는 evidence 를 비우면 서버가 근거를 검색해 넣는다(위 설명)
+      security: [{ apiKey: [] }]
+      responses:
+        '200': { description: 모델 서버 응답 그대로(v1/jobs 는 202), content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { description: 키 없음·불일치·폐기, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '404': { description: 허용되지 않은 경로(MODEL_API_PATH_NOT_ALLOWED), content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+
+  # ------------------------------------------------------------------ API 키(2026-09-30)
+  /api-keys:
+    get:
+      tags: [api-keys]
+      summary: 내 API 키 목록(원문 없이 앞자리만)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ApiKey' } } } } } } }
+    post:
+      tags: [api-keys]
+      summary: API 키 발급 — 원문(key)은 이 응답에서 한 번만 준다. 사용 중인 키는 5개까지
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { name: { type: string, maxLength: 40 } } }
+      responses:
+        '201':
+          description: 발급됨
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/ApiKey' }
+                  - { type: object, required: [key], properties: { key: { type: string } } }
+        '409': { description: 사용 중인 키 5개 초과, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /api-keys/{keyId}:
+    delete:
+      tags: [api-keys]
+      summary: 내 키 폐기
+      parameters:
+        - { name: keyId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '204': { description: 폐기됨 }
+        '404': { description: 없는 키·이미 폐기, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /admin/api-keys:
+    get:
+      tags: [api-keys]
+      summary: 전체 API 키(운영자, modelApi.manage) — 주인 이름·아이디 포함
+      x-gates: [G14]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/AdminApiKey' } } } } } } }
+  /admin/api-keys/{keyId}:
+    delete:
+      tags: [api-keys]
+      summary: 누구의 키든 폐기(운영자)
+      x-gates: [G14]
+      parameters:
+        - { name: keyId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '204': { description: 폐기됨 }
+        '404': { description: 없는 키·이미 폐기, content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+
+  # ------------------------------------------------------------------ admin: RBAC (화면 S10 은 2026-09-30 삭제, API 만 유지)
+  /admin/rbac:
+    get:
+      tags: [admin-rbac]
+      summary: 역할(사용자 유형) × 권한(유스케이스) 사용 여부 표 — 현재 값·초기값·잠긴 칸(운영자 권한 관리). 화면 S10 은 삭제됐고 API 만 남음
+      x-gates: [G14]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RbacView' } } } }
+        '403': { description: G14, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+    put:
+      tags: [admin-rbac]
+      summary: 표 전체 저장 — 역할마다 켜 둘 권한 목록. 잠긴 칸은 항상 켜진다. 다음 요청부터 모든 사용자에 적용
+      x-gates: [G14]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [matrix]
+              properties:
+                matrix: { $ref: '#/components/schemas/RoleMatrix' }
+      responses:
+        '200':
+          description: 저장 후 표 + 바뀐 칸 수
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/RbacView' }
+                  - { type: object, required: [changed], properties: { changed: { type: integer } } }
+        '400': { description: 형식 오류(모르는 역할·권한), content: { application/json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '403': { description: G14, content: { application/json: { schema: { $ref: '#/components/schemas/GateError' } } } }
+
+components:
+  securitySchemes:
+    apiKey: { type: http, scheme: bearer, description: 'API 활용 화면에서 발급받은 키(crd_…)' }
+  parameters:
+    RequestId: { name: requestId, in: path, required: true, schema: { type: integer } }
+    RunId: { name: runId, in: path, required: true, schema: { type: integer } }
+    AssessmentId: { name: assessmentId, in: path, required: true, schema: { type: integer } }
+    BatchId: { name: batchId, in: path, required: true, schema: { type: integer } }
+    EvalRunId: { name: evalRunId, in: path, required: true, schema: { type: integer } }
+    FeedbackId: { name: feedbackId, in: path, required: true, schema: { type: integer } }
+
+  schemas:
+    Permission:
+      type: string
+      description: RBAC 권한(유스케이스 단위) — backend/src/modules/auth/rbac.ts PERMISSIONS
+      enum: [analysis.request, result.view, explanation.view, history.manage, feedback.submit, knowledge.manage, eval.run, eval.review, feedback.review, modelApi.view, modelApi.manage, rbac.manage]
+    LoginResult:
+      type: object
+      required: [ok, returnTo]
+      properties:
+        ok: { type: boolean }
+        returnTo: { type: string }
+    ApiKey:
+      type: object
+      required: [keyId, name, keyPrefix, createdAt, lastUsedAt, revokedAt]
+      properties:
+        keyId: { type: integer }
+        name: { type: string }
+        keyPrefix: { type: string, description: "'crd_' + 앞 8자 — 원문은 발급 때 한 번만" }
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        revokedAt: { type: string, format: date-time, nullable: true }
+    AdminApiKey:
+      allOf:
+        - { $ref: '#/components/schemas/ApiKey' }
+        - type: object
+          required: [userId, ownerName, ownerLoginId]
+          properties:
+            userId: { type: integer }
+            ownerName: { type: string, nullable: true }
+            ownerLoginId: { type: string, nullable: true }
+    RoleMatrix:
+      type: object
+      required: [user, operator, legal_expert, developer]
+      additionalProperties: false
+      properties:
+        user: { type: array, items: { $ref: '#/components/schemas/Permission' } }
+        operator: { type: array, items: { $ref: '#/components/schemas/Permission' } }
+        legal_expert: { type: array, items: { $ref: '#/components/schemas/Permission' } }
+        developer: { type: array, items: { $ref: '#/components/schemas/Permission' } }
+    RbacView:
+      type: object
+      required: [roles, permissions, matrix, defaults, locked, updatedAt]
+      properties:
+        roles:
+          type: array
+          items: { type: object, required: [id, label], properties: { id: { type: string, enum: [user, operator, developer, legal_expert] }, label: { type: string } } }
+        permissions:
+          type: array
+          items:
+            type: object
+            required: [id, label, uc, area]
+            properties:
+              id: { $ref: '#/components/schemas/Permission' }
+              label: { type: string }
+              uc: { type: string, description: 근거 유스케이스 }
+              area: { type: string, enum: [user, ops, admin] }
+        matrix: { $ref: '#/components/schemas/RoleMatrix' }
+        defaults: { $ref: '#/components/schemas/RoleMatrix' }
+        locked:
+          type: array
+          items: { type: object, required: [role, permission], properties: { role: { type: string }, permission: { $ref: '#/components/schemas/Permission' } } }
+        updatedAt: { type: string, format: date-time, nullable: true }
+    Perspective: { type: string, enum: [consumer, business] }
+    ContractType: { type: string, enum: [ecommerce, subscription, installment, door_to_door, general_consumer, out_of_scope] }
+    RiskCategory: { type: string, enum: [normal, dispute, unfair, illegal] }
+    DisplayCategory: { type: string, enum: [normal, dispute, unfair, illegal, unanalyzable] }
+    RiskType: { type: string, enum: [rights_limit, liability_avoid, refund_cancel_limit, unilateral_change, excessive_penalty, vague, other] }
+    RiskLevel: { type: string, enum: [high, mid, low] }
+    Confidence: { type: string, enum: [high, medium, low] }
+    PiiType: { type: string, enum: [rrn, foreigner_no, account_no, card_no, phone, email, address, person_name] }
+    GateCode: { type: string, pattern: '^G([0-9]|1[0-4])$' }
+
+    Problem:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+
+    GateError:
+      description: 게이트 차단 본문(C2 — 사유·해제 주체·다음 행동). 문구는 SD_02 §14-2 사전과 동일
+      type: object
+      required: [gate, title, reason, releaseActor, nextActions]
+      properties:
+        gate: { $ref: '#/components/schemas/GateCode' }
+        title: { type: string, example: 이번 달 무료 분석을 모두 사용했습니다 }
+        reason: { type: string }
+        releaseActor: { type: string, enum: [user, operator, legal_expert, system, operator_expert] }
+        releaseText: { type: string, example: 시스템 - 10-01 초기화 }
+        nextActions:
+          type: array
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id: { type: string, example: switch_to_text }
+              label: { type: string }
+        eventId: { type: integer }
+        detail: { type: object, additionalProperties: true, description: '예: G4 {remaining:0, resetDate}, G2 {checks:[...]}' }
+
+    OpenGate:
+      type: object
+      required: [gate, title, scope]
+      properties:
+        gate: { $ref: '#/components/schemas/GateCode' }
+        title: { type: string }
+        reason: { type: string }
+        scope: { type: string, enum: [full, partial] }
+        releaseActor: { type: string }
+        eventId: { type: integer }
+
+    Quota:
+      type: object
+      description: 이력(미사용) — 이용 한도는 2026-09-29 부터 없다. 어떤 응답에도 싣지 않는다
+      required: [limit, used, remaining, resetDate]
+      properties:
+        limit: { type: integer, example: 3 }
+        used: { type: integer, description: '이번 달 저장된 결과(usage_charge) + 사용자 취소(cancel_charge) 합 — v_quota_effective' }
+        remaining: { type: integer }
+        resetDate: { type: string, format: date }
+
+    SessionInfo:
+      type: object
+      description: RBAC(2026-09-29) — 권한 판정 원천은 서버(backend/src/modules/auth/rbac.ts). 로컬 사업자 모드에는 이용 한도가 없어 quota 를 싣지 않는다
+      required: [loggedIn, permissions]
+      properties:
+        loggedIn: { type: boolean }
+        user:
+          type: object
+          nullable: true
+          properties:
+            userId: { type: integer }
+            provider: { type: string, enum: [kakao, naver, dev, local] }
+            nickname: { type: string, nullable: true, description: '화면에 보일 이름 — 아이디·비밀번호 계정은 회원가입 때 받은 이름(auth_password.display_name)' }
+            role: { type: string, enum: [user, operator, developer, legal_expert] }
+        permissions:
+          type: array
+          description: 역할의 권한(유스케이스 단위). 비로그인이면 빈 배열
+          items: { $ref: '#/components/schemas/Permission' }
+        authProviders: { type: array, items: { type: string, enum: [kakao, naver, dev] }, description: 로그인 화면에 보일 제공자 }
+
+    PrecheckItem:
+      type: object
+      required: [check, passed]
+      properties:
+        check: { type: string, enum: [format, size, pages, encrypted, corrupt] }
+        passed: { type: boolean }
+        message: { type: string }
+
+    PrecheckResult:
+      type: object
+      required: [uploadToken, format, checks]
+      properties:
+        uploadToken: { type: string }
+        format: { type: string, enum: [pdf, hwp, hwpx, docx, html] }
+        pages: { type: integer, nullable: true }
+        sizeBytes: { type: integer }
+        checks: { type: array, items: { $ref: '#/components/schemas/PrecheckItem' } }
+
+    AnalysisStatus:
+      type: object
+      required: [requestId, perspective, knowledgeDate, requestStage, rail, openGates]
+      properties:
+        requestId: { type: integer }
+        perspective: { $ref: '#/components/schemas/Perspective' }
+        knowledgeDate: { type: string, format: date }
+        requestStage: { type: string, enum: [received, deidentifying, structuring, awaiting_type, type_confirmed, stopped] }
+        rail:
+          description: FR-024 세부 줄(수신→비식별화→구조화→탐지→근거 검색→설명)
+          type: array
+          items:
+            type: object
+            properties:
+              step: { type: string, enum: [received, deidentify, structure, detect, search, explain] }
+              state: { type: string, enum: [waiting, running, done, blocked, reused] }
+        documents:
+          type: array
+          items:
+            type: object
+            properties:
+              documentId: { type: integer }
+              docSeq: { type: integer }
+              displayName: { type: string, description: 비식별 처리된 표시명 }
+              splitMethod: { type: string, enum: [article, semantic], nullable: true }
+              ocrApplied: { type: boolean }
+              summaryStatus: { type: string, enum: [ok, unavailable], nullable: true }
+              contractTypeCandidate: { $ref: '#/components/schemas/ContractType' }
+              contractType: { $ref: '#/components/schemas/ContractType' }
+        run:
+          type: object
+          nullable: true
+          properties:
+            runId: { type: integer }
+            runKind: { type: string, enum: [analysis, reanalysis] }
+            stage: { type: string, enum: [detecting, searching, explaining, completed, saved, aborted] }
+            clauseTotal: { type: integer }
+            scoredCount: { type: integer }
+            riskTotal:
+              type: integer
+              description: 판정(M3) 대상 위험 후보 수. 판정 단계(explaining) 이후에만 싣는다(2026-09-30 진행 중 결과 표시)
+            judgedCount: { type: integer, description: 위험 후보 중 판정을 마친 수(분석 불가 포함) }
+            judged:
+              type: array
+              description: 판정을 마친 위험 조항(정상 판정 제외), 판정 순서 = 위험 점수 높은 순. 설명·근거는 결과 화면에서
+              items:
+                type: object
+                required: [clauseId, seq, category]
+                properties:
+                  clauseId: { type: integer }
+                  seq: { type: integer }
+                  articleNo: { type: string }
+                  paragraphNo: { type: string }
+                  itemNo: { type: string }
+                  title: { type: string }
+                  category: { type: string, enum: [dispute, unfair, illegal] }
+                  preview: { type: string, description: 비식별 조항 앞부분(60자) }
+            judgedNormalCount: { type: integer, description: 판정 결과 정상인 위험 후보 수 }
+        openGates: { type: array, items: { $ref: '#/components/schemas/OpenGate' } }
+        elapsedSec: { type: integer, description: 요청 수신 이후 경과 초(진행 화면 표시) }
+        modelNotice:
+          type: object
+          nullable: true
+          description: |
+            모델 적재·대기 안내(공유 Ollama). cold_start = 이 단계 모델이 메모리에 없어 첫 호출에 적재 시간이 든다,
+            queue = 공유 서버에서 앞선 요청을 기다리는 중, loading = 모델 서버가 적재 중
+          properties:
+            kind: { type: string, enum: [cold_start, queue, loading] }
+            model: { type: string, enum: [M1, M2, M3, M4] }
+            message: { type: string }
+            estimatedSec: { type: integer, nullable: true }
+        cancellable: { type: boolean, description: 지금 취소할 수 있는지(received~explaining) }
+
+    ClauseNode:
+      type: object
+      required: [assessmentId, clauseId, seq, text, displayCategory]
+      properties:
+        assessmentId: { type: integer }
+        clauseId: { type: integer }
+        documentId: { type: integer }
+        seq: { type: integer }
+        articleNo: { type: string, nullable: true }
+        paragraphNo: { type: string, nullable: true }
+        itemNo: { type: string, nullable: true }
+        title: { type: string, nullable: true }
+        text: { type: string, description: 비식별 조항 원문(〔유형〕 가림 포함) }
+        displayCategory: { $ref: '#/components/schemas/DisplayCategory' }
+        riskLevel: { $ref: '#/components/schemas/RiskLevel' }
+        lowOcrQuality: { type: boolean }
+        abstention: { $ref: '#/components/schemas/Abstention' }
+
+    Abstention:
+      type: object
+      description: '판정 불가(2026-09-30, migration 008) — 잘못된 입력·계약 조항이 아닌 문장·지시문이라 모델을 부르지 않은 조항. displayCategory 는 unanalyzable'
+      required: [reason, label]
+      properties:
+        reason: { type: string, enum: [invalid_input, not_clause, prompt_injection] }
+        label: { type: string, example: '계약 조항으로 보기 어렵습니다' }
+
+    ResultView:
+      type: object
+      required: [runId, requestId, disclaimer, knowledgeDate, perspective, counts, clauses]
+      properties:
+        runId: { type: integer }
+        requestId: { type: integer }
+        runKind: { type: string, enum: [analysis, reanalysis] }
+        prevRunId: { type: integer, nullable: true }
+        disclaimer: { type: string, example: 본 결과는 법률 자문이 아니며 위험 가능성 정보입니다 }
+        knowledgeDate: { type: string, format: date }
+        analysisBasisVersion: { type: string }
+        perspective: { $ref: '#/components/schemas/Perspective' }
+        documents:
+          type: array
+          items:
+            type: object
+            properties:
+              documentId: { type: integer }
+              displayName: { type: string }
+              contractType: { $ref: '#/components/schemas/ContractType' }
+              contractTypeInScope: { type: boolean }
+              splitMethod: { type: string, enum: [article, semantic] }
+              summary: { type: string, nullable: true, description: 'null 이면 화면 "요약 제공 불가"(C7)' }
+              sourceUrl: { type: string, nullable: true }
+              collectedAt: { type: string, format: date-time, nullable: true }
+        counts:
+          type: object
+          properties:
+            high: { type: integer }
+            mid: { type: integer }
+            low: { type: integer }
+            unanalyzable: { type: integer }
+        impactNotice:
+          description: C9 근거 변경 안내(로그인 결과에만)
+          type: object
+          nullable: true
+          properties:
+            amend: { type: integer }
+            repeal: { type: integer }
+            newCase: { type: integer }
+            stdTermsRevision: { type: integer }
+        clauses: { type: array, items: { $ref: '#/components/schemas/ClauseNode' }, description: 원문 순서 }
+        riskOrder: { type: array, items: { type: integer }, description: 위험도순 assessmentId 목록 }
+
+    Evidence:
+      description: 근거 6항목(FR-021) + 사례 3구분(FR-028)
+      type: object
+      required: [evidenceVersionId, sourceType, sourceName, identifier, excerpt, sourceUrl]
+      properties:
+        evidenceVersionId: { type: integer }
+        sourceType: { type: string, enum: [law_article, ftc_case, std_terms] }
+        sourceName: { type: string }
+        identifier: { type: string }
+        excerpt: { type: string }
+        sourceUrl: { type: string }
+        effectiveDate: { type: string, format: date, nullable: true }
+        publishedDate: { type: string, format: date, nullable: true }
+        caseFacts: { type: string, nullable: true }
+        caseJudgment: { type: string, nullable: true }
+        caseBasis: { type: string, nullable: true }
+        changedSinceAnalysis: { type: boolean, description: C6 "변경됨" 상태 }
+
+    ClauseDetail:
+      type: object
+      required: [assessmentId, displayCategory, evidence]
+      properties:
+        assessmentId: { type: integer }
+        clause: { $ref: '#/components/schemas/ClauseNode' }
+        displayCategory: { $ref: '#/components/schemas/DisplayCategory' }
+        riskType: { $ref: '#/components/schemas/RiskType' }
+        riskLevel: { $ref: '#/components/schemas/RiskLevel' }
+        confidence: { $ref: '#/components/schemas/Confidence' }
+        evidenceUnconfirmed: { type: boolean, description: '분쟁 가능 - 근거 미확인(BR-EVD-01 강등)' }
+        expertReviewRecommended: { type: boolean }
+        explanationAvailable: { type: boolean, nullable: true }
+        unanalyzableReason: { type: string, enum: [timeout, server_down], nullable: true }
+        abstention: { $ref: '#/components/schemas/Abstention' }
+        evidence: { type: array, items: { $ref: '#/components/schemas/Evidence' } }
+        feedbackTypeAllowed: { type: string, enum: [false_positive, false_negative] }
+
+    Explanation:
+      type: object
+      required: [available, perspective]
+      properties:
+        available: { type: boolean }
+        perspective: { $ref: '#/components/schemas/Perspective' }
+        focus: { type: string, enum: [consumer_disadvantage, business_review_points] }
+        claims:
+          type: array
+          items:
+            type: object
+            required: [seq, text, evidenceVersionId]
+            properties:
+              seq: { type: integer }
+              text: { type: string }
+              evidenceVersionId: { type: integer }
+        gate: { $ref: '#/components/schemas/OpenGate' }
+
+    Comparison:
+      type: object
+      properties:
+        clauseText: { type: string }
+        law:
+          description: 'null 이면 "법령 조문 근거 없음"(UC3 A1) 또는 근거 미확인(A5)'
+          allOf: [ { $ref: '#/components/schemas/Evidence' } ]
+          nullable: true
+        stdTerms:
+          description: 'null 이면 "표준약관 대응 조항 없음"(UC3 A2)'
+          allOf: [ { $ref: '#/components/schemas/Evidence' } ]
+          nullable: true
+        businessDiffNotes: { type: array, items: { type: string }, description: 사업자 관점 — 표준약관 대비 차이(UC4 기본흐름 5) }
+
+    FtcCase:
+      allOf:
+        - $ref: '#/components/schemas/Evidence'
+
+    ResultImpact:
+      type: object
+      properties:
+        kvId: { type: integer }
+        knowledgeDate: { type: string, format: date }
+        changeKind: { type: string, enum: [amend, repeal, new_case, std_terms_revision] }
+        evidenceItemId: { type: integer }
+        sourceName: { type: string }
+        identifier: { type: string }
+
+    HistoryItem:
+      type: object
+      properties:
+        requestId: { type: integer }
+        latestRunId: { type: integer }
+        displayName: { type: string }
+        requestedAt: { type: string, format: date-time }
+        perspective: { $ref: '#/components/schemas/Perspective' }
+        knowledgeDate: { type: string, format: date }
+        counts: { type: object, properties: { high: { type: integer }, mid: { type: integer }, low: { type: integer } } }
+        evidenceChanged: { type: boolean }
+
+    HistoryDetail:
+      type: object
+      properties:
+        requestId: { type: integer }
+        displayName: { type: string }
+        runs:
+          type: array
+          items:
+            type: object
+            properties:
+              runId: { type: integer }
+              runKind: { type: string, enum: [analysis, reanalysis] }
+              prevRunId: { type: integer, nullable: true }
+              knowledgeDate: { type: string, format: date }
+              savedAt: { type: string, format: date-time }
+              evidenceChanged: { type: boolean }
+
+    KnowledgeVersion:
+      type: object
+      properties:
+        kvId: { type: integer }
+        kvSeq: { type: integer }
+        knowledgeDate: { type: string, format: date }
+        analysisBasisVersion: { type: string }
+        status: { type: string, enum: [active, superseded] }
+        createdAt: { type: string, format: date-time }
+
+    IngestBatch:
+      type: object
+      properties:
+        batchId: { type: integer }
+        stage: { type: string, enum: [collecting, collect_failed, preprocessing, selecting, kv_created, impact_identified, deadline_checked] }
+        baseKv: { $ref: '#/components/schemas/KnowledgeVersion' }
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              agency: { type: string, enum: [law_center, ftc, data_portal, kca] }
+              status: { type: string, enum: [ok, failed] }
+              failReason: { type: string, nullable: true }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              itemId: { type: integer }
+              agency: { type: string }
+              itemTitle: { type: string }
+              changeKind: { type: string, enum: [amend, repeal, new_law, new_case, std_terms_revision, reference] }
+              decisionLabel: { type: string, enum: [excluded_parse_fail, excluded_repealed, hold_not_effective, reference_only, candidate] }
+              include: { type: boolean }
+              elapsedDays: { type: integer, nullable: true }
+        openGates: { type: array, items: { $ref: '#/components/schemas/OpenGate' } }
+
+    EvalItem:
+      type: object
+      properties:
+        evalItemId: { type: integer }
+        clauseTextDeid: { type: string }
+        contractType: { $ref: '#/components/schemas/ContractType' }
+        goldCategory: { $ref: '#/components/schemas/RiskCategory' }
+        origin: { type: string, enum: [new_label, feedback_candidate, synthetic] }
+        overlapsTraining: { type: boolean }
+        reviewStatus: { type: string, enum: [pending, accepted, rejected] }
+        reviewedAt: { type: string, format: date-time, nullable: true }
+
+    EvalMetric:
+      type: object
+      properties:
+        contractType: { $ref: '#/components/schemas/ContractType' }
+        clauseCount: { type: integer }
+        timeoutExcluded: { type: integer }
+        recallPct: { type: number, nullable: true }
+        precisionPct: { type: number, nullable: true }
+        evidenceFitPct: { type: number, nullable: true, description: 'null = 판정 대기(G11) 또는 측정 불가(G12)' }
+        measurable: { type: boolean, nullable: true }
+
+    EvalRun:
+      type: object
+      properties:
+        evalRunId: { type: integer }
+        stage: { type: string, enum: [eligibility, inferring, awaiting_expert, result, recorded, aborted] }
+        kvId: { type: integer }
+        modelVersions: { type: object, properties: { m1: { type: string }, m2: { type: string }, m3: { type: string } } }
+        excluded: { type: object, properties: { unreviewed: { type: integer }, synthetic: { type: integer }, trainingOverlap: { type: integer } } }
+        metrics: { type: array, items: { $ref: '#/components/schemas/EvalMetric' } }
+        warnings:
+          type: array
+          items:
+            type: object
+            properties:
+              kind: { type: string, enum: [bias_gap, below_criteria] }
+              message: { type: string }
+        confirmable: { type: boolean }
+        scConfirmedAt: { type: string, format: date-time, nullable: true }
+        openGates: { type: array, items: { $ref: '#/components/schemas/OpenGate' } }
+
+    FeedbackRow:
+      type: object
+      properties:
+        feedbackId: { type: integer }
+        feedbackType: { type: string, enum: [false_positive, false_negative] }
+        categoryAtSubmit: { $ref: '#/components/schemas/DisplayCategory' }
+        knowledgeDate: { type: string, format: date }
+        submittedAt: { type: string, format: date-time }
+        reviewStatus: { type: string, enum: [unreviewed, reviewed] }
+        reviewDecision: { type: string, enum: [valid, invalid, needs_expert], nullable: true }
+
+    FeedbackDetail:
+      allOf:
+        - $ref: '#/components/schemas/FeedbackRow'
+        - type: object
+          properties:
+            opinionDeid: { type: string, nullable: true }
+            targetAvailable: { type: boolean, description: 'false = 결과 삭제됨(UC9 E1) — 대상 표시 불가' }
+            clause: { $ref: '#/components/schemas/ClauseNode' }
+            judgment: { $ref: '#/components/schemas/ClauseDetail' }
+            evidenceChangedSince: { type: boolean }
+            gates: { type: array, items: { $ref: '#/components/schemas/OpenGate' } }
+
+    ModelApiStatus:
+      type: object
+      required: [state, checkedAt]
+      properties:
+        state: { type: string, enum: [ready, loading, unreachable, auth_mismatch, not_implemented] }
+        httpStatus: { type: integer, nullable: true }
+        checkedAt: { type: string, format: date-time }
+        models:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, enum: [M1, M2, M3, M4] }
+              name: { type: string }
+              loadState: { type: string }
+              modelVersion: { type: string }
+              trainedDataDate: { type: string, nullable: true }
+        gpuMemory: { type: object, description: '통합 메모리(모델 서버 /health gpu 그대로)', properties: { usedMb: { type: integer }, totalMb: { type: integer } } }
+        modelChanged:
+          description: 9.6 H7 — 현재 model_version 이 최근 결과와 다르면 UC8 권장
+          type: object
+          nullable: true
+          properties:
+            currentM3: { type: string }
+            recentResultM3: { type: string }

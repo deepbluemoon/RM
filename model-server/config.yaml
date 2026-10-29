@@ -1,0 +1,37 @@
+# model-server 게이트웨이 설정 (model-serving §0 공유 Ollama 적용 구성 — "docs/ollama-guide.md")
+# 환경변수가 있으면 이 값보다 우선한다(app/config.py). 비밀값(MODEL_API_KEY)은 여기에 쓰지 않는다.
+server: { host: 127.0.0.1, port: 9542, workers: 1 }   # 8000 은 다른 계정이 사용 중(§0.2)
+model_root: ./var/models            # env MODEL_ROOT. 운영 예: /opt/crd/models
+bundle_version: crd-model-server@0.1.0
+classifiers:
+  device: cpu
+  torch_threads: 6
+  batch_size: 16
+  max_length: 512
+  score_decimals: 4
+  m1: { path: loophole-klue-roberta-base }
+  m2: { path: illegal-klue-roberta-base }
+llm:
+  base_url: http://127.0.0.1:11434  # env OLLAMA_URL — 공유 서버(가이드 1.1)
+  keep_alive: 5m                    # 가이드 1.3 필수(5m 이하, -1 금지)
+  concurrency: 1                    # 게이트웨이 전체 Ollama 동시 호출 1건
+  timeout_sec: 300                  # 요청 1건(대기열·적재 포함)
+  retry: { max_attempts: 3, backoff_sec: [3, 6] }
+  status_cache_sec: 60              # /api/version·/api/tags·/api/ps 캐시 — 60초 미만 금지(가이드 1.7-6 폴링 금지)
+  warmup_on_start: true             # 기동 시 1회만 미리 올리기(가이드 1.6, 1.7-10)
+  # 채팅 모델은 서비스당 1개(가이드 1.7-4) — M3(판정)·M4(요약)가 공용 A등급 모델 하나를 같이 쓴다. env OLLAMA_M3_MODEL·OLLAMA_M4_MODEL
+  # M3 설명은 1문장(2026-09-30 판정 속도 개선). 글자 수 상한(maxLength)은 문장을 중간에 자르므로 쓰지 않는다. 이전 값 = num_predict 700, 설명 3개·길이 무제한
+  m3: { model: qwen3:4b-instruct-2507-q4_K_M, fallback: null, num_ctx: 8192, num_predict: 300, json_schema: schemas/judge.json, explain_max_items: 1 }
+  m4: { model: qwen3:4b-instruct-2507-q4_K_M, fallback: null, num_ctx: 8192, num_predict: 600, json_schema: schemas/summarize.json }
+  # 임베딩 모델은 서비스당 1개(가이드 1.7-4) — 근거 검색(하이브리드 RAG) 전용. env OLLAMA_EMBED_MODEL. 런타임에서 받지 않는다(설치된 것만)
+  embed: { model: bge-m3, dim: 1024, max_batch: 32, max_chars: 8000 }
+limits:
+  max_clauses_per_job: 2000
+  max_clause_chars: 10000          # 조항 1개 글자 수 상한 — 넘으면 400(자르지 않고 거절). 계약서 ClauseIn.text maxLength 와 같은 값.
+                                    # 근거: 실제 조항 최대 8,233자(2026-09-30 DB 378건). M1·M2 는 512토큰까지만 읽는다(그 뒤는 모델 입력 한계)
+  max_body_bytes: 20000000
+  job_batch_timeout_sec: 60         # 조항 배치 1개(M1∥M2) 시간 초과 → 해당 조항 error=timeout
+  job_ttl_sec: 3600
+postfilter:
+  assertion_terms: ../shared/assertion-terms.json   # env ASSERTION_TERMS_PATH
+logging: { body: false }            # 요청·응답 본문 기록 금지 — 요청 ID·엔드포인트·지연·상태만

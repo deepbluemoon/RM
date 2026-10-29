@@ -1,0 +1,32 @@
+# 모델 원본 고정 목록 — scripts/fetch_models.py 가 이 revision 으로만 받는다.
+# <commit-sha> 는 착수 전(T047 수동 단계)에 Hugging Face 커밋 SHA(40자)로 바꾼다.
+# 기본 구성(model-serving §0)은 공용 qwen3:4b-instruct-2507-q4_K_M 을 쓰므로 이 파일의 M3·M4 는 쓰이지 않는다.
+# 관리자 협의로 bf16 커스텀(ollama_name)을 등록해 OLLAMA_M3_MODEL 로 지정한 경우에만 게이트웨이가
+# model_version 을 "<version_prefix>@<revision 앞 12자>" 로 만든다. 그 밖에는 "ollama:<모델 이름>"(판정 캐시 키).
+models:
+  M3:
+    repo: Qwen/Qwen3-4B-Instruct-2507
+    revision: <commit-sha>
+    license: Apache-2.0
+    local_dir: var/hf/qwen3-4b-instruct-2507
+    gguf: var/gguf/m3-bf16.gguf
+    gguf_sha256: null            # scripts/convert_bf16.py 가 기록
+    ollama_name: pioneer2-crd-m3:v1
+    version_prefix: qwen3-4b-instruct-2507-bf16
+    est_download_gb: 8.1
+  M4:
+    repo: Qwen/Qwen3-1.7B
+    revision: <commit-sha>
+    license: Apache-2.0
+    local_dir: var/hf/qwen3-1.7b
+    gguf: var/gguf/m4-bf16.gguf
+    gguf_sha256: null
+    ollama_name: pioneer2-crd-m4:v1
+    version_prefix: qwen3-1.7b-bf16
+    est_download_gb: 3.4
+  BASE:
+    repo: klue/roberta-base      # M1·M2 파인튜닝 출발점(training/)
+    revision: <commit-sha>
+    license: CC-BY-SA-4.0
+    local_dir: var/hf/klue-roberta-base
+    est_download_gb: 0.45

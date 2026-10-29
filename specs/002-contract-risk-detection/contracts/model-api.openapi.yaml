@@ -1,0 +1,361 @@
+openapi: 3.0.3
+info:
+  title: 모델 서버 (로컬) — 웹 백엔드가 소비하는 계약
+  version: 0.1.0
+  description: |
+    팀 결정(2026-09-28)·UC_00 §1.2·UC_10 의 엔드포인트 7종(+ 2026-09-29 승인 `/v1/embed` = 8종)을 **소비자(Express 백엔드) 관점**에서 고정한 계약이다.
+    서버 구현은 이 저장소의 `model-server/`(Python 3.11 + FastAPI + uvicorn 워커 1개, M1·M2 CPU,
+    M3·M4 는 서비스 전용 Ollama 에서 공식 원본 bf16)이며 웹 백엔드와 같은 서버에서 loopback 으로 연결한다
+    (specs/002-contract-risk-detection/model-serving.md). `tools/model-api-stub/` 가 같은 계약을 결정적 응답으로
+    구현해 개발·CI 에 쓴다.
+
+    필드명은 UC_10 의 [추론] 예시를 따랐으며 Pydantic 스키마 확정 시 이 파일을 먼저 고친다
+    (백엔드 어댑터 `modelApi/adapter.ts` 한 곳만 영향).
+
+    공통 규칙
+    - 인증: `Authorization: Bearer <API_KEY>` (BR-MDL-02). 키는 백엔드 env 에만.
+    - 요청 본문의 모든 텍스트는 **비식별화 완료** 텍스트다(BR-MDL-01). 서버는 본문을 디스크·로그에 남기지 않는다.
+    - 모든 응답에 `model_version` 과 `knowledge_date` 를 담는다(BR-MDL-05). 요청에 기준일이 없는 엔드포인트는 `knowledge_date: null`.
+    - M3·M4 는 `temperature=0`, M4 는 `enable_thinking=False`(BR-MDL-04) — 서버 측 고정, 요청 필드 없음.
+    - 오류 코드(BR-API-03): 400 입력 오류, 401 인증, 413 크기 초과, 500 게이트웨이 내부 오류(고장 — 재시도 안 함), 503 모델 로딩·다운(준비 안 됨), 504 타임아웃.
+    - 요청 본문은 선언한 필드만 받는다 — 모르는 필드·범위 밖 값·빈 조항은 400(2026-09-30 API 점검 B3·B5·B7).
+    - 백엔드 클라이언트: 조항 단위 호출 타임아웃 30초·재시도 1회 [가정] (`policy_constant.MODEL_TIMEOUT_SEC`, `MODEL_RETRY`).
+servers:
+  - url: '{MODEL_API_BASE_URL}'
+    variables:
+      MODEL_API_BASE_URL: { default: 'http://127.0.0.1:9542' }
+security:
+  - bearer: []
+
+paths:
+  /health:
+    get:
+      summary: 서버·모델별 로드 상태·GPU(통합) 메모리 (G5 판정 1.6, 표시 9.5)
+      description: |
+        공유 Ollama(127.0.0.1:11434, keep_alive 5m) 사용 시 M3·M4 는 쓰지 않으면 메모리에서 내려간다.
+        설치돼 있지만 상주하지 않는 모델은 `cold` — 호출은 가능하며 첫 호출에 적재 시간(`warmup_estimate_sec`)이 더 든다.
+        서버에 없는 모델은 `missing`(→ status=degraded, 백엔드 G5).
+      responses:
+        '200':
+          description: 4개 모델 모두 ready 또는 cold(호출 가능)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } }
+        '503':
+          description: 로딩 중(`status=loading`) 또는 일부 모델 미로드
+          content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/models:
+    get:
+      summary: 모델 목록·버전·경로·학습 기준일(model_card.json) — 7.1, 9.5, 실행별 m3_model_version 고정(R-11)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [models, model_version, knowledge_date]
+                properties:
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, model_version]
+                      properties:
+                        id: { type: string, enum: [M1, M2, M3, M4] }
+                        name: { type: string, example: loophole-klue-roberta-base }
+                        base: { type: string, example: klue/roberta-base }
+                        path: { type: string, description: 'MODEL_ROOT 하위 경로 — 화면에는 표시하지 않아도 됨' }
+                        model_version: { type: string, example: 'evasion-ordneg-klue-roberta@m3_ordneg_v1-2026-09-30' }
+                        trained_data_date: { type: string, format: date, nullable: true }
+                  model_version: { type: string, description: '서버 번들 버전' }
+                  knowledge_date: { type: string, nullable: true }
+  /v1/summarize:
+    post:
+      summary: M4 — 비식별 조항 목록 → 계약 요약 + 계약 유형 후보 (2.5)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clauses]
+              additionalProperties: false
+              properties:
+                clauses:
+                  type: array
+                  maxItems: 2000
+                  items: { $ref: '#/components/schemas/ClauseIn' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [summary, contract_type_candidates, model_version]
+                properties:
+                  summary: { type: string, description: '핵심 조건·당사자 의무·해지/환불 조건' }
+                  contract_type_candidates:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        label: { type: string, description: '서버 라벨 — 백엔드가 contract_type_code 6종으로 사상, 사상 실패 시 사용자 직접 선택' }
+                        score: { type: number }
+                  model_version: { type: string }
+                  knowledge_date: { type: string, nullable: true }
+        '400': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+        '504': { $ref: '#/components/responses/Error' }
+  /v1/detect/loophole:
+    post:
+      summary: M1 — 조항 배열 → 편법 라벨·유형·점수 (배치). 4.5 조항 1건 재분석에서 직접 호출
+      requestBody: { $ref: '#/components/requestBodies/DetectRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/DetectResponse' }
+        '400': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+        '504': { $ref: '#/components/responses/Error' }
+  /v1/detect/illegal:
+    post:
+      summary: M2 — 조항 배열 → 위법 라벨·관련 법령 후보·점수 (배치)
+      requestBody: { $ref: '#/components/requestBodies/DetectRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/DetectResponse' }
+        '400': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+        '504': { $ref: '#/components/responses/Error' }
+  /v1/jobs:
+    post:
+      summary: 문서 단위 비동기 탐지 작업 — M1 ∥ M2 (미해결 20 — M3 는 포함하지 않음). 관점 필드 없음(UC4 기본흐름 2)
+      requestBody: { $ref: '#/components/requestBodies/DetectRequest' }
+      responses:
+        '202':
+          description: 작업 생성
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job_id]
+                properties:
+                  job_id: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/jobs/{id}:
+    get:
+      summary: 작업 진행 조회 (3.2) — 완료된 조항부터 결과 누적
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job_id, status, total, done, results]
+                properties:
+                  job_id: { type: string }
+                  status: { type: string, enum: [queued, running, done, failed] }
+                  total: { type: integer }
+                  done: { type: integer }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [clause_id]
+                      properties:
+                        clause_id: { type: string }
+                        loophole: { $ref: '#/components/schemas/DetectScore' }
+                        illegal: { $ref: '#/components/schemas/DetectScore' }
+                        error: { type: string, nullable: true, enum: [timeout, null], description: '조항 단위 실패 → 분석 불가(E5)' }
+                  model_versions:
+                    type: object
+                    properties: { M1: { type: string }, M2: { type: string } }
+                  knowledge_date: { type: string, nullable: true }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/judge:
+    post:
+      summary: M3 — 조항 + M1·M2 점수 + 근거(백엔드 검색 결과) + 관점 + 지식 기준일 → 최종 판정 JSON (3.5, 4.5, 4.8 재생성, 7.5)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clause, contract_type, perspective, knowledge_date, scores, evidence]
+              additionalProperties: false
+              properties:
+                clause: { type: string, minLength: 1, maxLength: 10000, description: '비식별 조항 원문 — 공백만이면 400, 상한(config limits.max_clause_chars) 초과 400' }
+                contract_type: { type: string, enum: [ecommerce, subscription, installment, door_to_door, general_consumer, out_of_scope], example: subscription }
+                perspective: { type: string, enum: [consumer, business] }
+                knowledge_date: { type: string, format: date }
+                scores:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    loophole: { type: number, minimum: 0, maximum: 1 }
+                    illegal: { type: number, minimum: 0, maximum: 1 }
+                evidence:
+                  type: array
+                  maxItems: 10
+                  items:
+                    type: object
+                    required: [id, source_type, title, text]
+                    additionalProperties: false
+                    properties:
+                      id: { type: string, description: 'evidence_version_id 문자열 — 설명 주장의 evidence_ids 로 되돌아온다' }
+                      source_type: { type: string, enum: [law_article, ftc_case, std_terms] }
+                      title: { type: string, example: '약관의 규제에 관한 법률 제10조' }
+                      text: { type: string }
+      responses:
+        '200':
+          description: 판정
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [risk_class, explanation, model_version, knowledge_date]
+                properties:
+                  risk_class: { type: string, description: '정상|분쟁 가능|불공정 가능|위법 가능 (또는 영문 코드) — 어댑터가 정규화' }
+                  risk_type: { type: string, nullable: true }
+                  risk_level: { type: string, nullable: true, description: '높음|중간|낮음' }
+                  confidence: { type: string, nullable: true, description: '높음|중간(=보통)|낮음' }
+                  explanation:
+                    type: array
+                    items:
+                      type: object
+                      required: [claim, evidence_ids]
+                      properties:
+                        claim: { type: string }
+                        evidence_ids: { type: array, items: { type: string } }
+                  model_version: { type: string }
+                  knowledge_date: { type: string, format: date }
+        '400': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+        '504': { $ref: '#/components/responses/Error' }
+  /v1/embed:
+    post:
+      summary: 근거·조항 임베딩(하이브리드 RAG — BM25 + 밀집 벡터). 공유 Ollama bge-m3 (2026-09-29 추가, 8번째 엔드포인트)
+      description: |
+        백엔드가 근거 적재 뒤(트랜잭션 밖) 근거 발췌를, 검색 시 비식별 조항을 임베딩한다. 한 번에 최대 32개(가이드 1.7-7 —
+        묶음 사이 휴식은 호출자가 지킨다). 벡터는 L2 정규화(코사인 = 내적). model_version 이 바뀌면 이전 벡터와 섞지 않는다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [texts]
+              additionalProperties: false
+              properties:
+                texts:
+                  type: array
+                  minItems: 1
+                  maxItems: 32
+                  items: { type: string, minLength: 1, maxLength: 8000, description: 근거 발췌 또는 비식별 조항 }
+      responses:
+        '200':
+          description: 임베딩
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [model_version, dim, embeddings]
+                properties:
+                  model_version: { type: string, example: 'bge-m3@0a1b2c3d4e5f' }
+                  dim: { type: integer, example: 1024 }
+                  embeddings:
+                    type: array
+                    items: { type: array, items: { type: number } }
+        '400': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+        '504': { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+  schemas:
+    ClauseIn:
+      type: object
+      required: [clause_id, text]
+      additionalProperties: false
+      properties:
+        clause_id: { type: string }
+        text: { type: string, minLength: 1, maxLength: 10000, description: '비식별 조항 원문 — 공백만이면 400, 10,000자(config limits.max_clause_chars) 초과 400(자르지 않음). M1·M2 는 앞 512토큰만 읽는다' }
+        article_no: { type: string, nullable: true }
+        title: { type: string, nullable: true }
+    DetectScore:
+      type: object
+      required: [score]
+      properties:
+        label: { type: string }
+        type: { type: string, nullable: true, description: 'M1 편법 유형 / M2 관련 법령 후보(근거 검색 가중치로 사용 — research R-09)' }
+        related_laws: { type: array, items: { type: string } }
+        score: { type: number, minimum: 0, maximum: 1 }
+    Health:
+      type: object
+      required: [status, models]
+      properties:
+        status: { type: string, enum: [ready, loading, degraded] }
+        models:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, enum: [M1, M2, M3, M4] }
+              state: { type: string, enum: [ready, loading, cold, missing, error] }
+              model: { type: string, description: 'Ollama 모델 이름 또는 체크포인트 이름' }
+              size_mb: { type: integer, nullable: true }
+        gpu:
+          type: object
+          description: 'Apple Silicon 통합 메모리 — used_mb = Ollama /api/ps size_vram 합, total_mb = 물리 메모리'
+          properties:
+            used_mb: { type: integer }
+            total_mb: { type: integer }
+        model_version: { type: string }
+        knowledge_date: { type: string, nullable: true }
+        warmup_estimate_sec: { type: integer, nullable: true, description: 'cold 모델 적재 예상 초 — 없으면 null' }
+        queue_depth: { type: integer, description: '게이트웨이 안에서 Ollama 호출을 기다리는 요청 수(동시 1건 제한)' }
+    ErrorBody:
+      type: object
+      properties:
+        detail: { type: string }
+  requestBodies:
+    DetectRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [clauses, contract_type]
+            additionalProperties: false
+            properties:
+              clauses: { type: array, minItems: 1, maxItems: 2000, items: { $ref: '#/components/schemas/ClauseIn' } }
+              contract_type: { type: string, enum: [ecommerce, subscription, installment, door_to_door, general_consumer, out_of_scope] }
+  responses:
+    Error:
+      description: 오류 (400/401/404/413/500/503/504)
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+    DetectResponse:
+      description: OK
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [results, model_version]
+            properties:
+              results:
+                type: array
+                items:
+                  allOf:
+                    - $ref: '#/components/schemas/DetectScore'
+                    - type: object
+                      required: [clause_id]
+                      properties: { clause_id: { type: string } }
+              model_version: { type: string }
+              knowledge_date: { type: string, nullable: true }

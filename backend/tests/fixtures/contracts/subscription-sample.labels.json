@@ -1,0 +1,26 @@
+{
+ "$comment": "구독 약관 표본의 불공정 조항 라벨(가상). 조 번호 기준",
+ "articleCount": 40,
+ "unfair": [
+  {
+   "article": "제12조",
+   "type": "excessive_penalty"
+  },
+  {
+   "article": "제15조",
+   "type": "refund_cancel_limit"
+  },
+  {
+   "article": "제18조",
+   "type": "unilateral_change"
+  },
+  {
+   "article": "제22조",
+   "type": "liability_avoid"
+  },
+  {
+   "article": "제27조",
+   "type": "rights_limit"
+  }
+ ]
+}

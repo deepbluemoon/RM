@@ -1,0 +1,128 @@
+/* ================================================================
+   TOKENS — Compact (2026-10-01) · cosmos.so 를 참조한 콤팩트 · 미니멀
+   흰 바탕 + 중립 회색 단계 · 강조는 잉크(검정) 하나 · 의미 색은 빨강(오류) · 초록(통과) · 위험도 3단계(빨강 · 노랑 · 슬레이트)만.
+   글꼴 = Pretendard 하나(한글 · 영문 같은 글꼴, 가로로 넓힌 제목 없음). 값은 이 파일에서만 정의한다.
+   ================================================================ */
+:root{
+  /* colors — 역할 이름(이름은 그대로, 값만 바뀐다) */
+  --color-primary:#111111;           /* 채운 버튼 · 선택 · 현재 위치 = 잉크 하나 */
+  --color-primary-hover:#2b2b2e;
+  --color-on-primary:#ffffff;
+  --color-accent-faint:rgba(17,17,17,0.05);
+  --color-ink:#111111;               /* 본문 글자(흰 바탕 18.9:1) */
+  --color-ink-deep:#000000;
+  --color-charcoal:#46464d;          /* 보조 글자(흰 9.4:1) */
+  --color-body:#66666e;              /* 옅은 글자(흰 5.7:1 · 회색 바탕 5.2:1) */
+  --color-mute:#a1a1a8;              /* 비활성 글자 */
+  --color-canvas:#ffffff;
+  --color-paper:#f6f6f7;             /* 옅은 바탕 — 안내 상자 · 바닥 */
+  --color-surface-soft:#f3f3f4;
+  --color-surface-hover:#ebebed;
+  --color-surface-card:#ffffff;      /* 카드 = 흰 바탕 + 가는 테두리 */
+  --color-hairline:#e8e8eb;
+  --color-hairline-strong:#d2d2d7;
+  --color-on-dark:#f6f6f7;
+  --color-on-dark-mute:rgba(246,246,247,0.68);
+  --color-surface-dark:#111111;      /* 코드 상자 */
+  --color-focus-ring:rgba(17,17,17,0.18);
+  --color-scrim:rgba(17,17,17,0.28);  /* 어두운 막 — 메뉴 창 · 대화상자 · 서랍 모두 이것 하나 */
+  --color-link:#111111;
+  --color-link-mute:#66666e;
+  /* 의미 색 — 오류는 빨강 하나, 통과는 초록 하나. 그 밖의 색은 쓰지 않는다 */
+  --color-danger:#c0261b;            /* 흰 바탕 5.9:1 */
+  --color-danger-faint:rgba(192,38,27,0.08);
+  --color-success:#1f7a3d;           /* 흰 바탕 5.4:1 */
+  /* 위험도 단계(2026-10-01, 2차) — 높음 = 진한 빨강 채움 + 흰 글자, 중간 = 밝은 노랑 채움 + 검은 글자, 낮음 = 옅은 슬레이트.
+     1차(빨강 #c0261b · 주황 #b45309)는 둘 다 어두운 난색이라 비슷해 보였다 → 중간을 밝기부터 반대로(어두움 ↔ 밝음). 기호(● ◐ ○)는 그대로.
+     대비: 높음 흰 글자 5.9 · 중간 검은 글자 10.2 · 낮음 7.5, 왼쪽 띠(중간)는 #b98000 로 흰 바탕 3.4 */
+  --color-risk-high:#c0261b;
+  --color-risk-high-faint:#fdeceb;
+  --color-risk-mid:#f2b400;
+  --color-risk-mid-ink:#2b2000;
+  --color-risk-mid-line:#b98000;
+  --color-risk-mid-faint:#fff6d9;
+  --color-risk-low:#475569;
+  --color-risk-low-faint:#eef1f5;
+  --color-terminal-red:#d4d4d8;      /* 코드 상자 창 점 — 장식이라 회색 단계로 */
+  --color-terminal-yellow:#a1a1a8;
+  --color-terminal-green:#66666e;
+  /* 배경 모션(구름) — 아주 옅은 회청색 두 가지 */
+  --color-cloud-a:rgba(128,146,190,0.16);
+  --color-cloud-b:rgba(150,150,166,0.14);
+
+  /* font families — Pretendard 하나(제목 · 본문 같은 글꼴, 굵기와 크기로만 위계) */
+  --font-display:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --font-sans:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+
+  /* rounded — 작게: 입력 8 · 상자 12 · 카드 16 · 큰 판 20, 버튼은 알약 */
+  --rounded-none:0px;
+  --rounded-sm:8px;
+  --rounded-md:12px;
+  --rounded-lg:16px;
+  --rounded-xl:20px;
+  --rounded-full:9999px;
+
+  /* spacing — 기본 단위 8px */
+  --spacing-xxs:2px;
+  --spacing-xs:4px;
+  --spacing-sm:8px;
+  --spacing-md:12px;
+  --spacing-lg:16px;
+  --spacing-xl:24px;
+  --spacing-xxl:32px;
+  --spacing-section:80px;
+
+  /* layout */
+  --header-height:64px;
+  --page-width:1200px;
+}
+
+/* typography classes (.t-<token>) — 콤팩트: 제목은 600 · 좁은 자간, 크기는 한 단계씩 작게 */
+.t-hero{font:650 40px/1.18 var(--font-display);letter-spacing:-.03em;text-wrap:balance}
+.t-display-xl{font:650 32px/1.22 var(--font-display);letter-spacing:-.025em;text-wrap:balance}
+.t-display-lg{font:650 28px/1.25 var(--font-display);letter-spacing:-.022em;text-wrap:balance}
+.t-heading-lg{font:600 22px/1.3 var(--font-display);letter-spacing:-.018em}
+.heading-2{font:650 26px/1.25 var(--font-display);letter-spacing:-.02em}
+.t-heading-md{font:600 18px/1.4 var(--font-sans);letter-spacing:-.012em}
+.t-heading-sm{font:600 16px/1.45 var(--font-sans);letter-spacing:-.01em}
+.t-body-lg{font:400 17px/1.6 var(--font-sans)}
+.t-body-md{font:400 15px/1.6 var(--font-sans)}
+.t-body-strong{font:600 15px/1.6 var(--font-sans)}
+.t-body-sm{font:400 14px/1.5 var(--font-sans)}
+.t-body-sm-strong{font:600 14px/1.5 var(--font-sans)}
+.t-caption-sm{font:400 12px/1.4 var(--font-sans)}
+.t-code-md{font:400 15px/1.55 var(--font-mono)}
+.t-code-sm{font:400 13px/1.5 var(--font-mono)}
+.t-button-md{font:500 14px/1 var(--font-sans)}
+
+
+/* base — 전역 규칙 */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:120px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+body{margin:0;background:var(--color-canvas);color:var(--color-ink);font:400 15px/1.6 var(--font-sans);letter-spacing:-.005em;-webkit-font-smoothing:antialiased;word-break:keep-all;overflow-wrap:break-word}
+::selection{background:rgba(17,17,17,.12)}
+body.menu-locked{overflow:hidden}
+a{color:var(--color-link)}
+:focus-visible{outline:none;box-shadow:0 0 0 3px var(--color-focus-ring)}
+code{font:400 13px/1.5 var(--font-mono);background:var(--color-surface-soft);border:1px solid var(--color-hairline);border-radius:var(--rounded-sm);padding:1px 6px}
+h1,h2,h3,h4,h5{margin:0}
+.visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* 헤어라인 표(운영 화면) */
+table.spec{width:100%;border-collapse:collapse;font:400 14px/1.5 var(--font-sans)}
+table.spec th{text-align:left;font-weight:500;color:var(--color-body);padding:10px 12px 10px 0;border-bottom:1px solid var(--color-hairline-strong);white-space:nowrap}
+table.spec td{padding:12px 12px 12px 0;border-bottom:1px solid var(--color-hairline);vertical-align:top}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* responsive token overrides — 1024 / 850 / 768 / 640 */
+@media (max-width:1024px){ .t-hero{font-size:36px} }
+@media (max-width:768px){ :root{--spacing-section:64px;--header-height:64px} .t-hero{font-size:32px} }
+@media (max-width:640px){
+  :root{--spacing-section:48px}
+  .t-hero{font-size:28px;line-height:1.25}
+  .t-display-xl{font-size:26px;line-height:1.25}
+  .t-display-lg{font-size:24px}
+  .heading-2{font-size:22px}
+}

@@ -1,0 +1,9 @@
+# M3 최종판정 — Qwen/Qwen3-4B-Instruct-2507 공식 원본 bf16 (양자화 없음)
+# 등록: scripts/provision_models.sh → ollama create pioneer2-crd-m3:v1 (공유 Ollama, 계정 접두사 필수)
+# FROM 경로는 이 파일 기준 상대 경로. num_ctx 는 공유 서버 한도 8192.
+FROM ../var/gguf/m3-bf16.gguf
+PARAMETER temperature 0
+PARAMETER top_k 1
+PARAMETER seed 0
+PARAMETER num_ctx 8192
+PARAMETER num_predict 700

@@ -1,0 +1,108 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`C1 진행 레일 > 진행·완료·대기 상태와 aria-live polite 1`] = `
+"<div data-v-62d251ae="" class="rail-wrap" data-c="C1">
+  <div data-v-62d251ae="" aria-live="polite" aria-atomic="false">
+    <nav data-v-62d251ae="" class="rail" aria-label="진행 단계"><span data-v-62d251ae="" class="rid">REQ-142</span>
+      <!--v-if--><span data-v-62d251ae="" class="step done" data-state="done">1. 입력·검증 완료</span><span data-v-62d251ae="" class="sep" aria-hidden="true">›</span><span data-v-62d251ae="" class="step now" aria-current="step" data-state="now">2. 비식별화·구조화</span><span data-v-62d251ae="" class="sep" aria-hidden="true">›</span><span data-v-62d251ae="" class="step wait" data-state="wait">3. 탐지·판정</span><span data-v-62d251ae="" class="sep" aria-hidden="true">›</span><span data-v-62d251ae="" class="step wait" data-state="wait">4. 결과</span>
+    </nav>
+    <transition-stub data-v-62d251ae="" appear="false" persisted="false" css="false">
+      <!--v-if-->
+    </transition-stub>
+    <p data-v-62d251ae="" class="rail-detail" data-part="detail"><span data-v-62d251ae="" class="visually-hidden">세부 진행:</span><span data-v-62d251ae="" class="sub done">수신 완료</span><span data-v-62d251ae="" class="sub running"><b data-v-62d251ae="">비식별화 진행 중</b></span><span data-v-62d251ae="" class="sub waiting">구조화 기다리는 중</span></p>
+  </div>
+</div>"
+`;
+
+exports[`C1 진행 레일 > 차단·해제 대기·재사용 표기 1`] = `
+"<div data-v-62d251ae="" class="rail-wrap" data-c="C1">
+  <div data-v-62d251ae="" aria-live="polite" aria-atomic="false">
+    <nav data-v-62d251ae="" class="rail" aria-label="진행 단계">
+      <!--v-if-->
+      <!--v-if--><span data-v-62d251ae="" class="step reuse" data-state="reuse">1. 기록 열람 · 지난 결과 사용</span><span data-v-62d251ae="" class="sep" aria-hidden="true">›</span><span data-v-62d251ae="" class="step hold" data-state="hold">2. 근거 적합성 · 기다리는 중</span><span data-v-62d251ae="" class="sep" aria-hidden="true">›</span><span data-v-62d251ae="" class="step block" aria-current="step" data-state="block">3. 탐지·판정 · 멈춤</span>
+    </nav>
+    <transition-stub data-v-62d251ae="" appear="false" persisted="false" css="false">
+      <!--v-if-->
+    </transition-stub>
+    <!--v-if-->
+  </div>
+</div>"
+`;
+
+exports[`C2 게이트 차단 블록 > role=alert, 사유·해제 주체·다음 행동, 닫기 버튼 없음, 제목으로 포커스 1`] = `
+"<section class="gate" role="alert" aria-labelledby="gate-title-v-0" data-c="C2" data-gate="G3" data-variant="user" data-gate-block="">
+  <div class="gate-head"><span class="gate-id">G3</span>
+    <h2 id="gate-title-v-0" class="gate-title" tabindex="-1">URL 본문을 가져올 수 없습니다</h2>
+  </div>
+  <dl>
+    <dt>이유</dt>
+    <dd data-part="reason">로그인이 필요한 페이지이거나 접근이 차단되었거나 본문이 없습니다</dd>
+    <dt>누가 풀 수 있나요</dt>
+    <dd data-part="actor">사용자 - 파일 업로드 또는 텍스트 붙여넣기로 전환</dd>
+  </dl>
+  <div class="actions"><button type="button" class="btn btn-secondary" data-action="switch_to_file">파일 업로드로 전환</button><button type="button" class="btn btn-secondary" data-action="switch_to_text">텍스트 붙여넣기로 전환</button></div>
+</section>"
+`;
+
+exports[`C3 사유 붙은 비활성 버튼 > 비활성: aria-disabled + aria-describedby 로 사유 연결, 포커스 가능, 클릭 무시 1`] = `"<div class="reasoned" data-c="C3"><button type="button" class="btn btn-secondary" aria-disabled="true" aria-describedby="reason-v-0" title="이번 달 무료 분석 3건을 모두 사용했습니다 - 10-01 초기화">분석 시작</button><span id="reason-v-0" class="reason" data-part="reason">이번 달 무료 분석 3건을 모두 사용했습니다 - 10-01 초기화</span></div>"`;
+
+exports[`C4 기준일·비자문 고지 띠 > 비자문 고지·기준일·관점(사업자) 1`] = `
+"<div class="band" role="note" data-c="C4"><strong>법률 자문이 아니에요. 결정하기 전에 근거를 직접 확인해 주세요</strong><span><!--v-if-->근거 자료 기준일 <strong>2026-09-15</strong></span>
+  <!--v-if-->
+  <!--v-if--><span>보는 입장 <strong>사업자</strong></span>
+</div>"
+`;
+
+exports[`C5 판정 배지 > 위험도 = 글자 + 기호(aria) + 모양 클래스, 읽기 전용 1`] = `
+"<div class="verdict" data-c="C5" data-category="unfair" aria-label="판단 결과 (읽기 전용)" role="group"><span class="cat">불공정 가능</span><span class="meta">과도한 위약금</span><span class="risk high" data-level="high" aria-label="위험도 높음 (●)">위험도 높음</span><span class="meta">확신 정도 보통</span>
+  <!--v-if-->
+  <!--v-if-->
+  <!--v-if-->
+  <!--v-if-->
+</div>"
+`;
+
+exports[`C6 근거 칩 + D1 출처 드로어 > 칩: 출처 유형 + 식별 정보, 변경됨·강조 상태, 클릭 시 open 1`] = `"<button type="button" class="chip lit changed" data-c="C6" data-evidence="9001" aria-label="근거 법령 약관의 규제에 관한 법률 제8조, 변경됨 — 출처 보기" aria-pressed="true"><small>법령</small><span class="">약관의 규제에 관한 법률 제8조</span></button>"`;
+
+exports[`C7 영역 대체 문구 > na → 해당 없어요 1`] = `
+"<div class="fallback" data-c="C7" data-kind="na"><span class="kind">해당 없어요</span>
+  <p>요약 제공 불가 - 요약 모델이 응답하지 않았습니다</p>
+</div>"
+`;
+
+exports[`C7 영역 대체 문구 > processing → 진행 중 1`] = `
+"<div class="fallback" data-c="C7" data-kind="processing"><span class="kind">진행 중</span>
+  <p>요약 제공 불가 - 요약 모델이 응답하지 않았습니다</p>
+</div>"
+`;
+
+exports[`C7 영역 대체 문구 > unavailable → 지금은 볼 수 없어요 1`] = `
+"<div class="fallback" data-c="C7" data-kind="unavailable"><span class="kind">지금은 볼 수 없어요</span>
+  <p>요약 제공 불가 - 요약 모델이 응답하지 않았습니다</p>
+</div>"
+`;
+
+exports[`C8 가림 표기 > 〔유형〕 을 가림 표기로, 스크린리더는 "가림, 유형" 1`] = `"<span data-c="C8">갑 <span class="mask" aria-label="가림, 이름">〔이름〕</span> 연락처 <span class="mask" aria-label="가림, 전화번호">〔전화번호〕</span> 로 문의</span>"`;
+
+exports[`C9 근거 변경 안내 띠 > 변경 없으면 숨김, 있으면 유형별 개수 + 변경 내용 보기·재분석 1`] = `
+"<div class="change-band" role="note" data-c="C9">
+  <p><strong>분석한 뒤에 근거 자료가 바뀌었어요</strong> · 법 개정 1 · 법 폐지 0 · 새 사례 2 · 표준약관 개정 0</p>
+  <div class="row"><button type="button" class="btn btn-secondary" data-action="view">바뀐 내용 보기</button><button type="button" class="btn btn-secondary" data-action="reanalyze">다시 분석</button></div>
+</div>"
+`;
+
+exports[`C11 모델 서버 상태 표시 > ready + coldStart → 모델 대기 중(cold), 예상 추가 시간 N초 1`] = `
+"<div class="status-block" data-c="C11" data-state="ready" data-cold="true">
+  <div class="row"><span class="status cold"><i aria-hidden="true"></i><span class="state-text">잠시 쉬는 중</span><time datetime="2026-09-30T10:42:00+09:00">확인 시각 10:42:00</time></span><button type="button" class="btn btn-secondary" data-action="refresh">상태 다시 확인</button></div>
+  <p class="status-note" data-part="note">지금 바로 시작할 수 있어요. 한동안 쉬고 있었기 때문에 첫 분석만 약 25초 더 걸려요.</p>
+</div>"
+`;
+
+exports[`C11 모델 서버 상태 표시 > ready 1`] = `
+"<div class="status-block" data-c="C11" data-state="ready">
+  <div class="row"><span class="status ready"><i aria-hidden="true"></i><span class="state-text">바로 분석할 수 있어요</span><time datetime="2026-09-30T10:42:00+09:00">확인 시각 10:42:00</time></span><button type="button" class="btn btn-secondary" data-action="refresh">상태 다시 확인</button></div>
+  <!--v-if-->
+</div>"
+`;
+
+exports[`진행 대기 안내 줄 > mm:ss 경과 + 콜드 스타트 안내 + 예상 범위, 시계는 aria-live off 1`] = `"<div class="rail-wait" data-part="wait-line"><span>지난 시간 <span class="clock" data-part="elapsed" aria-live="off" aria-label="지난 시간 01:15">01:15</span></span><span data-part="notice" data-kind="cold_start"> · <b>계약 요약을 준비하고 있어요. 약 20초 더 걸려요</b></span><span class="muted" data-part="expected"> · 보통 1~3분 걸려요. 분석 준비가 필요하면 조금 더 걸릴 수 있어요</span></div>"`;

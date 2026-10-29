@@ -1,0 +1,20 @@
+{
+  "$comment": "M4 /api/chat format. 라벨은 contract_type_code 6종.",
+  "type": "object",
+  "required": ["summary", "contract_type_candidates"],
+  "properties": {
+    "summary": { "type": "string" },
+    "contract_type_candidates": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["label", "score"],
+        "properties": {
+          "label": { "type": "string", "enum": ["ecommerce", "subscription", "installment", "door_to_door", "general_consumer", "out_of_scope"] },
+          "score": { "type": "number" }
+        }
+      }
+    }
+  }
+}
