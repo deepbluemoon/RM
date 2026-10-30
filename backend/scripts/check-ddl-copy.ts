@@ -2,8 +2,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sha = (p: string) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 const a = sha(path.join(root, '..', 'design', 'crd_ddl.sql'));
 const b = sha(path.join(root, 'db', 'migrations', '001_crd_ddl.sql'));

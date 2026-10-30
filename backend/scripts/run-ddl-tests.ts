@@ -3,11 +3,12 @@
 // "-- @setup / @accept / @reject <규칙> / @expect <값>" 표지 단위로 한 문장씩 실행한다. 실패 건수만큼 exit code.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
 import { config as loadDotenv } from 'dotenv';
 import { splitSql } from '../src/db/sqlSplit.js';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 loadDotenv({ path: path.join(root, '.env') });
 const e = process.env;
 const conf = {

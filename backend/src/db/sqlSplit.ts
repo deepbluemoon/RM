@@ -7,6 +7,8 @@ export interface SqlStatement {
 }
 
 export function splitSql(script: string): SqlStatement[] {
+  // Windows 체크아웃(core.autocrlf)의 CRLF 를 LF 로 — 주석 표지 정규식이 \r 에서 깨지지 않게
+  script = script.replace(/\r\n?/g, '\n');
   const out: SqlStatement[] = [];
   let delimiter = ';';
   let buf = '';
