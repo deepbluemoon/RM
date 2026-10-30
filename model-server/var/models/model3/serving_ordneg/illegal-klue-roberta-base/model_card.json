@@ -1,0 +1,30 @@
+{
+ "id": "M2",
+ "name": "illegal-ordneg-klue-roberta",
+ "source": "klue/roberta-base",
+ "model_version": "illegal-ordneg-klue-roberta@m3_ordneg_v1-2026-09-30",
+ "trained_data_date": "2026-09-30",
+ "serving": {
+  "kind": "seqcls_binary",
+  "runtime": "pytorch",
+  "device": "cpu",
+  "max_length": 512,
+  "threshold": 0.015481499999999999,
+  "threshold_selection": "VALIDATION: 평범한 조항(ordVAL) 오탐 ≤5% 안에서 공식 VAL 재현율 최대"
+ },
+ "labels": "{'0': 'none', '1': 'illegal'}",
+ "input_format": "{계약유형 한글} [SEP] {조 제목} [SEP] {조항}",
+ "run": "data_source/model_3/runs/m3_ordneg_v1",
+ "metrics": {
+  "chosen_epoch": 2,
+  "th": 0.015481499999999999,
+  "val_auc": 0.9322,
+  "val_recall": 0.9394,
+  "test_auc": 0.9513,
+  "test_f1": 0.8466,
+  "test_recall": 0.9195,
+  "test_precision": 0.7843,
+  "ordval_flag": 0.03,
+  "ordtest_flag": 0.036
+ }
+}

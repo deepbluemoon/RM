@@ -1,7 +1,7 @@
 # model-server 게이트웨이 설정 (model-serving §0 공유 Ollama 적용 구성 — "docs/ollama-guide.md")
 # 환경변수가 있으면 이 값보다 우선한다(app/config.py). 비밀값(MODEL_API_KEY)은 여기에 쓰지 않는다.
 server: { host: 127.0.0.1, port: 9542, workers: 1 }   # 8000 은 다른 계정이 사용 중(§0.2)
-model_root: ./var/models            # env MODEL_ROOT. 운영 예: /opt/crd/models
+model_root: ./var/models/model3/serving_ordneg # env MODEL_ROOT. 운영 예: /opt/crd/models
 bundle_version: crd-model-server@0.1.0
 classifiers:
   device: cpu

@@ -4,12 +4,20 @@
 M1(편법)·M2(위법)는 프로세스 안에서 CPU 로, M3(최종판정)·M4(요약)는 서버의 **공유 Ollama** 로 실행한다.
 구성 근거: `specs/002-contract-risk-detection/model-serving.md` §0 (공유 Ollama 적용 구성).
 
+## Git LFS 모델 준비
+
+M1·M2 가중치(`model.safetensors`)는 Git LFS로 관리한다. Git LFS를 설치한 후 저장소 루트에서 `git lfs install`과 `git lfs pull`을 실행한다. 가중치가 LFS 포인터 텍스트로 남아 있으면 실모델을 사용할 수 없다. 각 모델 카드·토크나이저·설정은 가중치와 함께 유지한다.
+
+기본 `MODEL_ROOT`는 `model-server/var/models/model3/serving_ordneg`이다. 환경변수 `MODEL_ROOT`가 설정되어 있으면 기본값보다 우선하므로 각 모델 디렉터리가 직접 들어 있는 경로로 지정한다. 별도의 심볼릭 링크는 필요하지 않다.
+
+실모델에는 `uv sync --frozen --extra classifiers`가 필요하다. `/v1/models`에서 M1·M2 이름·버전을 확인하고 실제 추론을 수행한다. 모델 파일이 있거나 `/health`가 ready인 것만으로 실모델 추론 성공을 뜻하지 않는다. M3·M4, Ollama, DB 및 지식 스냅숏 준비는 별도다.
+
 ## 실행
 
 ```bash
 cd model-server
 cp .env.example .env            # MODEL_API_KEY 를 채운다(백엔드 MODEL_API_KEY 와 같은 값). .env 는 git 에 올리지 않는다
-uv sync                         # .venv (Python 3.11) + fastapi·uvicorn·httpx
+uv sync --frozen --extra classifiers  # 실모델 M1·M2 의존성 포함
 uv run uvicorn app.main:app --host 127.0.0.1 --port 9542 --workers 1 --no-access-log
 uv run pytest                   # Ollama 는 목 — 실제 서버를 부르지 않는다
 ```

@@ -1,0 +1,30 @@
+{
+ "id": "M1",
+ "name": "evasion-ordneg-klue-roberta",
+ "source": "klue/roberta-base",
+ "model_version": "evasion-ordneg-klue-roberta@m3_ordneg_v1-2026-09-30",
+ "trained_data_date": "2026-09-30",
+ "serving": {
+  "kind": "seqcls",
+  "runtime": "pytorch",
+  "device": "cpu",
+  "max_length": 512,
+  "threshold": 0.0929,
+  "threshold_selection": "VALIDATION: 평범한 조항(ordVAL) 오탐 ≤5% 안에서 공식 VAL 재현율 최대"
+ },
+ "labels": "{'0': 'none', '1': 'evasion'}",
+ "input_format": "{계약유형 한글} [SEP] {조 제목} [SEP] {조항}",
+ "run": "data_source/model_3/runs/m3_ordneg_v1",
+ "metrics": {
+  "chosen_epoch": 3,
+  "th": 0.0929,
+  "val_auc": 0.8879,
+  "val_recall": 0.6667,
+  "test_auc": 0.8767,
+  "test_f1": 0.7059,
+  "test_recall": 0.6923,
+  "test_precision": 0.72,
+  "ordval_flag": 0.005,
+  "ordtest_flag": 0.03
+ }
+}
