@@ -1,0 +1,6 @@
+# 비밀값·로컬 데이터 — 저장소에 올리지 않는다 (AGENTS.md)
+.env
+!.env.example
+backend/var/
+node_modules/
+dist/
