@@ -1,0 +1,1 @@
+/model-server/var/models/model3/serving_ordneg/*/model.safetensors filter=lfs diff=lfs merge=lfs -text
