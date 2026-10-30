@@ -9,8 +9,8 @@ classifiers:
   batch_size: 16
   max_length: 512
   score_decimals: 4
-  m1: { path: loophole-klue-roberta-base }
-  m2: { path: illegal-klue-roberta-base }
+  m1: { path: m1-evasion-klue-roberta }
+  m2: { path: m2-illegal-klue-roberta }
 llm:
   base_url: http://127.0.0.1:11434  # env OLLAMA_URL — 공유 서버(가이드 1.1)
   keep_alive: 5m                    # 가이드 1.3 필수(5m 이하, -1 금지)
