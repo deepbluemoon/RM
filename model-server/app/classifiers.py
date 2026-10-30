@@ -1,6 +1,6 @@
 """M1(편법)·M2(위법) 분류기 — model-serving §5.1·§5.2.
 
-체크포인트({model_root}/loophole-klue-roberta-base, .../illegal-klue-roberta-base + model_card.json)와
+체크포인트({model_root}/m1-evasion-klue-roberta, .../m2-illegal-klue-roberta + model_card.json)와
 torch·transformers(extra `classifiers`)가 있으면 CPU fp32 로 추론한다(6스레드, 배치 16, 최대 512토큰, 결정적).
 없으면 키워드 휴리스틱 분류기로 대신한다. 휴리스틱은 파인튜닝 전 파이프라인 전체를 돌려 보기 위한 것이며
 버전 문자열(`*-heuristic@날짜`)이 달라 백엔드 판정 캐시·평가 결과가 실제 모델과 섞이지 않는다.

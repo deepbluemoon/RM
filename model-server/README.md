@@ -96,7 +96,7 @@ env 의 모델 이름만 바꾼다(`model_version` 이 바뀌어 판정 캐시�
 
 ## M1·M2
 
-`{MODEL_ROOT}/loophole-klue-roberta-base/`·`illegal-klue-roberta-base/`(+ `model_card.json`)와 `uv sync --extra classifiers`
+`{MODEL_ROOT}/m1-evasion-klue-roberta/`·`m2-illegal-klue-roberta/`(+ `model_card.json`)와 `uv sync --extra classifiers`
 가 있으면 PyTorch CPU fp32(6스레드, 배치 16, 512토큰, 결정적)로 추론한다. 없으면 키워드 휴리스틱
 (`loophole-heuristic@2026-09-28`, `illegal-heuristic@2026-09-28`)으로 파이프라인을 끝까지 돌릴 수 있다.
 파인튜닝은 `training/README.md`.

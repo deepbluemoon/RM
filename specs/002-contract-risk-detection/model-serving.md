@@ -200,7 +200,7 @@ PARAMETER num_predict 600
 | 입력 형식 | `"{계약유형 한글} [SEP] {조 제목} [SEP] {비식별 조항 원문}"`. 512토큰 초과분은 자른다 |
 | 추론 | **CPU fp32**, 6스레드, 배치 16, 동적 패딩. 조항 100개 × 모델 2개 ≈ 2~4초(추정) |
 | 결정성 | `torch.use_deterministic_algorithms(True)`, 점수 반올림. CPU에서 추론하므로 같은 입력에 같은 점수가 나온다(UC8 평가 재현성) |
-| 체크포인트 | `{MODEL_ROOT}/loophole-klue-roberta-base/` + `model_card.json` |
+| 체크포인트 | `{MODEL_ROOT}/m1-evasion-klue-roberta/` + `model_card.json` |
 | 버전 문자열 | `loophole-klue-roberta-base@{학습 완료일}` |
 | 호출 경로 | `/v1/jobs`(문서 단위, M2와 병렬), `/v1/detect/loophole`(조항 1건 재분석) |
 
@@ -212,7 +212,7 @@ PARAMETER num_predict 600
 | 베이스·학습·추론·결정성 | M1과 같다(별도 파인튜닝 체크포인트, 같은 게이트웨이 프로세스) |
 | 출력 헤드 | 공유 인코더 + 헤드 2개: ① 이진(위법 소지 여부), ② 다중 레이블 5개(법률별) |
 | 계약 응답 사상 | `score` = P(위법 소지), `related_laws` = 법률별 확률 0.5 이상(최대 3개), `type` = 최상위 법률. `related_laws`는 백엔드 근거 검색 가중치로 쓰인다(research R-09) |
-| 체크포인트 | `{MODEL_ROOT}/illegal-klue-roberta-base/` + `model_card.json` |
+| 체크포인트 | `{MODEL_ROOT}/m2-illegal-klue-roberta/` + `model_card.json` |
 | 버전 문자열 | `illegal-klue-roberta-base@{학습 완료일}` |
 | 호출 경로 | `/v1/jobs`, `/v1/detect/illegal` |
 
@@ -261,8 +261,8 @@ classifiers:
   batch_size: 16
   max_length: 512
   score_decimals: 4
-  m1: { path: loophole-klue-roberta-base }
-  m2: { path: illegal-klue-roberta-base }
+  m1: { path: m1-evasion-klue-roberta }
+  m2: { path: m2-illegal-klue-roberta }
 llm:
   base_url: http://127.0.0.1:11435
   m3: { model: crd-m3, timeout_sec: 60, concurrency: 4, json_schema: schemas/judge.json }

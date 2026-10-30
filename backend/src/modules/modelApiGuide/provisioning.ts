@@ -33,7 +33,7 @@ export const LLM_CUSTOM_STEPS: ProvisionStep[] = [
 
 export const CLASSIFIER_STEPS: ProvisionStep[] = [
   { step: '1 분류기 의존성', command: 'uv sync --extra classifiers', estimate: '약 1~3분' },
-  { step: '2 학습 결과 배치', command: '{MODEL_ROOT}/loophole-klue-roberta-base/ · illegal-klue-roberta-base/ (+ model_card.json) — training/README.md', estimate: '복사 수 초(학습 자체는 training/README.md)' },
+  { step: '2 학습 결과 배치', command: '{MODEL_ROOT}/m1-evasion-klue-roberta/ · m2-illegal-klue-roberta/ (+ model_card.json) — training/README.md', estimate: '복사 수 초(학습 자체는 training/README.md)' },
   { step: '3 게이트웨이 재시작', command: 'uv run uvicorn app.main:app --host 127.0.0.1 --port 9542 --workers 1', estimate: '수 초 + CPU 적재 수 초' },
 ];
 
