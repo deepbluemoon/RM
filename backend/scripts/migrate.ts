@@ -4,11 +4,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
 import { config as loadDotenv } from 'dotenv';
 import { splitSql } from '../src/db/sqlSplit.js';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 loadDotenv({ path: path.join(root, '.env') });
 const MIGRATIONS_DIR = path.join(root, 'db', 'migrations');
 
@@ -54,7 +55,7 @@ export async function applyMigrations(t: Target, opts: { reset?: boolean; log?: 
   return applied;
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   const reset = process.argv.includes('--reset-test');
   applyMigrations(target(reset), { reset })
