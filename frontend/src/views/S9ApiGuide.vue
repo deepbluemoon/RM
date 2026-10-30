@@ -470,7 +470,7 @@ Authorization: Bearer <발급받은 API 키>
           </div>
           <p v-if="missingCls.length" class="t-body-sm charcoal">
             {{ missingCls.map((m) => m.id).join('·') }}(CPU 분류기)는 팀 파인튜닝 체크포인트와 model_card.json 을 MODEL_ROOT 아래
-            (loophole-klue-roberta-base/, illegal-klue-roberta-base/)에 두고 게이트웨이를 재시작하면 적재됩니다.
+            (m1-evasion-klue-roberta/, m2-illegal-klue-roberta/)에 두고 게이트웨이를 재시작하면 적재됩니다.
           </p>
           <p v-if="missingLlm.length" class="t-caption-sm muted">등록 스크립트는 이미 있는 모델을 다시 만들지 않습니다. 모델 교체 시에는 버전 문자열이 바뀌어 판정 캐시가 자동으로 분리됩니다.</p>
         </div>
