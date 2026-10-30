@@ -1,5 +1,9 @@
 # RM 작업 지침
 
+## 공통 기여 안내
+
+- 이슈·커밋·PR 작성·리뷰·검증은 [CONTRIBUTING.md](CONTRIBUTING.md)를 함께 따른다. 브랜치·병합 정책은 별도 PR에서 정하며, 아래 작업 범위·검증·push 제한은 유지한다.
+
 ## 작업 범위와 이슈
 
 - 계약위험탐지 기능의 개발·개선, 오류 수정, 최소 구동 점검은 docs/01-issue-template/GUIDE.md를 참조한다.

@@ -8,8 +8,8 @@
 cd /home/euclid/rm
 git status --short
 git branch --show-current
-git diff -- .github/ISSUE_TEMPLATE docs/01-issue-template
-git diff --cached -- .github/ISSUE_TEMPLATE docs/01-issue-template
+git diff -- CONTRIBUTING.md .github/ISSUE_TEMPLATE .github/pull_request_template.md docs/01-issue-template
+git diff --cached -- CONTRIBUTING.md .github/ISSUE_TEMPLATE .github/pull_request_template.md docs/01-issue-template
 ```
 
 기존 변경과 스테이징을 보존한다. 새 파일은 diff에 나오지 않을 수 있으므로 직접 읽는다. 현재 브랜치가 작업 목적에 맞으면 유지한다. 별도 브랜치가 필요할 때만 겹치지 않는 이름으로 만들고 기존 브랜치를 삭제하지 않는다.
@@ -35,23 +35,25 @@ git diff --cached -- .github/ISSUE_TEMPLATE docs/01-issue-template
 
 ## 템플릿 유지보수
 
-실제 적용본 .github/ISSUE_TEMPLATE/을 기준으로 수정한 뒤 아래 두 위치를 같은 내용으로 갱신한다.
+이슈 템플릿은 `.github/ISSUE_TEMPLATE/`, 공통 PR 본문은 `.github/pull_request_template.md`를 기준으로 수정한다. 변경한 파일을 아래 두 위치의 같은 상대 경로에 동기화한다.
 
-- docs/01-issue-template/changes/.github/ISSUE_TEMPLATE/
-- docs/01-issue-template/completed/.github/ISSUE_TEMPLATE/
+- `docs/01-issue-template/changes/.github/`
+- `docs/01-issue-template/completed/.github/`
+
+예를 들어 PR 템플릿 사본은 각각 `changes/.github/pull_request_template.md`, `completed/.github/pull_request_template.md`다. 사본은 전달·검토용이며, GitHub에 적용할 파일은 루트 `.github/` 아래의 대응 파일이다. PR 제목 형식은 루트 [CONTRIBUTING.md](../../CONTRIBUTING.md)를 따른다.
 
 패키지만 받은 경우 파일별로 비교해 적용한다. 기존 .github 폴더 전체를 덮어쓰지 않는다. 템플릿 추가·삭제 시 세 위치와 안내·검증 문서를 함께 갱신한다.
 
 ## 커밋과 push 전 검토
 
-아래는 사용자가 로컬 커밋을 하기로 결정한 경우의 예시다. 이번 수정에서는 스테이징·커밋·PR 생성·push를 실행하지 않는다.
+아래는 사용자가 로컬 커밋을 하기로 결정한 경우의 예시다. 현재 변경에 필요한 파일만 선택한다. 이슈·PR 템플릿을 함께 반영할 때 루트 적용본과 기여 안내를 빠뜨리지 않는다. 커밋 메시지는 CONTRIBUTING의 형식에 맞춰 현재 작업 내용으로 작성하며, 과거 작업의 COMMIT_MESSAGE.txt를 그대로 재사용하지 않는다. 이번 수정에서는 스테이징·커밋·PR 생성·push를 실행하지 않는다.
 
 ```bash
-git add .github/ISSUE_TEMPLATE/runtime_readiness.md .github/ISSUE_TEMPLATE/bug_report.md .github/ISSUE_TEMPLATE/feature_request.md docs/01-issue-template
+git add CONTRIBUTING.md .github/pull_request_template.md .github/ISSUE_TEMPLATE/runtime_readiness.md .github/ISSUE_TEMPLATE/bug_report.md .github/ISSUE_TEMPLATE/feature_request.md docs/01-issue-template
 git diff --cached --stat
 git diff --cached --check
 git diff --cached
-git commit -F docs/01-issue-template/COMMIT_MESSAGE.txt
+git commit
 ```
 
 이미 스테이징된 다른 변경도 커밋에 포함될 수 있으므로 전체 staged diff를 확인한다. push는 사용자의 별도 명시적 지시를 받은 뒤에만 실행한다. 사용자가 나중에 push할 예정이라는 말만으로 대신 실행하지 않는다.
