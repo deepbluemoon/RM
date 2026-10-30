@@ -20,6 +20,8 @@
 
 ## 적용본과 사본
 
-실제 GitHub 적용본은 .github/ISSUE_TEMPLATE/의 Markdown 파일이다. changes와 completed는 전달·검토용 사본이다. 적용본 기준으로 함께 갱신하고 파일별 해시를 대조한다. 확인하지 않은 라벨·담당자는 강제하지 않는다.
+GitHub 적용 대상은 .github/ISSUE_TEMPLATE/의 이슈 양식과 .github/pull_request_template.md의 공통 PR 본문이다. changes와 completed는 같은 상대 경로의 전달·검토용 사본이다. 적용 대상 파일 기준으로 함께 갱신하고 파일별 해시를 대조한다. 확인하지 않은 라벨·담당자는 강제하지 않는다.
+
+PR 제목 형식은 CONTRIBUTING.md, 본문 양식은 .github/pull_request_template.md에서 관리한다. docs/01-issue-template/PR.md는 과거 작업의 본문 예시로 보존한다. Markdown PR 템플릿은 제목을 자동 입력하거나 필수 항목·승인 인원을 강제하는 설정이 아니다. 기본 브랜치에 반영되기 전에는 GitHub 적용 완료로 기록하지 않는다.
 
 이슈 양식은 작성 가이드이며 필수 입력을 기술적으로 강제하지 않는다. AI 작업 시 GUIDE와 선택한 이슈의 범위·인수 조건을 함께 제공한다. 반복 사용 중 누락이 발생하면 양식과 검증 기준을 함께 보완한다.
