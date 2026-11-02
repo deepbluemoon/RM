@@ -34,16 +34,32 @@ function renderOverview() {
   $('memory-total').textContent = `${memoryLimit ? (memoryUsed / memoryLimit * 100).toFixed(1) : '0.0'}%`
   $('last-updated').textContent = new Date(overview.observedAt).toLocaleTimeString('ko-KR')
   $('connection-label').textContent = overview.dockerAvailable ? 'Docker 연결됨' : 'Docker 연결 오류'
-  $('connection-label').previousElementSibling.style.background = overview.dockerAvailable ? '#67d49c' : '#f77e70'
+  $('connection-label').previousElementSibling.style.background = overview.dockerAvailable ? '#29cccc' : '#ff6b78'
+  $('sidebar-engine').textContent = overview.dockerAvailable ? 'Docker connected' : 'Docker unavailable'
+  $('sidebar-engine-dot').className = `engine-dot ${overview.dockerAvailable ? 'is-online' : 'is-offline'}`
+  $('scope-label').textContent = overview.scope ? `${String(overview.scope).toUpperCase()} SCOPE` : 'PROJECT SCOPE'
+  renderAlerts(overview.alerts || [])
   renderContainers(containers, overview.alerts || [])
   renderActions(overview.alerts || [])
   const banner = $('error-banner')
   if (overview.error) { banner.classList.remove('hidden'); banner.innerHTML = `<strong>OPS-DOCKER-001</strong> · ${escapeHtml(overview.error)}` } else banner.classList.add('hidden')
 }
 
+function renderAlerts(alerts) {
+  const list = $('alerts-list')
+  if (!alerts.length) {
+    list.innerHTML = '<div class="alert-nominal">현재 활성 경고가 없습니다. 모든 감시 대상이 설정된 임계치 안에 있습니다.</div>'
+    return
+  }
+  list.innerHTML = alerts.map((alert) => `<article class="alert-card">
+    <div class="alert-card-top"><strong>${escapeHtml(alert.code)}</strong><span class="alert-resource">${escapeHtml(alert.resource)}</span></div>
+    <p><b>${escapeHtml(alert.containerName || alert.containerId)}</b> · ${escapeHtml(String(alert.value))}% 사용 · ${formatDuration(alert.durationSec)} 지속</p>
+  </article>`).join('')
+}
+
 function renderContainers(containers, alerts) {
   const list = $('container-list')
-  if (!containers.length) { list.innerHTML = '<div class="empty">감시 중인 컨테이너가 없습니다.</div>'; return }
+  if (!containers.length) { list.innerHTML = '<div class="empty">현재 프로젝트 스코프에 일치하는 컨테이너가 없습니다.<br />이미지·이름 prefix 설정을 확인하세요.</div>'; return }
   list.innerHTML = containers.map((container) => {
     const stats = container.stats || { cpuPercent: 0, memoryPercent: 0, memoryUsedBytes: 0, memoryLimitBytes: 0 }
     const ownAlerts = alerts.filter((alert) => alert.containerId === container.id)
@@ -111,6 +127,7 @@ async function init() {
   state.catalog = await fetch('/api/error-codes').then((response) => response.json())
   $('codes-list').innerHTML = state.catalog.codes.map((item) => `<article class="code-item"><code>${escapeHtml(item.code)}</code><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.trigger)}<br />대응: ${escapeHtml(item.response)}</p></article>`).join('')
   $('clear-logs').addEventListener('click', () => { $('log-output').innerHTML = '<div class="log-empty"><span>⌁</span><p>로그를 선택하세요.</p></div>' })
+  $('refresh-now').addEventListener('click', () => { void refresh().catch(() => {}) })
   await refresh()
   setInterval(() => { void refresh().catch(() => {}) }, 5_000)
 }
