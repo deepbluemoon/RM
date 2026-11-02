@@ -23,6 +23,8 @@ const num = (def: number) =>
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: num(9522),
+  // 접속을 받을 주소. 로컬 기본값은 127.0.0.1, 컨테이너에서는 다른 컨테이너가 접속하도록 0.0.0.0
+  HOST: z.string().min(1).default('127.0.0.1'),
   APP_BASE_URL: z.string().default('http://127.0.0.1:9502'),
   DB_HOST: z.string().min(1),
   DB_PORT: num(3306),
