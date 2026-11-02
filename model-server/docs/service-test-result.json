@@ -1,0 +1,142 @@
+{
+  "base": "http://model-server:9542",
+  "at": "2026-11-02T11:20:54",
+  "passed": 15,
+  "total": 19,
+  "sec": 53.5,
+  "results": [
+    {
+      "id": "T01",
+      "name": "GET /health — 200·계약 스키마·M1·M2 실모델",
+      "ok": true,
+      "ms": 14,
+      "detail": "status=ready M1=evasion-ordneg-klue-roberta M2=illegal-ordneg-klue-roberta M3=ready queue=0"
+    },
+    {
+      "id": "T02",
+      "name": "GET /v1/models — 모델 버전",
+      "ok": true,
+      "ms": 10,
+      "detail": "{\"M1\": \"evasion-ordneg-klue-roberta@m3_ordneg_v1-2026-09-30\", \"M2\": \"illegal-ordneg-klue-roberta@m3_ordneg_v1-2026-09-30\", \"M3\": \"vertex:gemini-3.5-flash-lite\", \"M4\": \"vertex:gemini-3.5-flash-lite\"}"
+    },
+    {
+      "id": "T03",
+      "name": "인증 — 키 없음·틀림은 401",
+      "ok": true,
+      "ms": 78,
+      "detail": "8개 엔드포인트 × 3가지(없음·틀린 키·Basic) 모두 401"
+    },
+    {
+      "id": "T04",
+      "name": "POST /v1/detect/loophole — M1",
+      "ok": false,
+      "ms": 2475,
+      "detail": "실패: 예상 판정과 다름: [0.0199, 0.0437, 0.027]"
+    },
+    {
+      "id": "T05",
+      "name": "POST /v1/detect/illegal — M2",
+      "ok": false,
+      "ms": 2081,
+      "detail": "실패: 예상 판정과 다름: [0.9981, 0.7036, 0.998]"
+    },
+    {
+      "id": "T06",
+      "name": "M2 관련 법률 필드",
+      "ok": false,
+      "ms": 188,
+      "detail": "실패: related_laws·type 없음"
+    },
+    {
+      "id": "T07",
+      "name": "결정성 — 반복·배치 크기와 무관",
+      "ok": true,
+      "ms": 5277,
+      "detail": "반복·단건/배치 점수 일치"
+    },
+    {
+      "id": "T08",
+      "name": "입력 검증 — 400",
+      "ok": true,
+      "ms": 30,
+      "detail": "5가지 잘못된 입력 모두 400, 응답에 원문 없음"
+    },
+    {
+      "id": "T09",
+      "name": "크기 한도 — 413",
+      "ok": true,
+      "ms": 541,
+      "detail": "2001조항 detect·jobs 413, 본문 42MB → 413"
+    },
+    {
+      "id": "T10",
+      "name": "POST /v1/jobs → GET /v1/jobs/{id} — 100조항 문서",
+      "ok": true,
+      "ms": 27347,
+      "detail": "100조항 27.3초, 오류 0, versions={'M1': 'evasion-ordneg-klue-roberta@m3_ordneg_v1-2026-09-30', 'M2': 'illegal-ordneg-klue-roberta@m3_ordneg_v1-2026-09-30'}"
+    },
+    {
+      "id": "T11",
+      "name": "없는 작업 조회 — 404",
+      "ok": true,
+      "ms": 10,
+      "detail": "404"
+    },
+    {
+      "id": "T12",
+      "name": "동시 요청",
+      "ok": true,
+      "ms": 12204,
+      "detail": "동시 8요청(각 16조항) 모두 200"
+    },
+    {
+      "id": "T13",
+      "name": "요청 ID 헤더",
+      "ok": true,
+      "ms": 7,
+      "detail": "지정 ID 되돌림·미지정 시 생성"
+    },
+    {
+      "id": "T14",
+      "name": "계약 유형 6종 + 미정의 값",
+      "ok": false,
+      "ms": 682,
+      "detail": "실패: unknown_type → 400"
+    },
+    {
+      "id": "T15",
+      "name": "POST /v1/judge — M3 (공유 Ollama)",
+      "ok": true,
+      "ms": 1163,
+      "detail": "1.2초 risk_class=illegal level=high 설명 1개 vertex:gemini-3.5-flash-lite"
+    },
+    {
+      "id": "T16",
+      "name": "POST /v1/judge 입력 검증",
+      "ok": true,
+      "ms": 18,
+      "detail": "5가지 잘못된 입력 모두 400(Ollama 호출 없음)"
+    },
+    {
+      "id": "T17",
+      "name": "POST /v1/summarize — M4 (공유 Ollama)",
+      "ok": true,
+      "ms": 1256,
+      "detail": "1.3초 후보=['subscription', 'ecommerce', 'general_consumer'] 요약 185자"
+    },
+    {
+      "id": "T18",
+      "name": "API 문서 페이지",
+      "ok": true,
+      "ms": 76,
+      "detail": "/docs·/openapi.json 200 (인증 없음), 경로 ['/health', '/v1/detect/illegal', '/v1/detect/loophole', '/v1/embed', '/v1/jobs', '/v1/jobs/{job_id}', '/v1/judge', '/v1/models', '/v1/summarize']"
+    },
+    {
+      "id": "T19",
+      "name": "로그에 원문·키가 남지 않음",
+      "ok": true,
+      "ms": 1,
+      "detail": "로그 파일 없음 — 건너뜀"
+    }
+  ]
+}

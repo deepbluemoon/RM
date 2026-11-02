@@ -45,11 +45,13 @@ describe('US1 전체 흐름', () => {
     expect(run.judgedCount).toBe(run.riskTotal);
     expect(run.judged.length + run.judgedNormalCount).toBeLessThanOrEqual(run.riskTotal);
     for (const j of run.judged) expect(['dispute', 'unfair', 'illegal']).toContain(j.category);
-    // 판정 순서가 위험 점수 내림차순인지 — 판정 행(assessment_id)이 점수 높은 순으로 쌓인다
-    const rows = await select<{ s: number }>(getPool(),
-      `SELECT GREATEST(COALESCE(score_loophole, 0), COALESCE(score_illegal, 0)) AS s FROM clause_assessment
-        WHERE run_id = ? AND status = 'judged' ORDER BY assessment_id`, [runId]);
-    const scores = rows.map((r) => Number(r.s));
+    // 판정된 위험 조항 목록이 위험 점수 내림차순인지 — 판정은 병렬이라 저장 순서가 아니라 응답 순서로 확인한다(#88)
+    const rows = await select<{ clause_id: number; s: number }>(getPool(),
+      `SELECT clause_id, GREATEST(COALESCE(score_loophole, 0), COALESCE(score_illegal, 0)) AS s FROM clause_assessment
+        WHERE run_id = ? AND status = 'judged'`, [runId]);
+    const byClause = new Map(rows.map((r) => [Number(r.clause_id), Number(r.s)]));
+    const scores: number[] = run.judged.map((j: { clauseId: number }) => byClause.get(j.clauseId)!);
+    expect(scores.length).toBeGreaterThan(0);
     expect(scores).toEqual([...scores].sort((x, y) => y - x));
   });
 
