@@ -39,6 +39,10 @@ const schema = z.object({
   NAVER_CLIENT_SECRET: z.string().default(''),
   OAUTH_REDIRECT_BASE: z.string().default('http://127.0.0.1:9502'),
   AUTH_DEV_PROVIDER: bool,
+  // 쿠키 secure — auto(기본)면 production 에서만. HTTPS 없이 HTTP 로 띄우는 컨테이너 구성은 off
+  COOKIE_SECURE: z.enum(['auto', 'on', 'off']).default('auto'),
+  // Express trust proxy — 기본 loopback(같은 PC 의 Nginx). 컨테이너에서는 내부망 nginx 를 믿도록 'loopback, uniquelocal'
+  TRUST_PROXY: z.string().min(1).default('loopback'),
   RAW_STORAGE_DIR: z.string().default('./var/raw'),
   RAW_FILE_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'RAW_FILE_KEY 는 32바이트 hex(64자)'),
   // 기본값 없음(필수) — 빠지면 기동 실패. 8000 은 다른 계정 포트라 조용히 그리로 가면 조항·키가 샌다(API 점검 A10)
@@ -93,3 +97,10 @@ export const env: Env = load();
 
 /** 개발용 로그인(dev 제공자) — AUTH_DEV_PROVIDER=true 이고 production 이 아닐 때만 */
 export const devAuthEnabled = (): boolean => env.AUTH_DEV_PROVIDER && env.NODE_ENV !== 'production';
+
+/** 세션·OAuth state 쿠키의 secure — COOKIE_SECURE=auto 면 production 에서만 */
+export const cookieSecure = (): boolean =>
+  env.COOKIE_SECURE === 'auto' ? env.NODE_ENV === 'production' : env.COOKIE_SECURE === 'on';
+
+/** Express trust proxy 값 — 숫자면 신뢰할 프록시 홉 수, 아니면 쉼표로 구분한 주소·이름(loopback, uniquelocal 등) */
+export const trustProxy = (): number | string => (/^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) : env.TRUST_PROXY);

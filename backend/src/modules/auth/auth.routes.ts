@@ -1,7 +1,7 @@
 // /api/auth/login · signup(아이디·비밀번호, 2026-09-30), /api/auth/{provider}/start · callback(소셜 — 화면에서는 숨김), /api/auth/logout, /api/session (T025, RBAC). state 쿠키로 CSRF 를 막고, 로그인 시 세션을 재발급한다
 import crypto from 'node:crypto';
 import { Router, type Request } from 'express';
-import { env } from '../../config/env.js';
+import { cookieSecure, env } from '../../config/env.js';
 import { ah } from '../../middleware/guards.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { logger } from '../../logger.js';
@@ -81,7 +81,7 @@ authRouter.get(
     const state = crypto.randomBytes(24).toString('base64url');
     const returnTo = safeReturnTo(req.query.returnTo);
     res.cookie(STATE_COOKIE, `${state}.${Buffer.from(returnTo).toString('base64url')}`, {
-      httpOnly: true, sameSite: 'lax', secure: env.NODE_ENV === 'production', maxAge: 10 * 60 * 1000, path: '/api/auth',
+      httpOnly: true, sameSite: 'lax', secure: cookieSecure(), maxAge: 10 * 60 * 1000, path: '/api/auth',
     });
     res.redirect(302, p.authorizeUrl(state, redirectUri(p.id), req));
   }),

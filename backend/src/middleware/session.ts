@@ -2,7 +2,7 @@
 import session from 'express-session';
 import MySQLStoreFactory from 'express-mysql-session';
 import type { RequestHandler } from 'express';
-import { env } from '../config/env.js';
+import { cookieSecure, env } from '../config/env.js';
 import type { Role } from '../domain/codes.js';
 
 declare module 'express-session' {
@@ -42,7 +42,7 @@ export function sessionMiddleware(): RequestHandler {
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: env.NODE_ENV === 'production',
+      secure: cookieSecure(),
       maxAge: 14 * 24 * 60 * 60 * 1000,
     },
   });

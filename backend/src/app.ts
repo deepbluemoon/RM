@@ -2,6 +2,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
+import { trustProxy } from './config/env.js';
 import { logger } from './logger.js';
 import { requestId } from './middleware/requestId.js';
 import { sessionMiddleware } from './middleware/session.js';
@@ -14,7 +15,7 @@ import { rateLimits } from './middleware/rateLimit.js';
 
 export function createApp() {
   const app = express();
-  app.set('trust proxy', 'loopback');
+  app.set('trust proxy', trustProxy());
   app.disable('x-powered-by');
   app.use(requestId);
   app.use(
