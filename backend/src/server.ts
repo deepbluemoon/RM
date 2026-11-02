@@ -7,11 +7,13 @@ import { recoverInterrupted } from './jobs/recovery.js';
 import { startScheduledJobs } from './jobs/schedule.js';
 import { closePool } from './db/pool.js';
 import { loadRoleMatrix } from './modules/auth/rbac.service.js';
+import { registerKnowledgeSubscribers } from './modules/knowledge/subscribers.js';
 
 async function main() {
   await loadPolicy();
   await loadRoleMatrix();
   await recoverInterrupted();
+  registerKnowledgeSubscribers();
   startScheduledJobs();
   const app = createApp();
   const server = app.listen(env.PORT, env.HOST, () => logger.info({ host: env.HOST, port: env.PORT, env: env.NODE_ENV }, 'crd backend listening'));

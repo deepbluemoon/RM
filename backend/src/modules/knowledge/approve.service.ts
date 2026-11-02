@@ -16,6 +16,7 @@ import { activeKv, batchById, kvById, sourcesOf, toKvDto } from './knowledge.rep
 import { readStaged } from './staging.js';
 import { identifyImpacts, type ImpactKind, type KvChange } from './impact.service.js';
 import { deadlineWarnings } from './deadline.js';
+import { emitKnowledgeEvent } from './events.js';
 import type { PreparedUnit } from './preprocess.js';
 
 const IMPACT_KIND: Record<string, ImpactKind> = { amend: 'amend', new_law: 'amend', repeal: 'repeal', new_case: 'new_case', std_terms_revision: 'std_terms_revision' };
@@ -119,6 +120,8 @@ export async function approveBatch(batchId: number, opts: ApproveOptions = {}) {
 
   // 새 기준일 BM25 인덱스를 미리 만든다(이전 기준일 인덱스는 그대로 — 진행 중 분석용)
   await buildIndexForNewKv(asKvId(r.kvId));
+  // 구독자(벡터 채우기 등)는 승인 응답을 기다리게 하지 않는다(#99)
+  emitKnowledgeEvent({ type: 'kv_activated', batchId, kvId: r.kvId, added: r.added.length, closed: r.closed.length });
   // 0.5
   const impactedResultCount = await identifyImpacts(r.kvId, r.closed, r.added);
   await exec(getPool(), "UPDATE ingest_batch SET stage = 'impact_identified' WHERE batch_id = ?", [batchId]);
