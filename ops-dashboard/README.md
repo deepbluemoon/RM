@@ -19,9 +19,12 @@ Docker CLI와 Docker Engine에 접근할 수 있는 계정에서 실행한다.
 ```bash
 npm run check --prefix ops-dashboard
 npm test --prefix ops-dashboard
+npm run test:coverage --prefix ops-dashboard
 npm run dev --prefix ops-dashboard
 open http://127.0.0.1:9760
 ```
+
+단위 테스트 커버리지는 `test:coverage` 명령으로 확인하며 line·branch·function 각각 80% 미만이면 실패한다. 현재 검증은 실제 Docker Engine 없이 가짜 Docker CLI와 모듈 경계 테스트로 수행한다. Dockerfile·Compose·tamji 이미지가 준비되면 실제 컨테이너 통합 테스트를 별도 단계로 추가한다.
 
 환경 변수:
 
