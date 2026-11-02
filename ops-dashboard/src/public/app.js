@@ -1,3 +1,5 @@
+import { summarizeMetrics, formatPercent } from './metric-display.js'
+
 const state = { overview: null, catalog: null, statusCatalog: null, selectedId: null, logSource: null }
 const $ = (id) => document.getElementById(id)
 
@@ -22,16 +24,13 @@ function escapeHtml(value) {
 function renderOverview() {
   const overview = state.overview
   if (!overview) return
-  const containers = overview.containers || []
-  const running = containers.filter((item) => item.running)
-  const stats = running.map((item) => item.stats).filter(Boolean)
-  const memoryUsed = stats.reduce((sum, item) => sum + item.memoryUsedBytes, 0)
-  const memoryLimit = stats.reduce((sum, item) => sum + item.memoryLimitBytes, 0)
-  $('running-count').textContent = String(running.length)
-  $('total-count').textContent = String(containers.length)
+  const containers = overview.dockerAvailable ? (overview.containers || []) : []
+  const metrics = summarizeMetrics(overview)
+  $('running-count').textContent = metrics.running === null ? '수집 불가' : String(metrics.running)
+  $('total-count').textContent = metrics.total === null ? '확인 불가' : String(metrics.total)
   $('alert-count').textContent = String(overview.alerts?.length || 0)
-  $('cpu-total').textContent = `${stats.reduce((sum, item) => sum + item.cpuPercent, 0).toFixed(1)}%`
-  $('memory-total').textContent = `${memoryLimit ? (memoryUsed / memoryLimit * 100).toFixed(1) : '0.0'}%`
+  $('cpu-total').textContent = formatPercent(metrics.cpu)
+  $('memory-total').textContent = formatPercent(metrics.memory)
   $('last-updated').textContent = new Date(overview.observedAt).toLocaleTimeString('ko-KR')
   $('connection-label').textContent = overview.dockerAvailable ? 'Docker 연결됨' : 'Docker 연결 오류'
   $('connection-label').previousElementSibling.style.background = overview.dockerAvailable ? '#29cccc' : '#ff6b78'
@@ -40,7 +39,7 @@ function renderOverview() {
   $('scope-label').textContent = overview.scope ? `${String(overview.scope).toUpperCase()} SCOPE` : 'PROJECT SCOPE'
   renderAlerts(overview.alerts || [])
   renderStatusCodes(overview.statusCodes || {})
-  renderContainers(containers, overview.alerts || [])
+  renderContainers(containers, overview.alerts || [], overview.dockerAvailable)
   renderActions(overview.alerts || [])
   const banner = $('error-banner')
   if (overview.error) { banner.classList.remove('hidden'); banner.innerHTML = `<strong>OPS-DOCKER-001</strong> · ${escapeHtml(overview.error)}` } else banner.classList.add('hidden')
@@ -74,17 +73,18 @@ function renderStatusCodes(statusState) {
   </div>`).join('') : '<div class="empty">실행 중인 컨테이너의 access log에서 HTTP 응답을 수집합니다.</div>'
 }
 
-function renderContainers(containers, alerts) {
+function renderContainers(containers, alerts, dockerAvailable) {
   const list = $('container-list')
+  if (!dockerAvailable) { list.innerHTML = '<div class="empty">Docker 연결이 없어 컨테이너 상태를 확인할 수 없습니다.</div>'; return }
   if (!containers.length) { list.innerHTML = '<div class="empty">현재 프로젝트 스코프에 일치하는 컨테이너가 없습니다.<br />이미지·이름 prefix 설정을 확인하세요.</div>'; return }
   list.innerHTML = containers.map((container) => {
-    const stats = container.stats || { cpuPercent: 0, memoryPercent: 0, memoryUsedBytes: 0, memoryLimitBytes: 0 }
+    const stats = container.stats
     const ownAlerts = alerts.filter((alert) => alert.containerId === container.id)
     const selected = state.selectedId === container.id ? ' selected' : ''
     return `<button class="container-row${selected}" data-container-id="${escapeHtml(container.id)}" type="button">
       <div class="row-top"><span class="container-name" title="${escapeHtml(container.name)}">${escapeHtml(container.name)}</span><span class="status${container.running ? '' : ' stopped'}">${container.running ? 'running' : 'stopped'}</span></div>
       <div class="container-id">${escapeHtml(container.id.slice(0, 12))} · ${escapeHtml(container.image)}</div>
-      <div class="metrics"><div><div class="metric-label"><span>CPU</span><span class="metric-value">${stats.cpuPercent.toFixed(1)}%</span></div><div class="bar"><i class="${stats.cpuPercent >= 80 ? 'warn' : ''}" style="width:${Math.min(stats.cpuPercent, 100)}%"></i></div></div><div><div class="metric-label"><span>MEM</span><span class="metric-value">${stats.memoryPercent.toFixed(1)}%</span></div><div class="bar"><i class="${stats.memoryPercent >= 80 ? 'warn' : ''}" style="width:${Math.min(stats.memoryPercent, 100)}%"></i></div></div></div>
+      <div class="metrics"><div><div class="metric-label"><span>CPU</span><span class="metric-value">${formatPercent(stats?.cpuPercent)}</span></div>${stats && Number.isFinite(stats.cpuPercent) ? `<div class="bar"><i class="${stats.cpuPercent >= 80 ? 'warn' : ''}" style="width:${Math.min(Math.max(stats.cpuPercent, 0), 100)}%"></i></div>` : ''}</div><div><div class="metric-label"><span>MEM</span><span class="metric-value">${formatPercent(stats?.memoryPercent)}</span></div>${stats && Number.isFinite(stats.memoryPercent) ? `<div class="bar"><i class="${stats.memoryPercent >= 80 ? 'warn' : ''}" style="width:${Math.min(Math.max(stats.memoryPercent, 0), 100)}%"></i></div>` : ''}</div></div>
       ${ownAlerts.map((alert) => `<div class="row-alert"><b>${escapeHtml(alert.code)}</b> · ${escapeHtml(alert.resource)} ${alert.value}% 이상 · ${formatDuration(alert.durationSec)} 지속</div>`).join('')}
     </button>`
   }).join('')
