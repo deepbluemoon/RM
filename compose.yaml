@@ -60,6 +60,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+      # 기동·종료 유예는 측정값의 2~4배(#89, 실행 안내 9절). 첫 기동(DB 초기화) 약 13초
+      start_period: 30s
+    # 안전 종료(InnoDB 기록 정리) 실측 1초 미만 — 데이터가 커져도 강제 종료되지 않게 넉넉히
+    stop_grace_period: 30s
     restart: unless-stopped
 
   model-server:
@@ -81,7 +85,10 @@ services:
       interval: 10s
       timeout: 6s
       retries: 30
-      start_period: 30s
+      # M1·M2 적재 실측 11~13초(CPU 제한 없음) — 느린 서버·CPU 제한을 고려해 60초
+      start_period: 60s
+    # 처리 중인 작업을 마치고 종료 — 200조항 작업 중 실측 5.4초
+    stop_grace_period: 30s
     restart: unless-stopped
 
   # 1회 초기화: 마이그레이션(멱등) → 최초 지식 기준일 적재(이미 있으면 변경 없음)
@@ -110,7 +117,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
-      start_period: 20s
+      # 기동 실측 5~7초
+      start_period: 30s
+    # 종료 신호를 받으면 연결을 닫고 늦어도 10초 뒤 스스로 끝낸다(server.ts) — 그보다 길게 두어 강제 종료(137)를 피한다. 실측 0.5초
+    stop_grace_period: 15s
     restart: unless-stopped
 
   frontend:
