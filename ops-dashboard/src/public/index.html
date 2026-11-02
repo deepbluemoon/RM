@@ -75,13 +75,13 @@
             <p class="status-footnote">상태코드는 Docker access log에서 비식별 파싱합니다. 단일 4xx는 대응 버튼을 활성화하지 않습니다.</p>
           </section>
 
-          <section class="workspace-grid">
+          <section id="container-workspace" class="workspace-grid">
             <article id="containers" class="panel containers-panel">
-              <div class="panel-head"><div><p class="eyebrow">RUNTIME INVENTORY</p><h2>Container status</h2></div><span class="panel-hint">ALL SERVICES</span></div>
+              <div class="panel-head"><div><p class="eyebrow">RUNTIME INVENTORY</p><h2>Container status</h2></div><span class="panel-hint">선택해 로그 보기</span></div>
               <div id="container-list" class="container-list"></div>
             </article>
-            <article id="logs" class="panel logs-panel">
-              <div class="panel-head"><div><p class="eyebrow">LIVE LOG STREAM</p><h2 id="logs-title">로그를 선택하세요</h2></div><button id="clear-logs" class="text-button" type="button">Clear</button></div>
+            <article id="logs" class="panel logs-panel hidden" aria-live="polite">
+              <div class="panel-head"><div><p class="eyebrow">CONTAINER LOGS</p><h2 id="logs-title">컨테이너 로그</h2></div><button id="clear-logs" class="text-button" type="button">Clear</button></div>
               <div class="terminal-toolbar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span>stdout / stderr</span></div>
               <div id="log-output" class="log-output"><div class="log-empty"><span>⌁</span><p>컨테이너를 선택하면<br />실시간 운영 로그가 표시됩니다.</p></div></div>
             </article>
