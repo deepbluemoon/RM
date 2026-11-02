@@ -10,7 +10,8 @@ ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.13.6
 
 FROM ${UV_IMAGE} AS uv
 
-# 1) 의존성: uv.lock 그대로(--frozen), 개발 도구 제외, 분류기(torch CPU·transformers) 포함
+# 1) 의존성: uv.lock 그대로(--frozen), 개발 도구 제외, 분류기(torch CPU·transformers)와
+#    Vertex(google-auth·requests — LLM_PROVIDER=vertex 일 때 M3·M4) 포함
 FROM ${PYTHON_IMAGE} AS deps
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
@@ -20,7 +21,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /src
 COPY model-server/pyproject.toml model-server/uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --extra classifiers --no-install-project
+    uv sync --frozen --no-dev --extra classifiers --extra vertex --no-install-project
 
 # 2) 모델: 구동에 필요한 파일만(모델당 5개). LFS 포인터(수백 바이트)면 빌드를 멈춘다.
 FROM ${PYTHON_IMAGE} AS models
@@ -58,4 +59,5 @@ COPY --from=models /models ./var/models/model3/serving_ordneg
 USER app
 EXPOSE 9542
 # MODEL_API_KEY 등 비밀값은 실행 시 환경 변수로 넣는다(이미지에 넣지 않음).
+# Vertex 인증 정보(서비스 계정 키 등)도 이미지에 넣지 않고 실행 설정에서 연결한다(compose, #48).
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9542", "--workers", "1"]
