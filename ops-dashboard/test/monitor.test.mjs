@@ -42,6 +42,13 @@ test('Docker 조회가 실패하면 연결 오류코드를 활성화한다', asy
   assert.match(state.alerts[0].message, /permission denied/)
 })
 
+test('상태코드 로그 수집이 실패해도 Docker 자원 모니터링은 유지한다', async () => {
+  const monitor = createMonitor({ readSnapshot: async () => [container('api', 20, 30)], readStatusLogs: async () => { throw new Error('log permission denied') } })
+  const state = await monitor.tick()
+  assert.equal(state.dockerAvailable, true)
+  assert.deepEqual(state.statusCodes.collectionErrors, ['log permission denied'])
+})
+
 test('MariaDB 자원 경고는 감시하지만 무조건 수평 확장하지 않는다', () => {
   const result = canRunAction('scale-service', { code: 'OPS-MEM-80-001', stateful: true })
   assert.equal(result.allowed, false)

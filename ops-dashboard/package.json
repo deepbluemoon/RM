@@ -11,6 +11,7 @@
     "dev": "node --watch src/server.mjs",
     "start": "node src/server.mjs",
     "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include='src/*.mjs' --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80",
     "check": "node --check src/server.mjs && node --check src/docker.mjs && node --check src/monitor.mjs && node --check src/http-status.mjs && node --check src/actions.mjs"
   }
 }
