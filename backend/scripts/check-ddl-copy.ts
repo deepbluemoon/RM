@@ -3,8 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { findBackendRoot } from '../src/config/backendRoot.js';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// backend/ — 소스(scripts/)·빌드본(dist/scripts/) 어디서 실행해도 같은 값(#76)
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = findBackendRoot(here, path.resolve(here, '..'));
 const sha = (p: string) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 const a = sha(path.join(root, '..', 'design', 'crd_ddl.sql'));
 const b = sha(path.join(root, 'db', 'migrations', '001_crd_ddl.sql'));
