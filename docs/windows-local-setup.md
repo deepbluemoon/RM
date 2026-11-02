@@ -7,6 +7,7 @@ Windows 11 PC에서 RM을 Docker 없이 띄우는 절차다. 원래 절차는 ma
 ## 0. 먼저 확인
 
 - **PR #14(`fix/windows-local-run`)의 수정이 필요하다.** 이 수정이 없으면 `db:migrate`가 오류 없이 아무것도 하지 않고 끝나고, `db:ddl-tests`가 "총 0건"으로 통과처럼 보인다. PR #14가 `main`에 병합되기 전이면 그 브랜치를 받아서 진행한다.
+- **루트 `.gitignore`는 PR #20(#18)에 있다.** 병합 전 브랜치에서는 `backend/.env`가 커밋 대상으로 잡히므로 `git add .`를 쓰지 않는다. 미리 막으려면 저장소의 `.git/info/exclude`에 `.env`, `!.env.example`, `backend/var/`, `node_modules/`를 적어 둔다(이 PC에만 적용되고 커밋되지 않는다).
   ```bash
   git fetch origin && git switch fix/windows-local-run
   ```
@@ -63,7 +64,7 @@ GRANT ALL ON crd_ddltest.* TO 'crd'@'localhost'; GRANT ALL ON crd_ddltest.* TO '
 
 ## 3. 환경 변수
 
-`backend/.env.example`을 `backend/.env`로, `model-server/.env.example`을 `model-server/.env`로 복사하고 아래 값을 바꾼다. 두 파일 모두 git 제외 대상이다(`git check-ignore -v backend/.env`로 확인).
+`backend/.env.example`을 `backend/.env`로, `model-server/.env.example`을 `model-server/.env`로 복사하고 아래 값을 바꾼다. 두 파일 모두 git 제외 대상이다(`git check-ignore -v backend/.env`로 확인. `backend/.env`는 루트 `.gitignore`(PR #20)가 있어야 제외된다).
 
 | 파일 | 키 | 값 |
 |---|---|---|
