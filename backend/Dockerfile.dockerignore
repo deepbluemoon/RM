@@ -1,0 +1,21 @@
+# backend/Dockerfile 전용 — 빌드 컨텍스트(저장소 루트)에서 필요한 파일만 허용한다.
+*
+
+!backend/package.json
+!backend/package-lock.json
+!backend/tsconfig.json
+!backend/tsconfig.build.json
+!backend/src/
+!backend/scripts/
+!backend/db/migrations/
+!backend/tests/fixtures/knowledge/initial.json
+
+!shared/assertion-terms.json
+!specs/002-contract-risk-detection/contracts/model-api.openapi.yaml
+!model-server/docs/GUIDELINE.md
+!model-server/docs/USER_MANUAL.md
+!model-server/reports/baseline_v0/MODEL_TEST_REPORT.md
+
+**/node_modules
+**/dist
+**/.env
