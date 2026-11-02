@@ -3,9 +3,10 @@ import { config as loadDotenv } from 'dotenv';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { z } from 'zod';
+import { findBackendRoot } from './backendRoot.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-export const BACKEND_ROOT = path.resolve(here, '..', '..');
+export const BACKEND_ROOT = findBackendRoot(here, path.resolve(here, '..', '..'));
 export const REPO_ROOT = path.resolve(BACKEND_ROOT, '..');
 loadDotenv({ path: path.join(BACKEND_ROOT, '.env') });
 
