@@ -76,6 +76,9 @@ class FakeOllama:
                 return httpx.Response(self.chat_status.pop(0), json={"error": {"message": "boom"}})
             sys_text = body["systemInstruction"]["parts"][0]["text"]
             reply = self.judge_reply if "risk_class" in sys_text else self.summary_reply
+            if "explanation" in reply:  # 실제 Gemini 는 스키마 강제 없이 claim 을 sentence 로 낼 때가 있다 — 정규화 검증
+                reply = {**reply, "explanation": [{"sentence": c["claim"], "evidence_ids": c["evidence_ids"]}
+                                                  for c in reply["explanation"]]}
             return httpx.Response(200, json={"candidates": [
                 {"content": {"parts": [{"text": json.dumps(reply, ensure_ascii=False)}]}, "finishReason": "STOP"}]})
         if p == "/api/embed":
