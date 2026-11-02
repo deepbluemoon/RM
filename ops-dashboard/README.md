@@ -36,6 +36,8 @@ open http://127.0.0.1:9760
 | `OPS_COMPOSE_FILE` | 없음 | `scale-service.sh`가 사용할 Compose 파일 |
 | `OPS_SCALE_SERVICE` | 없음 | 늘릴 Compose 서비스 이름 |
 | `OPS_SCALE_TARGET` | `2` | 경고 대응 후 목표 인스턴스 수 |
+| `OPS_SCALE_MAX` | `5` | 사전점검에서 허용하는 최대 인스턴스 수 |
+| `OPS_SCALE_ALLOWED_SERVICES` | `backend,frontend,model-server` | 자동 확장이 허용된 무상태 Compose 서비스 목록 |
 | `OPS_HTTP_STATUS_LOG_TAIL` | `200` | 상태코드 파싱에 사용할 컨테이너별 최근 로그 줄 수 |
 | `OPS_HTTP_STATUS_ALERT_DURATION_MS` | `30000` | HTTP 상태코드 경고가 활성화되기까지의 지속 시간(ms) |
 
@@ -48,9 +50,19 @@ OPS_NAME_PREFIXES=rm-backend,rm-frontend,rm-mariadb
 OPS_COMPOSE_FILE=/srv/tamji/compose.yml
 OPS_SCALE_SERVICE=backend
 OPS_SCALE_TARGET=2
+OPS_SCALE_MAX=5
+OPS_SCALE_ALLOWED_SERVICES=backend,frontend,model-server
 ```
 
 `tamji` Docker Hub 이미지의 정확한 태그는 Compose 파일에서 관리하고, 대시보드는 접두사로 현재 프로젝트 범위를 잡는다. 저장소에는 비공개 태그나 비밀 환경변수를 기록하지 않는다.
+
+`scale-service.sh`는 변경 전에 `preflight-ops.sh`를 실행한다. Docker Engine·Compose 파일·서비스 목록·허용 목록·replica 상한을 모두 통과해야 하며, 기본 허용 목록에 없는 서비스와 MariaDB/MySQL 계열 서비스는 자동 확장하지 않는다. 사전점검만 수행하려면 다음처럼 실행한다.
+
+```bash
+OPS_COMPOSE_FILE=/srv/tamji/compose.yml \
+OPS_SCALE_SERVICE=backend OPS_SCALE_TARGET=2 OPS_SCALE_MAX=5 \
+  bash ops-dashboard/scripts/preflight-ops.sh
+```
 
 ## 대시보드만 컨테이너로 실행
 
