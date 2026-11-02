@@ -4,6 +4,7 @@
 
 | 코드 | 조건 | 화면 메시지 의미 | 대응 스크립트 |
 |---|---|---|---|
+| `OPS-PREFLIGHT-001` | 자동 대응 실행 전 Docker·Compose·서비스·replica 설정 사전점검 실패 | 변경 없이 실행을 차단하고 실패 원인을 표시 | `preflight-ops.sh` |
 | `OPS-CPU-80-001` | 개별 컨테이너 CPU 사용률이 80% 이상 | CPU가 80% 이상인 상태와 지속 시간 표시 | 무상태 서비스만 `scale-service.sh` |
 | `OPS-MEM-80-001` | 개별 컨테이너 메모리 사용률이 80% 이상 | 메모리가 80% 이상인 상태와 지속 시간 표시 | 무상태 서비스만 `scale-service.sh` |
 | `OPS-DOCKER-001` | Docker CLI가 엔진에 연결되지 않음 | 자원·로그 수집을 일시 중지하고 연결 오류 표시 | `collect-diagnostics.sh` |
@@ -14,6 +15,8 @@
 ## 스크립트 실행 안전 조건
 
 - 자원 경고 대응은 무조건 새 컨테이너를 생성하지 않는다. `OPS_COMPOSE_FILE`, `OPS_SCALE_SERVICE`, `OPS_SCALE_TARGET`를 운영 환경에서 명시한 경우에만 `docker compose up --scale`을 실행한다.
+- `scale-service.sh`는 실제 변경 전에 `preflight-ops.sh`를 실행한다. Docker Engine 연결, Compose 파일 읽기, Compose 서비스 존재, `OPS_SCALE_ALLOWED_SERVICES` 허용 목록, `OPS_SCALE_MAX` 상한을 모두 통과해야 한다. 실패 시 `OPS-PREFLIGHT-001`을 출력하고 `docker compose up`을 실행하지 않는다.
+- `OPS_SCALE_ALLOWED_SERVICES`의 기본값은 `backend,frontend,model-server`이며 운영 환경에서 무상태 서비스만 명시적으로 재정의한다. `OPS_SCALE_TARGET`는 `OPS_SCALE_MAX`보다 클 수 없다.
 - `mariadb`·`mysql` 이미지 컨테이너는 자원·로그를 감시하지만 수평 확장 버튼을 차단한다. DB 복제·클러스터·읽기 전용 레플리카 정책 없이 두 번째 DB를 생성하면 데이터가 분리되거나 충돌할 수 있으므로, DB 대응은 별도 운영 정책으로 확정해야 한다.
 - 위 환경 변수가 없으면 버튼이 활성화되어 있어도 서버가 스크립트 실행 실패를 반환한다. 대시보드가 모니터링 대상 구성을 추측해 임의 서비스를 띄우지 않도록 한 제한이다.
 - 운영 스크립트는 컨테이너 ID나 사용자 입력을 셸 문자열로 조합하지 않고, 서버에서 허용된 오류코드·액션 조합만 전달받는다.
