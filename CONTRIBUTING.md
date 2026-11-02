@@ -14,6 +14,7 @@ RM 작업에 참여할 때 필요한 문서를 찾고, 이슈·커밋·PR·리�
 | 커밋·PR 제목 형식·리뷰 소통 | 이 문서 |
 | 공통 PR 본문 양식 | [PR 템플릿](.github/pull_request_template.md) |
 | 모델 API 실행·설정 | [모델 서버 안내](model-server/README.md) |
+| 모델 게이트웨이 이미지 규약 제안 | [Docker 이미지 규약](docs/docker-image-policy.md) |
 | API 계약·모델 제공 구성 | [명세·계약 폴더](specs/002-contract-risk-detection/) |
 | 공유 Ollama 사용 제한 | [공유 서버 가이드](docs/ollama-guide.md) |
 | 기존 배포 방식 | [배포 안내](deploy/README.md) |
