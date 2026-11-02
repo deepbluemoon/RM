@@ -17,6 +17,7 @@ RM 작업에 참여할 때 필요한 문서를 찾고, 이슈·커밋·PR·리�
 | API 계약·모델 제공 구성 | [명세·계약 폴더](specs/002-contract-risk-detection/) |
 | 공유 Ollama 사용 제한 | [공유 서버 가이드](docs/ollama-guide.md) |
 | 기존 배포 방식 | [배포 안내](deploy/README.md) |
+| Docker 이미지·Docker Hub·compose 실행 기준 | [Docker 이미지 규약](docs/docker-image-policy.md) |
 
 브랜치 이름·분기·동기화·필수 승인 수·병합 방식·브랜치 정리는 별도 브랜치·머지 정책 PR에서 관리한다. 이 문서는 해당 정책을 다시 정의하지 않는다. 정책 파일이 반영되면 실제 위치를 확인해 여기에 링크한다. 제안·과거 기록·실제 GitHub 설정을 구분하고, 문서 사이의 충돌은 관련 PR에서 명시적으로 조정한다.
 
