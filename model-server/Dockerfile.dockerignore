@@ -1,0 +1,20 @@
+# model-server/Dockerfile 전용 — 빌드 컨텍스트(저장소 루트)에서 필요한 파일만 허용한다.
+*
+
+!model-server/pyproject.toml
+!model-server/uv.lock
+!model-server/app/
+!model-server/schemas/
+!model-server/config.yaml
+!model-server/models.lock.yaml
+!shared/assertion-terms.json
+
+!model-server/var/models/model3/serving_ordneg/*/config.json
+!model-server/var/models/model3/serving_ordneg/*/model.safetensors
+!model-server/var/models/model3/serving_ordneg/*/model_card.json
+!model-server/var/models/model3/serving_ordneg/*/tokenizer.json
+!model-server/var/models/model3/serving_ordneg/*/tokenizer_config.json
+
+**/__pycache__
+**/*.pyc
+**/.env
