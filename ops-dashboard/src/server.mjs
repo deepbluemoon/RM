@@ -6,12 +6,35 @@ import { readSnapshot, readLogs, streamLogs, assertContainerId } from './docker.
 import { createMonitor } from './monitor.mjs'
 import { ACTIONS, canRunAction, runAction } from './actions.mjs'
 import { ERROR_CODES } from './errors.mjs'
+import { HTTP_STATUS_CODES, HTTP_STATUS_ALERT_RULES } from './http-status.mjs'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const publicDir = path.join(root, 'public')
 const port = Number(process.env.OPS_DASHBOARD_PORT || 9760)
 const pollMs = Math.max(1_000, Number(process.env.OPS_DASHBOARD_POLL_MS || 5_000))
-const monitor = createMonitor({ readSnapshot, threshold: Number(process.env.OPS_RESOURCE_THRESHOLD || 80) })
+const statusLogTail = Math.min(Math.max(Number(process.env.OPS_HTTP_STATUS_LOG_TAIL || 200), 20), 1_000)
+
+async function readStatusLogs(containers) {
+  const logs = {}
+  const errors = []
+  await Promise.all(containers.filter((container) => container.running).map(async (container) => {
+    try {
+      const output = await readLogs(container.id, { tail: statusLogTail })
+      logs[container.id] = output.split('\n').filter(Boolean)
+    } catch (error) {
+      errors.push(`${container.name}: ${error instanceof Error ? error.message : String(error)}`)
+      logs[container.id] = []
+    }
+  }))
+  return { logs, errors }
+}
+
+const monitor = createMonitor({
+  readSnapshot,
+  readStatusLogs,
+  threshold: Number(process.env.OPS_RESOURCE_THRESHOLD || 80),
+  httpStatusAlertDurationMs: Math.max(0, Number(process.env.OPS_HTTP_STATUS_ALERT_DURATION_MS || 30_000)),
+})
 
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' }
 
@@ -32,8 +55,9 @@ async function serveStatic(req, res) {
   const requested = routePath(req) === '/' ? 'index.html' : routePath(req).slice(1)
   const target = path.resolve(publicDir, requested)
   if (target !== publicDir && !target.startsWith(`${publicDir}${path.sep}`)) return sendJson(res, 403, { error: 'forbidden' })
-  if (requested === 'docs/error-codes.md') {
-    const markdown = await fs.readFile(path.join(root, '..', 'docs', 'error-codes.md'))
+  const docFiles = new Set(['docs/error-codes.md', 'docs/http-status-codes.md'])
+  if (docFiles.has(requested)) {
+    const markdown = await fs.readFile(path.join(root, '..', requested))
     res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' })
     res.end(markdown)
     return
@@ -54,6 +78,7 @@ async function handle(req, res) {
   if (req.method === 'GET' && url.pathname === '/api/health') return sendJson(res, 200, { ok: true, service: 'rm-ops-dashboard' })
   if (req.method === 'GET' && url.pathname === '/api/overview') return sendJson(res, 200, monitor.getState())
   if (req.method === 'GET' && url.pathname === '/api/error-codes') return sendJson(res, 200, { codes: ERROR_CODES, actions: ACTIONS })
+  if (req.method === 'GET' && url.pathname === '/api/status-codes') return sendJson(res, 200, { codes: HTTP_STATUS_CODES, rules: HTTP_STATUS_ALERT_RULES })
   if (req.method === 'GET' && url.pathname === '/api/logs') {
     try {
       const containerId = assertContainerId(url.searchParams.get('containerId') || '')

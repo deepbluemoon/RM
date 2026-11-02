@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createMonitor } from '../src/monitor.mjs'
 import { filterContainers } from '../src/docker.mjs'
 import { canRunAction } from '../src/actions.mjs'
+import { createHttpStatusAggregator, HTTP_STATUS_CODES, parseHttpStatusLine, summarizeHttpStatusLines } from '../src/http-status.mjs'
 
 const container = (id, cpuPercent, memoryPercent) => ({ id, name: id, running: true, stats: { cpuPercent, memoryPercent } })
 
@@ -59,4 +60,35 @@ test('현재 프로젝트 범위는 tamji 앱과 MariaDB만 선택할 수 있다
     namePrefixes: ['rm-'],
   })
   assert.deepEqual(selected.map((item) => item.name), ['rm-backend', 'rm-mariadb'])
+})
+
+test('표준 HTTP access log와 JSON 로그에서 상태코드 태그를 추출한다', () => {
+  assert.equal(parseHttpStatusLine('"GET /health HTTP/1.1" 200 41').tag, 'HTTP-200')
+  assert.equal(parseHttpStatusLine('{"statusCode": 404, "message": "not found"}').tag, 'HTTP-404')
+  assert.equal(parseHttpStatusLine('responseStatus=503').tag, 'HTTP-503')
+  assert.equal(parseHttpStatusLine('not an access log 999'), null)
+  const summary = summarizeHttpStatusLines(['HTTP/1.1 200', 'HTTP/1.1 404', 'HTTP/1.1 500'])
+  assert.deepEqual(summary.classCounts, { '1xx': 0, '2xx': 1, '3xx': 0, '4xx': 1, '5xx': 1 })
+})
+
+test('등록된 전체 HTTP 상태코드를 태그 카탈로그로 제공한다', () => {
+  assert.ok(HTTP_STATUS_CODES.some((item) => item.tag === 'HTTP-202'))
+  assert.ok(HTTP_STATUS_CODES.some((item) => item.tag === 'HTTP-403'))
+  assert.ok(HTTP_STATUS_CODES.some((item) => item.tag === 'HTTP-404'))
+  assert.ok(HTTP_STATUS_CODES.some((item) => item.tag === 'HTTP-511'))
+  assert.equal(new Set(HTTP_STATUS_CODES.map((item) => item.code)).size, HTTP_STATUS_CODES.length)
+})
+
+test('HTTP 5xx 비율이 지속되면 운영 경고를 만들고 단일 404는 무시한다', () => {
+  let time = 1_000
+  const monitor = createHttpStatusAggregator({ now: () => time, alertDurationMs: 30_000 })
+  const containers = [{ id: 'api', name: 'api', image: 'moonsangjin/tamji:latest', running: true }]
+  const lines = Array.from({ length: 10 }, (_, index) => `HTTP/1.1 ${index === 0 ? 500 : 200}`)
+  monitor.observe(containers, { api: lines }, time)
+  time += 30_000
+  const state = monitor.observe(containers, { api: lines }, time)
+  assert.equal(state.alerts[0].code, 'HTTP-5XX-RATE-001')
+  assert.equal(state.alerts[0].count, 1)
+  const single404 = monitor.observe(containers, { api: ['HTTP/1.1 404'] }, time + 30_000)
+  assert.equal(single404.alerts.length, 0)
 })

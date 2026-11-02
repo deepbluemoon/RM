@@ -6,7 +6,7 @@ const root = path.dirname(fileURLToPath(import.meta.url))
 
 export const ACTIONS = [
   { id: 'scale-service', label: '서비스 인스턴스 1개 늘리기', script: 'scale-service.sh', codes: ['OPS-CPU-80-001', 'OPS-MEM-80-001'] },
-  { id: 'collect-diagnostics', label: 'Docker 진단 정보 수집', script: 'collect-diagnostics.sh', codes: ['OPS-DOCKER-001'] },
+  { id: 'collect-diagnostics', label: 'Docker 진단 정보 수집', script: 'collect-diagnostics.sh', codes: ['OPS-DOCKER-001', 'HTTP-5XX-RATE-001'] },
 ]
 
 const actionMap = new Map(ACTIONS.map((item) => [item.id, item]))
