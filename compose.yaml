@@ -1,0 +1,135 @@
+# 계약위험탐지 서비스(tamji) 기본 실행 구성 — 규칙: docs/docker-image-policy.md, 실행 안내: docs/docker-compose-guide.md
+#   cp .env.example .env   # 값 채우기(비밀값은 .env 에만, 저장소에 올리지 않음)
+#   docker compose pull && docker compose up -d
+#   → http://localhost:8080
+# 개발(직접 빌드·개발 로그인): docker compose -f compose.yaml -f compose.dev.yaml up -d --build
+# 운영용 설정(compose.prod.yaml)은 배포 서버가 정해지면 추가한다(#48 결정). 운영에서 바뀔 값은 ${변수} 로 둔다.
+#
+# 프로젝트 이름을 rm 으로 두어 컨테이너 이름이 rm-<서비스>-1 이 된다(운영 대시보드 OPS_NAME_PREFIXES 와 맞춤).
+
+name: rm
+
+x-backend-env: &backend-env
+  # 컨테이너 기본 시간대는 UTC — KNOWLEDGE_CRON·보관 기한 작업을 한국 시간으로 돌린다
+  TZ: Asia/Seoul
+  NODE_ENV: production
+  HOST: 0.0.0.0
+  PORT: 9522
+  APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+  OAUTH_REDIRECT_BASE: ${APP_BASE_URL:-http://localhost:8080}
+  DB_HOST: mariadb
+  DB_PORT: 3306
+  DB_USER: ${DB_USER:-crd}
+  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 를 .env 에 설정하세요}
+  DB_NAME: ${DB_NAME:-crd}
+  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET(64자 hex) 를 .env 에 설정하세요}
+  RAW_FILE_KEY: ${RAW_FILE_KEY:?RAW_FILE_KEY(64자 hex) 를 .env 에 설정하세요}
+  MODEL_API_BASE_URL: http://model-server:9542
+  MODEL_API_KEY: ${MODEL_API_KEY:?MODEL_API_KEY 를 .env 에 설정하세요}
+  # HTTP 로 띄우므로 secure 쿠키를 끄고, 프런트 nginx(내부망) 뒤라 사설 대역 프록시를 신뢰한다(#66). HTTPS 운영 구성에서는 COOKIE_SECURE=auto
+  COOKIE_SECURE: ${COOKIE_SECURE:-off}
+  TRUST_PROXY: ${TRUST_PROXY:-loopback, uniquelocal}
+  # 임베딩(bge-m3) 대체 전까지 근거 검색은 BM25 만 쓴다(Ollama 없음)
+  RAG_HYBRID: ${RAG_HYBRID:-off}
+  # 근거 정기 수집(선택) — 외부 공공 API 는 웹훅이 없어 cron 으로 확인한다. 비우면 운영자가 S0 에서 수동 수집. 반영은 S0 승인 후
+  KNOWLEDGE_CRON: ${KNOWLEDGE_CRON:-}
+  LAW_API_OC: ${LAW_API_OC:-}
+  DATA_PORTAL_KEY: ${DATA_PORTAL_KEY:-}
+  DATA_PORTAL_STD_TERMS_URL: ${DATA_PORTAL_STD_TERMS_URL:-}
+  KCA_API_KEY: ${KCA_API_KEY:-}
+  KCA_API_URL: ${KCA_API_URL:-}
+  KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
+  KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
+  NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
+  NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+
+services:
+  mariadb:
+    image: mariadb:12.0
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-crd}
+      MARIADB_USER: ${DB_USER:-crd}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 를 .env 에 설정하세요}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD 를 .env 에 설정하세요}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=+09:00"]
+    volumes:
+      # 기본은 이름 있는 볼륨. 폴더에 두려면 .env 에 DB_DATA=./data/mariadb (Windows·Mac 에서는 느릴 수 있다)
+      - ${DB_DATA:-db-data}:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  model-server:
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:ms-${TAMJI_VERSION:-0.1.0}
+    environment:
+      MODEL_API_KEY: ${MODEL_API_KEY:?MODEL_API_KEY 를 .env 에 설정하세요}
+      # M3·M4 LLM — docs/gemini-vertex-setup.md §4·§5
+      LLM_PROVIDER: ${LLM_PROVIDER:-vertex}
+      VERTEX_PROJECT: ${VERTEX_PROJECT:-}
+      VERTEX_LOCATION: ${VERTEX_LOCATION:-global}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp-credentials
+      OLLAMA_WARMUP_ON_START: "false"
+    secrets:
+      - gcp-credentials
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:9542/health', headers={'Authorization': 'Bearer ' + os.environ['MODEL_API_KEY']}), timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  # 1회 초기화: 마이그레이션(멱등) → 최초 지식 기준일 적재(이미 있으면 변경 없음)
+  backend-init:
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:-0.1.0}
+    environment: *backend-env
+    command: ["sh", "-c", "node scripts/migrate.js && node scripts/seed-knowledge.js --fixture tests/fixtures/knowledge/initial.json"]
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:-0.1.0}
+    environment: *backend-env
+    volumes:
+      # 원본 파일 임시 보관(24시간 내 삭제)·지식 스테이징·벡터 캐시
+      - backend-var:/app/backend/var
+    depends_on:
+      backend-init:
+        condition: service_completed_successfully
+      model-server:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9522/api/session').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:fe-${TAMJI_VERSION:-0.1.0}
+    environment:
+      BACKEND_URL: http://backend:9522
+    ports:
+      # 외부에 여는 포트는 프런트뿐이다. 기본은 이 PC 에서만(127.0.0.1). 같은 네트워크에 열려면 FRONTEND_BIND=0.0.0.0
+      - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+secrets:
+  # Vertex 인증 정보(gcloud ADC 파일 또는 서비스 계정 키). 각자 PC 의 경로를 .env 에 적는다 — 이미지·저장소에 넣지 않는다
+  gcp-credentials:
+    file: ${GCP_CREDENTIALS_FILE:?GCP_CREDENTIALS_FILE(Vertex 인증 파일 경로) 를 .env 에 설정하세요}
+
+volumes:
+  db-data:
+  backend-var:
