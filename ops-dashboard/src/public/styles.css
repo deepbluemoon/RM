@@ -111,6 +111,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid #e8eaed; outline-offs
 .alert-card p b { color: var(--ink); font-weight: 600; }
 .alert-nominal { color: var(--muted); border: 1px dashed var(--line); font-size: 11px; }
 .status-panel { margin-bottom: 14px; }
+.status-chart { display: grid; gap: 10px; }
+.status-chart-note { margin: 0; color: var(--muted-strong); font-size: 11px; }
+.status-chart-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) 60px; gap: 12px; align-items: center; color: var(--muted-strong); font: 11px var(--mono); }
+.status-chart-row strong { color: var(--ink); text-align: right; font-weight: 500; }
+.status-chart-track { height: 8px; background: var(--surface-soft); overflow: hidden; }
+.status-chart-track span { display: block; height: 100%; background: var(--blue); }
+.status-chart-row.status-2xx .status-chart-track span { background: var(--teal); }
+.status-chart-row.status-4xx .status-chart-track span { background: var(--amber); }
+.status-chart-row.status-5xx .status-chart-track span { background: var(--red); }
 .status-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin-bottom: 14px; }
 .status-summary-card { padding: 10px 11px; background: var(--surface-soft); border: 1px solid var(--line-soft); border-radius: 7px; }
 .status-summary-card span { display: block; color: var(--muted); font: 9px var(--mono); }
