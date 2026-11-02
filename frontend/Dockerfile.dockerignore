@@ -1,0 +1,15 @@
+# frontend/Dockerfile 전용 — 빌드 컨텍스트(저장소 루트)에서 필요한 파일만 허용한다.
+*
+
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/vite.config.ts
+!frontend/tsconfig.json
+!frontend/public/
+!frontend/src/
+!frontend/nginx/default.conf.template
+
+**/node_modules
+**/dist
+**/.env
