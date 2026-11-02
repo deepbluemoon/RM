@@ -1,5 +1,10 @@
-"""LLM_PROVIDER=gemini — M3(판정)·M4(요약)를 Gemini(generateContent)로 돌린다.
+"""LLM_PROVIDER=gemini|vertex — M3(판정)·M4(요약)를 Gemini(generateContent)로 돌린다.
 실제 Google 호출 없이 conftest 의 transport 목으로 확인한다. 임베딩·M1·M2 는 범위 밖(그대로 Ollama)."""
+import pytest
+
+from app.gemini_client import GeminiClient
+from app.ollama_client import OllamaError
+
 from .conftest import AUTH, assert_contract
 from .test_contract import CLAUSES, JUDGE
 
@@ -70,3 +75,39 @@ def test_gemini_4xx_not_retried(make_client, fake, sleeps):
         r = c.post("/v1/judge", headers=AUTH, json=JUDGE)
     assert r.status_code == 503
     assert sleeps == []  # 재시도 대기 없음
+
+
+# ---------------------------------------------------------- vertex(Google Cloud) 모드
+def test_vertex_endpoint_url_and_auth():
+    """vertex 모드는 aiplatform 리전 엔드포인트 + ADC Bearer 토큰으로 간다."""
+    c = GeminiClient("gemini-3.8-flash", mode="vertex", project="proj-x", location="us-central1",
+                     token_provider=lambda: "tok-123")
+    url, headers = c._endpoint()
+    assert url == ("https://us-central1-aiplatform.googleapis.com/v1/projects/proj-x"
+                   "/locations/us-central1/publishers/google/models/gemini-3.8-flash:generateContent")
+    assert headers["Authorization"] == "Bearer tok-123" and "x-goog-api-key" not in headers
+
+
+def test_vertex_global_location_host():
+    c = GeminiClient("m", mode="vertex", project="p", location="global", token_provider=lambda: "t")
+    url, _ = c._endpoint()
+    assert url.startswith("https://aiplatform.googleapis.com/v1/projects/p/locations/global/")
+
+
+def test_vertex_missing_project_is_503():
+    c = GeminiClient("m", mode="vertex", project=None, token_provider=lambda: "t")
+    with pytest.raises(OllamaError):
+        c._endpoint()
+
+
+def test_vertex_judge_via_app(make_client, fake):
+    """vertex 공급자로 /v1/judge 가 aiplatform 경로로 가고 model_version 이 vertex: 접두어를 쓴다."""
+    with make_client(llm_provider="vertex", vertex_project="test-proj") as c:
+        r = c.post("/v1/judge", headers=AUTH, json=JUDGE)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["model_version"] == "vertex:gemini-3.8-flash"
+    assert len(body["explanation"]) == 1  # 정규화는 vertex 에서도 동작
+    paths = fake.paths()
+    assert any("/projects/test-proj/locations/" in p and p.endswith(":generateContent") for p in paths)
+    assert "/api/chat" not in paths
