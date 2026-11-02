@@ -26,11 +26,11 @@ function renderOverview() {
   if (!overview) return
   const containers = overview.dockerAvailable ? (overview.containers || []) : []
   const metrics = summarizeMetrics(overview)
-  $('running-count').textContent = metrics.running === null ? '수집 불가' : String(metrics.running)
-  $('total-count').textContent = metrics.total === null ? '확인 불가' : String(metrics.total)
+  $('running-count').textContent = metrics.running === null ? '-' : String(metrics.running)
+  $('total-count').textContent = metrics.total === null ? '-' : String(metrics.total)
   $('alert-count').textContent = String(overview.alerts?.length || 0)
-  $('cpu-total').textContent = formatPercent(metrics.cpu)
-  $('memory-total').textContent = formatPercent(metrics.memory)
+  $('cpu-total').textContent = formatPercent(metrics.cpu, '-')
+  $('memory-total').textContent = formatPercent(metrics.memory, '-')
   $('last-updated').textContent = new Date(overview.observedAt).toLocaleTimeString('ko-KR')
   $('connection-label').textContent = overview.dockerAvailable ? 'Docker 연결됨' : 'Docker 연결 오류'
   $('connection-label').previousElementSibling.style.background = overview.dockerAvailable ? '#29cccc' : '#ff6b78'
