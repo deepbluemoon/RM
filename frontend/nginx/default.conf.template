@@ -1,0 +1,41 @@
+# 프런트 컨테이너 nginx 설정 — deploy/nginx/crd.conf 를 컨테이너용으로 정리한 것.
+# 이미지 시작 시 ${BACKEND_URL} 이 환경 변수 값으로 바뀐다(기본 http://backend:9522, compose 서비스 이름).
+# TLS·도메인은 운영용 설정에서 앞단에 둔다. 여기서는 HTTP 만 받는다.
+
+# 요청 본문·쿼리를 접근 로그에 남기지 않는다(FR-009) — 경로만
+log_format crd '$remote_addr [$time_local] "$request_method $uri" $status $body_bytes_sent $request_time';
+
+server {
+  # 일반 사용자 nginx 는 1024 미만 포트를 쓸 수 없어 8080 에서 받는다
+  listen 8080;
+  server_name _;
+
+  access_log /dev/stdout crd;
+
+  # 업로드 50MB 한도(FR-002) + 여유. 초과는 413 — 화면이 G2 로 안내한다
+  client_max_body_size 55m;
+
+  root /usr/share/nginx/html;
+  index index.html;
+
+  # 빌드 산출물(해시 파일명)은 길게 캐시, index.html 은 캐시하지 않는다
+  location /assets/ { expires 30d; add_header Cache-Control "public, immutable"; }
+  location = /index.html { add_header Cache-Control "no-store"; }
+  location / { try_files $uri /index.html; }
+
+  # 컨테이너 상태 확인용(백엔드와 무관하게 nginx 자체가 살아 있는지)
+  location = /healthz { access_log off; return 200 "ok\n"; }
+
+  location /api/ {
+    # Docker 내부 DNS 로 매 요청 이름을 다시 해석한다 — 백엔드가 늦게 뜨거나 재시작해 주소가 바뀌어도 nginx 를 다시 띄울 필요가 없다
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $backend ${BACKEND_URL};
+    proxy_pass $backend;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 120s;      # 분석은 비동기(폴링)라 긴 연결이 필요 없다. 업로드 사전 검사만 수십 초
+    proxy_request_buffering on;   # 업로드를 다 받은 뒤 앱으로 넘긴다
+  }
+}
