@@ -63,7 +63,10 @@ async function main(): Promise<number> {
   return hits.length ? 1 : 0;
 }
 
-const isMain = process.argv[1] && new URL(import.meta.url).pathname === process.argv[1];
+// URL.pathname(/C:/…, 한글은 %xx)과 argv[1](C:\…)은 같아질 수 없어 파일 경로끼리 비교한다(#79)
+const { fileURLToPath } = await import('node:url');
+const { resolve } = await import('node:path');
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   main()
     .then((code) => (process.exitCode = code))
