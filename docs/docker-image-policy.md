@@ -99,7 +99,12 @@
 
 - **첫 릴리스는 담당자가 직접 push한다.** `docker buildx build --platform linux/amd64,linux/arm64 --push`로 두 플랫폼을 한 번에 올린다. push 권한은 `moonsangjin` 계정 소유자가 부여한다.
 - push 결과(태그, digest, 소스 커밋, 확인한 플랫폼)는 해당 PR에 남긴다.
-- 안정되면 GitHub Actions 자동 빌드·push로 옮긴다(별도 `ci` 이슈). 이때 Docker Hub 접근 토큰은 GitHub Secrets에 두고, 새 이미지가 올라오면 팀 채널로 알림을 보낸다.
+- GitHub Actions(`.github/workflows/images.yml`, #84)가 세 이미지를 amd64·arm64 네이티브 러너에서 빌드하고 `compose.yaml`로 네 컨테이너를 띄워 확인한다.
+  - PR·`main`: 빌드·확인만 하고 push하지 않는다.
+  - push: Actions 화면에서 수동 실행(Run workflow)하고 `push`를 켠다. `<약어>-sha-<커밋 12자리>`로 올라가고, `release`에 버전(예: `0.1.0`)을 넣으면 `<약어>-<버전>`·`<약어>-latest`도 올린다(`main`에서만). 이미 있는 태그는 덮어쓰지 않는다.
+  - 결과(태그·digest·소스 커밋)는 실행 요약(Summary)에 남는다. 릴리스 PR에 옮겨 적는다.
+- 관리자 작업: 저장소 Settings → Secrets and variables → Actions에 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`(`moonsangjin/tamji` 쓰기 권한 접근 토큰)을 등록한다. 없으면 push 실행이 처음에 멈춘다.
+- 모델 가중치(LFS)는 Actions 캐시에 두어 실행마다 LFS 대역폭을 쓰지 않게 한다. 새 이미지 알림 채널은 정해지면 워크플로의 "알림" 단계에 연결한다.
 
 ## 8. 검증
 
@@ -116,6 +121,6 @@
 
 - LLM 제공자(Gemini 등)와 호출 방식. 제공자를 설정만으로 바꿀 수 있도록 OpenAI 호환 방식을 검토한다.
 - 임베딩(bge-m3) 대체. Ollama를 쓰지 않으면 RAG가 BM25만으로 동작하므로, 모델 서버에서 직접 실행할지 외부 API로 바꿀지 정한다.
-- CI 자동화 시점, `sha` 태그 보존·삭제 기간, 베이스 이미지 갱신 주기와 취약점 점검 담당.
+- push 자동화 시점(지금은 수동 실행), `sha` 태그 보존·삭제 기간, 베이스 이미지 갱신 주기와 취약점 점검 담당.
 
 참고: [Docker 빌드 모범 사례](https://docs.docker.com/build/building/best-practices/), [멀티 플랫폼 빌드](https://docs.docker.com/build/building/multi-platform/), [uv의 Docker 사용 안내](https://docs.astral.sh/uv/guides/integration/docker/).
