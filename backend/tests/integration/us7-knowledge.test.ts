@@ -17,6 +17,7 @@ import { ftcCollector } from '../../src/modules/knowledge/collectors/ftc.js';
 import { dataPortalCollector } from '../../src/modules/knowledge/collectors/dataPortal.js';
 import { kcaCollector } from '../../src/modules/knowledge/collectors/kca.js';
 import { drainIngest } from '../../src/modules/knowledge/ingest.service.js';
+import { drainKnowledgeEvents, onKnowledgeEvent, type KnowledgeEvent } from '../../src/modules/knowledge/events.js';
 import { preprocess } from '../../src/modules/knowledge/preprocess.js';
 import { DEFAULT_INCLUDE } from '../../src/modules/knowledge/select.js';
 
@@ -32,6 +33,10 @@ let kv1 = 0;
 let today = '';
 let amendItem: { evidence_item_id: number; source_name: string; identifier: string };
 let repealItem: { evidence_item_id: number; source_name: string; identifier: string };
+// #99 수집·반영 결과 이벤트(옵저버 패턴)
+const events: KnowledgeEvent[] = [];
+const offEvents = onKnowledgeEvent((e) => void events.push(e));
+const eventsOf = async (batchId: number) => { await drainKnowledgeEvents(); return events.filter((e) => e.batchId === batchId).map((e) => e.type); };
 
 const daysAgo = (n: number) => {
   const d = new Date(`${today}T00:00:00Z`);
@@ -172,6 +177,7 @@ beforeAll(async () => {
 afterAll(async () => {
   setCollectors(null);
   await drainIngest();
+  offEvents();
   await stub.close();
   await teardown();
 });
@@ -258,6 +264,8 @@ describe('갱신 흐름(0.1~0.6)', () => {
     expect(g0.reason).toContain('공정거래위원회');
     const ev = await selectOne<{ n: number }>(getPool(), "SELECT COUNT(*) AS n FROM gate_event WHERE gate_code = 'G0' AND batch_id = ? AND released_at IS NULL", [batchId]);
     expect(ev!.n).toBe(1);
+    expect(await eventsOf(batchId)).toEqual(['collect_failed']);
+    expect(events.find((e) => e.batchId === batchId)).toMatchObject({ agencies: ['ftc'] });
 
     const ap = await op.post(`/api/admin/knowledge/ingest-batches/${batchId}/approve`);
     expect(ap.status).toBe(409);
@@ -278,6 +286,7 @@ describe('갱신 흐름(0.1~0.6)', () => {
     expect(b.openGates.find((g: { gate: string }) => g.gate === 'G0')).toBeUndefined();
     const released = await selectOne<{ n: number }>(getPool(), "SELECT COUNT(*) AS n FROM gate_event WHERE gate_code = 'G0' AND batch_id = ? AND released_at IS NOT NULL", [batchId]);
     expect(released!.n).toBe(1);
+    expect(await eventsOf(batchId)).toEqual(['collect_failed', 'review_ready']);
 
     const labels = (kind: string) => b.items.filter((i: { changeKind: string }) => i.changeKind === kind).map((i: { decisionLabel: string }) => i.decisionLabel);
     expect(labels('amend').every((l: string) => l === 'candidate')).toBe(true);
@@ -328,6 +337,8 @@ describe('갱신 흐름(0.1~0.6)', () => {
     expectResponse('web', 'POST', '/admin/knowledge/ingest-batches/{batchId}/approve', 200, r.body);
     kv2 = r.body.knowledgeVersion.kvId;
     expect(r.body.knowledgeVersion).toMatchObject({ status: 'active', knowledgeDate: today, kvSeq: 2 });
+    expect(await eventsOf(batchId)).toEqual(['collect_failed', 'review_ready', 'kv_activated']);
+    expect(events.at(-1)).toMatchObject({ type: 'kv_activated', kvId: kv2, added: r.body.reflected.added, closed: r.body.reflected.closed });
 
     const kvs = await select<{ kv_id: number; status: string }>(getPool(), 'SELECT kv_id, status FROM knowledge_version ORDER BY kv_seq');
     expect(kvs).toEqual([{ kv_id: kv1, status: 'superseded' }, { kv_id: kv2, status: 'active' }]);

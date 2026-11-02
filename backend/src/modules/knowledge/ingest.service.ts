@@ -14,6 +14,7 @@ import { applySelection } from './select.js';
 import { readStaged, writeStaged } from './staging.js';
 import { activeKv, batchById, itemsOf, kvById, listVersions, sourcesOf, toKvDto, type BatchRow } from './knowledge.repo.js';
 import { deadlineWarnings } from './deadline.js';
+import { emitKnowledgeEvent } from './events.js';
 
 const running = new Map<number, Promise<void>>();
 
@@ -108,6 +109,7 @@ async function runCollect(batchId: number, since: SinceKv | null): Promise<void>
     await exec(getPool(), "UPDATE ingest_batch SET stage = 'collect_failed' WHERE batch_id = ?", [batchId]);
     await recordGate('G0', 'collect_failed', { batchId }, failed.join(','));
     logger.warn({ batchId, failed }, 'knowledge ingest G0');
+    emitKnowledgeEvent({ type: 'collect_failed', batchId, agencies: failed });
     return;
   }
 
@@ -134,6 +136,9 @@ async function runCollect(batchId: number, since: SinceKv | null): Promise<void>
     await exec(conn, "UPDATE ingest_batch SET stage = 'selecting' WHERE batch_id = ?", [batchId]);
   });
   logger.info({ batchId, ...stats, carried: units.length - stats.units }, 'knowledge ingest selecting');
+  emitKnowledgeEvent(units.length
+    ? { type: 'review_ready', batchId, units: units.length, parseFailed: stats.parseFailed, carried: units.length - stats.units }
+    : { type: 'no_changes', batchId });
 }
 
 /** 반영 포함 여부 — 분리 실패 항목은 DB(chk_ii_g1)가 거부 → G1 */
