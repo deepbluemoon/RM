@@ -4,6 +4,7 @@
   M1·M2 — 적재 중 loading, 적재 완료 ready, 적재 실패 error
   M3·M4 — /api/tags(설치)·/api/ps(상주) 로 판단. 상주 ready, 설치만 됨 cold(호출 가능 — G5 아님),
           예열 중 loading, 주 모델·대체 모델 모두 미설치 missing, Ollama 연결 불가 error
+          (LLM_PROVIDER=gemini|vertex 면 키·프로젝트·ADC 토큰이 준비됐으면 ready, 아니면 error — 60초 캐시)
 전체 status — M1·M2 적재 중이면 loading, missing·error 가 하나라도 있으면 degraded, 그 밖에는 ready.
 warmup_estimate_sec — cold/loading 인 M3·M4 적재 예상 초의 합(서로 다른 모델만). 없으면 null.
 """

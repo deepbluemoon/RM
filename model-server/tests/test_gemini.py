@@ -5,7 +5,7 @@ import pytest
 from app.gemini_client import GeminiClient
 from app.ollama_client import OllamaError
 
-from .conftest import AUTH, assert_contract
+from .conftest import AUTH, assert_contract, wait_ready
 from .test_contract import CLAUSES, JUDGE
 
 GEMINI = {"llm_provider": "gemini", "gemini_api_key": "test-gemini-key"}
@@ -107,6 +107,50 @@ def test_vertex_missing_project_is_503():
     c = GeminiClient("m", mode="vertex", project=None, token_provider=lambda: "t")
     with pytest.raises(OllamaError):
         c._endpoint()
+
+
+def _models_state(body: dict) -> dict:
+    return {m["id"]: m["state"] for m in body["models"]}
+
+
+def test_gemini_health_error_without_key(make_client, fake):
+    """키가 없으면 /health 가 M3·M4 를 error 로 보고해 G5(분석 일시 불가)로 막는다 — ready 로 속이지 않는다(#82)."""
+    with make_client(llm_provider="gemini", gemini_api_key=None) as c:
+        wait_ready(c)  # M1·M2 적재 중이면 전체 status 가 loading 이 된다
+        r = c.get("/health", headers=AUTH)
+    state = _models_state(r.json())
+    assert state["M3"] == "error" and state["M4"] == "error"
+    assert r.status_code == 503 and r.json()["status"] == "degraded"
+
+
+def test_vertex_health_error_without_project(make_client, fake):
+    with make_client(llm_provider="vertex", vertex_project=None) as c:
+        state = _models_state(c.get("/health", headers=AUTH).json())
+    assert state["M3"] == "error" and state["M4"] == "error"
+
+
+def test_vertex_health_ready_with_credentials(make_client, fake):
+    with make_client(llm_provider="vertex", vertex_project="test-proj") as c:
+        r = c.get("/health", headers=AUTH)
+    state = _models_state(r.json())
+    assert state["M3"] == "ready" and state["M4"] == "ready"
+
+
+def test_vertex_credential_error_when_token_fails_and_cached():
+    """ADC 토큰 발급이 실패하면 사유를 돌려주고, 결과는 캐시해 /health 마다 다시 발급하지 않는다."""
+    import asyncio
+
+    calls = []
+
+    def failing_token() -> str:
+        calls.append(1)
+        raise RuntimeError("no ADC")
+
+    c = GeminiClient("m", mode="vertex", project="p", token_provider=failing_token)
+    first = asyncio.run(c.credential_error())
+    second = asyncio.run(c.credential_error())
+    assert first and "Vertex 인증 실패" in first and second == first
+    assert len(calls) == 1
 
 
 def test_vertex_judge_via_app(make_client, fake):
