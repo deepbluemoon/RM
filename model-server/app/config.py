@@ -88,7 +88,7 @@ class Settings:
     gemini_base_url: str = "https://generativelanguage.googleapis.com"
     gemini_api_key: str | None = field(default=None, repr=False)   # gemini 모드 비밀값 — repr 에 노출하지 않는다
     vertex_project: str | None = None   # vertex 모드 GCP 프로젝트 ID (env VERTEX_PROJECT)
-    vertex_location: str = "us-central1"  # vertex 모드 리전 (env VERTEX_LOCATION; 'global' 가능)
+    vertex_location: str = "global"  # vertex 모드 리전 (env VERTEX_LOCATION). 현재 세대 Gemini 는 global 에만 있다(리전엔 404)
     api_key: str | None = field(default=None, repr=False)  # repr 에 노출하지 않는다
 
 
@@ -209,7 +209,7 @@ def load_settings(config_path: str | os.PathLike[str] | None = None) -> Settings
                          or "https://generativelanguage.googleapis.com").rstrip("/"),
         gemini_api_key=os.environ.get("GEMINI_API_KEY") or None,
         vertex_project=os.environ.get("VERTEX_PROJECT") or (llm.get("vertex") or {}).get("project") or None,
-        vertex_location=os.environ.get("VERTEX_LOCATION") or (llm.get("vertex") or {}).get("location") or "us-central1",
+        vertex_location=os.environ.get("VERTEX_LOCATION") or (llm.get("vertex") or {}).get("location") or "global",
         api_key=os.environ.get("MODEL_API_KEY") or None,
     )
     validate(s)
