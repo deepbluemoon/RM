@@ -179,6 +179,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid #e8eaed; outline-offs
 .code-item p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
 .error-banner { margin: 0 0 14px; padding: 13px 15px; color: #08090b; background: var(--red); border-radius: 4px; font-size: 11px; }
 .hidden { display: none !important; }
+.brand-mark, .nav-item, .engine-card, .scope-pill, .refresh-button,
+.panel-hint, .alert-card, .alert-nominal, .status-summary-card, .status-tags,
+.status-chip, .status-container-row, .container-row, .action-card,
+.action-card button, .terminal-toolbar, .log-output, .empty { border-radius: 4px; }
 footer { padding: 0 20px 30px; color: var(--muted); text-align: center; font: 9px var(--mono); }
 footer span { padding: 0 7px; color: #4d5a6e; }
 
