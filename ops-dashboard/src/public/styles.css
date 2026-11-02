@@ -31,9 +31,9 @@ button { color: inherit; }
 button:focus-visible, a:focus-visible { outline: 2px solid #e8eaed; outline-offset: 3px; }
 
 .app-shell { min-height: 100vh; display: flex; }
-.sidebar { width: 228px; flex: none; display: flex; flex-direction: column; padding: 30px 18px 24px; background: var(--bg-deep); border-right: 1px solid var(--line-soft); }
+.sidebar { position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; width: 210px; flex: none; display: flex; flex-direction: column; padding: 20px 14px; background: var(--bg-deep); border-right: 1px solid var(--line-soft); }
 .brand-lockup, .top-actions, .connection-state, .breadcrumb, .scope-pill, .refresh-button, .summary-top, .row-top, .metric-label, .engine-card { display: flex; align-items: center; }
-.brand-lockup { gap: 11px; padding: 0 10px 42px; }
+.brand-lockup { gap: 11px; padding: 0 10px 22px; }
 .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid rgba(34, 197, 94, .65); border-radius: 9px; color: var(--teal); font: 800 12px var(--mono); letter-spacing: .08em; }
 .brand-lockup b { display: block; font-size: 14px; letter-spacing: -.02em; }
 .brand-lockup small { display: block; margin-top: 3px; color: var(--muted); font: 10px var(--mono); }
@@ -43,7 +43,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #e8eaed; outline-offs
 .nav-item:hover { color: var(--ink); background: rgba(255,255,255,.04); }
 .nav-item.active { color: var(--teal); background: rgba(34, 197, 94, .11); }
 .nav-icon { width: 16px; color: currentColor; font-size: 16px; text-align: center; }
-.sidebar-bottom { margin-top: auto; }
+.sidebar-bottom { margin-top: 20px; }
 .engine-card { gap: 10px; margin: 0 2px; padding: 13px 11px; background: var(--surface-soft); border: 1px solid var(--line-soft); border-radius: 10px; }
 .engine-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px rgba(245, 194, 107, .12); }
 .engine-dot.is-online { background: var(--teal); box-shadow: 0 0 0 4px rgba(34, 197, 94, .12); }
@@ -66,7 +66,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #e8eaed; outline-offs
 .refresh-button:hover { color: var(--teal); border-color: var(--teal-deep); }
 .top-actions time { color: var(--muted); }
 
-.content-shell { max-width: 1460px; margin: 0 auto; padding: clamp(34px, 4vw, 58px) clamp(24px, 4vw, 58px) 42px; }
+.content-shell { max-width: 1460px; margin: 0 auto; padding: 22px clamp(18px, 3vw, 36px) 28px; }
 .page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 30px; margin-bottom: 40px; }
 .eyebrow { margin: 0 0 11px; color: var(--teal); font: 600 9px/1.2 var(--mono); letter-spacing: .15em; }
 .page-heading h1 { margin: 0; color: var(--ink); font-size: clamp(36px, 4vw, 60px); line-height: 1.04; letter-spacing: -.07em; font-weight: 650; }
@@ -78,7 +78,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #e8eaed; outline-offs
 .monitoring-badge small { color: var(--muted); letter-spacing: 0; }
 
 .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; margin-bottom: 14px; }
-.summary-card, .panel { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 11px; }
+.summary-card, .panel { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 4px; }
 .summary-card { position: relative; overflow: hidden; min-height: 135px; padding: 19px 20px; }
 .summary-card:before { position: absolute; top: 0; left: 0; right: 0; height: 2px; content: ""; background: var(--teal); }
 .summary-card.accent-red:before { background: var(--red); }
@@ -95,9 +95,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid #e8eaed; outline-offs
 .card-note b { color: var(--muted-strong); font-weight: 500; }
 .danger-text { color: var(--red) !important; }
 
-.panel { min-width: 0; padding: 22px 22px 20px; }
+.panel { min-width: 0; padding: 16px; }
 .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-.panel-head h2 { margin: 0; color: var(--ink); font-size: 17px; letter-spacing: -.04em; }
+.panel-head h1, .panel-head h2 { margin: 0; color: var(--ink); font-size: 17px; letter-spacing: -.04em; }
 .panel-hint { padding: 6px 8px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; font: 9px var(--mono); white-space: nowrap; }
 .warning-hint { color: var(--amber); border-color: rgba(245, 194, 107, .25); background: rgba(245,194,107,.06); }
 .alert-panel { margin-bottom: 14px; }
@@ -177,7 +177,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #e8eaed; outline-offs
 .code-item code { color: var(--teal); font: 10px var(--mono); }
 .code-item strong { display: block; margin: 8px 0 5px; color: var(--ink); font-size: 11px; }
 .code-item p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
-.error-banner { margin: -19px 0 14px; padding: 13px 15px; color: #08090b; background: var(--red); border-radius: 8px; font-size: 11px; }
+.error-banner { margin: 0 0 14px; padding: 13px 15px; color: #08090b; background: var(--red); border-radius: 4px; font-size: 11px; }
 .hidden { display: none !important; }
 footer { padding: 0 20px 30px; color: var(--muted); text-align: center; font: 9px var(--mono); }
 footer span { padding: 0 7px; color: #4d5a6e; }
@@ -196,9 +196,11 @@ footer span { padding: 0 7px; color: #4d5a6e; }
 }
 @media (max-width: 680px) {
   .app-shell { display: block; }
-  .sidebar { width: 100%; height: auto; padding: 17px 18px 12px; border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .sidebar { position: static; width: 100%; height: auto; overflow: visible; padding: 17px 18px 12px; border-right: 0; border-bottom: 1px solid var(--line-soft); }
   .brand-lockup { padding: 0 0 16px; }
-  .sidebar-section-label, .sidebar-bottom { display: none; }
+  .sidebar-section-label, .sidebar-note { display: none; }
+  .sidebar-bottom { margin-top: 10px; }
+  .engine-card { padding: 8px 10px; }
   .side-nav { flex-direction: row; gap: 3px; overflow-x: auto; }
   .nav-item { flex: none; padding: 8px 9px; font-size: 10px; }
   .nav-icon { display: none; }
