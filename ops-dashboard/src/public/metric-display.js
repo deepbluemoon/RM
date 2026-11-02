@@ -16,6 +16,6 @@ export function summarizeMetrics(overview) {
   }
 }
 
-export function formatPercent(value) {
-  return Number.isFinite(value) ? `${value.toFixed(1)}%` : '수집 불가'
+export function formatPercent(value, unavailable = '수집 불가') {
+  return Number.isFinite(value) ? `${value.toFixed(1)}%` : unavailable
 }
