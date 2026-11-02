@@ -10,6 +10,7 @@
 - 오류코드에 대응하는 운영 스크립트 버튼은 평상시 비활성화하고, 해당 오류코드가 활성화된 경우에만 활성화한다.
 - 자원 경고 대응은 대상 Compose 서비스의 인스턴스를 늘리는 방식이며, 운영 환경 설정이 없으면 실행되지 않는다.
 - MariaDB 컨테이너도 전체 대상에 포함되지만 무상태 서비스와 달리 자동 수평 확장하지 않는다. DB는 복제·클러스터 정책을 확정한 후 별도 대응 스크립트를 추가한다.
+- 실행 중 컨테이너의 Docker access log에서 HTTP 상태코드 전체를 비식별 파싱하고 `HTTP-200`, `HTTP-404`, `HTTP-5XX-RATE-001` 같은 태그·경고로 집계한다.
 
 ## 호스트에서 실행
 
@@ -35,6 +36,8 @@ open http://127.0.0.1:9760
 | `OPS_COMPOSE_FILE` | 없음 | `scale-service.sh`가 사용할 Compose 파일 |
 | `OPS_SCALE_SERVICE` | 없음 | 늘릴 Compose 서비스 이름 |
 | `OPS_SCALE_TARGET` | `2` | 경고 대응 후 목표 인스턴스 수 |
+| `OPS_HTTP_STATUS_LOG_TAIL` | `200` | 상태코드 파싱에 사용할 컨테이너별 최근 로그 줄 수 |
+| `OPS_HTTP_STATUS_ALERT_DURATION_MS` | `30000` | HTTP 상태코드 경고가 활성화되기까지의 지속 시간(ms) |
 
 현재 프로젝트의 컨테이너만 감시하려면 예를 들어 다음처럼 설정한다. MariaDB가 공식 `mariadb` 이미지라면 앱 이미지와 함께 접두사를 넣는다. 이 설정으로 다른 프로젝트의 컨테이너는 대시보드에서 제외된다.
 
@@ -65,7 +68,8 @@ OPS_PROJECT_DIR=/srv/rm OPS_COMPOSE_FILE=/workspace/compose.yml \
 - `GET /api/overview`: 컨테이너·자원·활성 경고
 - `GET /api/logs/stream?containerId=<id>`: 컨테이너 로그 SSE
 - `GET /api/error-codes`: 오류코드와 액션 정의
+- `GET /api/status-codes`: 표준 HTTP 상태코드 전체와 운영 경고 규칙
 - `POST /api/actions/run`: 활성 오류코드에 허용된 대응 스크립트 실행
 - `GET /api/health`: 프로세스 상태
 
-인증·TLS·감사 로그·다중 Docker 호스트·메트릭 영속화는 현재 1차 범위가 아니다. 운영 공개 전에는 기존 인증 체계 또는 별도 운영망/리버스 프록시를 붙이는 후속 이슈가 필요하다.
+HTTP 상태코드 수집·운영 기준과 주의사항은 [docs/http-status-codes.md](docs/http-status-codes.md)에 기록한다. 인증·TLS·감사 로그·다중 Docker 호스트·메트릭 영속화는 현재 단계가 아니다. 운영 공개 전에는 기존 인증 체계 또는 별도 운영망/리버스 프록시를 붙이는 후속 이슈가 필요하다.
