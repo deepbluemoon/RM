@@ -8,8 +8,11 @@ import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
 import { config as loadDotenv } from 'dotenv';
 import { splitSql } from '../src/db/sqlSplit.js';
+import { findBackendRoot } from '../src/config/backendRoot.js';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// backend/ — 소스(scripts/)·빌드본(dist/scripts/) 어디서 실행해도 같은 값(#76)
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = findBackendRoot(here, path.resolve(here, '..'));
 loadDotenv({ path: path.join(root, '.env') });
 const MIGRATIONS_DIR = path.join(root, 'db', 'migrations');
 
