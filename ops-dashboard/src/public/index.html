@@ -21,6 +21,7 @@
           <a class="nav-item" href="#logs"><span class="nav-icon">⌁</span> Live logs</a>
           <a class="nav-item" href="#playbooks"><span class="nav-icon">↯</span> Playbooks</a>
           <a class="nav-item" href="#error-codes"><span class="nav-icon">≡</span> Error codes</a>
+          <a class="nav-item" href="#status-codes"><span class="nav-icon">#</span> HTTP status</a>
         </nav>
         <div class="sidebar-bottom">
           <div class="engine-card">
@@ -64,6 +65,14 @@
           <section class="panel alert-panel" aria-label="활성 경고">
             <div class="panel-head"><div><p class="eyebrow">ATTENTION REQUIRED</p><h2>Active alerts</h2></div><span class="panel-hint warning-hint">80% threshold</span></div>
             <div id="alerts-list" class="alerts-list"></div>
+          </section>
+
+          <section id="status-codes" class="panel status-panel" aria-label="HTTP 상태코드">
+            <div class="panel-head"><div><p class="eyebrow">HTTP OBSERVABILITY</p><h2>HTTP status signals</h2></div><a href="/docs/http-status-codes.md" class="text-button" target="_blank" rel="noreferrer">Rules doc ↗</a></div>
+            <div id="status-summary" class="status-summary"></div>
+            <div id="status-tags" class="status-tags"></div>
+            <div id="status-container-list" class="status-container-list"></div>
+            <p class="status-footnote">상태코드는 Docker access log에서 비식별 파싱합니다. 단일 4xx는 대응 버튼을 활성화하지 않습니다.</p>
           </section>
 
           <section class="workspace-grid">

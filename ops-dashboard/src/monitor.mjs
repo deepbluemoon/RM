@@ -1,3 +1,5 @@
+import { createHttpStatusAggregator } from './http-status.mjs'
+
 const METRICS = [
   { key: 'cpuPercent', label: 'CPU', code: 'OPS-CPU-80-001', unit: '%' },
   { key: 'memoryPercent', label: '메모리', code: 'OPS-MEM-80-001', unit: '%' },
@@ -17,9 +19,10 @@ export function formatDuration(seconds) {
   return `${secs}초`
 }
 
-export function createMonitor({ readSnapshot, threshold = 80, now = () => Date.now() }) {
+export function createMonitor({ readSnapshot, readStatusLogs = async () => ({ logs: {}, errors: [] }), threshold = 80, now = () => Date.now(), httpStatusAlertDurationMs = 30_000 } = {}) {
   const thresholdStartedAt = new Map()
-  let latest = { observedAt: now(), containers: [], alerts: [], dockerAvailable: true }
+  const httpStatusMonitor = createHttpStatusAggregator({ now, alertDurationMs: httpStatusAlertDurationMs })
+  let latest = { observedAt: now(), containers: [], alerts: [], dockerAvailable: true, statusCodes: httpStatusMonitor.getState() }
 
   function makeAlerts(containers, observedAt) {
     const alerts = []
@@ -59,7 +62,20 @@ export function createMonitor({ readSnapshot, threshold = 80, now = () => Date.n
     const observedAt = now()
     try {
       const containers = await readSnapshot()
-      latest = { observedAt, containers, alerts: makeAlerts(containers, observedAt), dockerAvailable: true }
+      let statusCollection = { logs: {}, errors: [] }
+      try {
+        statusCollection = await readStatusLogs(containers)
+      } catch (error) {
+        statusCollection = { logs: {}, errors: [error instanceof Error ? error.message : String(error)] }
+      }
+      const statusCodes = httpStatusMonitor.observe(containers, statusCollection.logs || statusCollection, observedAt, statusCollection.errors || [])
+      latest = {
+        observedAt,
+        containers,
+        alerts: [...makeAlerts(containers, observedAt), ...statusCodes.alerts],
+        statusCodes,
+        dockerAvailable: true,
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const startedAt = latest.error ? latest.alerts.find((alert) => alert.code === 'OPS-DOCKER-001')?.startedAt : new Date(observedAt).toISOString()
