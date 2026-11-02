@@ -14,7 +14,7 @@ async function main() {
   await recoverInterrupted();
   startScheduledJobs();
   const app = createApp();
-  const server = app.listen(env.PORT, '127.0.0.1', () => logger.info({ port: env.PORT, env: env.NODE_ENV }, 'crd backend listening'));
+  const server = app.listen(env.PORT, env.HOST, () => logger.info({ host: env.HOST, port: env.PORT, env: env.NODE_ENV }, 'crd backend listening'));
   // Nginx upstream keep-alive(기본 60초)보다 길게 — 유휴 연결 종료 경합 방지
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
