@@ -145,3 +145,23 @@ docker compose -f compose.yaml -f compose.prod.yaml up -d
 | 판정 단계에서 실패 | Vertex 인증 파일·권한 | 3절, [Gemini·Vertex 가이드 §7](gemini-vertex-setup.md) |
 | 같은 네트워크의 다른 기기에서 접속 안 됨 | 기본은 이 PC 전용 | `.env`에 `FRONTEND_BIND=0.0.0.0` (노출 범위 주의) |
 | 포트 충돌 | 8080·19522·13306 사용 중 | `.env`의 `FRONTEND_PORT`·`DEV_BACKEND_PORT`·`DEV_DB_PORT` 변경 |
+
+## 9. 기동·종료 시간
+
+`compose.yaml`의 기동 유예(`start_period`)와 종료 유예(`stop_grace_period`)는 아래 측정값을 근거로 정했다(#89). 서버 사양이 정해지면 다시 측정해 조정한다.
+
+- 측정 환경: Windows 11, Docker Desktop(WSL2 메모리 3GB·CPU 4개), CPU·메모리 제한 없음(기본 compose), 실모델 M1·M2, Vertex. 2026-11-02
+- 기동: 컨테이너 시작부터 준비(DB 접속 가능, M1·M2 적재 완료, `/api/session` 200, `/healthz` 200)까지. 첫 기동 1회 + 재기동 4회
+- 종료: `docker stop` 후 종료까지. 종료 코드 0이면 정상 종료, 137이면 강제 종료
+
+| 서비스 | 기동 실측 | 기동 유예 | 종료 실측 | 종료 유예 |
+|---|---|---|---|---|
+| mariadb | 첫 기동 약 13초(초기화), 재기동 약 5초 | 30초 | 0.7초 | 30초 |
+| model-server | 11~13초(M1·M2 적재) | 60초 | 유휴 1.5초, 200조항 작업 중 5.4초 | 30초 |
+| backend | 5~7초 | 30초 | 0.4~0.5초(분석 진행 중 포함) | 15초 |
+| frontend | 5초 이내 | — | 0.6초 | 기본 10초 |
+| 전체 | `docker compose up -d` 후 모두 준비까지 16~21초 | | 분석 중 `docker compose stop` 3.2초 | |
+
+- 모든 종료가 코드 0(정상)이었다. 분석 중에 끈 뒤 다시 띄우면 그 분석은 "중단"으로 정리되고 한도는 차감되지 않는다(재기동 복구).
+- 유예 시간은 측정값의 2~4배로 잡았다. 기동 유예 동안에는 healthcheck 실패를 세지 않는다. 종료 유예가 지나면 Docker가 강제 종료한다.
+- 백엔드는 종료 신호를 받으면 늦어도 10초 뒤 스스로 끝나므로, 종료 유예를 그보다 긴 15초로 두었다(Docker 기본값 10초면 정리 중 강제 종료될 수 있다).
