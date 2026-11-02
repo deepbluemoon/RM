@@ -111,8 +111,8 @@ class LlmService:
         self.client = client
         self.inv = inventory
         self.pf = pf
-        # M3·M4 공급자. gemini 면 Ollama 상태(cold/loading/missing)·예열 개념이 없어 항상 ready 로 본다.
-        self.is_gemini = s.llm_provider == "gemini"
+        # M3·M4 공급자. gemini/vertex 면 Ollama 상태(cold/loading/missing)·예열 개념이 없어 항상 ready 로 본다.
+        self.is_gemini = s.llm_provider in ("gemini", "vertex")
         self.gemini = gemini
         self.lock = yaml.safe_load(s.models_lock_path.read_text(encoding="utf-8"))["models"] if s.models_lock_path.is_file() else {}
         self.judge_tpl = json.loads(s.m3.json_schema.read_text(encoding="utf-8"))
@@ -151,8 +151,8 @@ class LlmService:
         return Resolved(mid, cfg.model, False, "missing")
 
     def model_version(self, r: Resolved) -> str:
-        if self.is_gemini:  # 이름이 바뀌면 백엔드 판정 캐시 키가 갈려 Ollama 결과와 섞이지 않는다
-            return f"gemini:{r.name}"
+        if self.is_gemini:  # 공급자(gemini/vertex)·이름이 바뀌면 백엔드 판정 캐시 키가 갈려 섞이지 않는다
+            return f"{self.s.llm_provider}:{r.name}"
         lk = self.lock.get(r.id, {})
         if r.is_fallback or not lk.get("ollama_name") or norm_name(r.name) != norm_name(lk["ollama_name"]):
             return f"ollama:{r.name}"

@@ -71,7 +71,7 @@ class FakeOllama:
             reply = self.judge_reply if "risk_class" in body["format"]["properties"] else self.summary_reply
             return httpx.Response(200, json={"message": {"role": "assistant", "content": json.dumps(reply, ensure_ascii=False)},
                                              "done": True, "load_duration": self.load_duration_ns})
-        if p.startswith("/v1beta/models/") and p.endswith(":generateContent"):  # Gemini(LLM_PROVIDER=gemini)
+        if p.endswith(":generateContent"):  # Gemini — /v1beta/models/..(gemini) 또는 /v1/projects/../models/..(vertex)
             if self.chat_status:
                 return httpx.Response(self.chat_status.pop(0), json={"error": {"message": "boom"}})
             sys_text = body["systemInstruction"]["parts"][0]["text"]
@@ -109,7 +109,8 @@ def make_client(fake, sleeps, monkeypatch):
         async def fake_sleep(d: float) -> None:
             sleeps.append(d)
 
-        return TestClient(create_app(s, transport=httpx.MockTransport(fake.handler), sleep=fake_sleep))
+        return TestClient(create_app(s, transport=httpx.MockTransport(fake.handler), sleep=fake_sleep,
+                                     vertex_token_provider=lambda: "fake-adc-token"))  # vertex 모드일 때만 쓰임
     return _make
 
 

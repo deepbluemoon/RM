@@ -12,8 +12,9 @@ classifiers:
   m1: { path: m1-evasion-klue-roberta }
   m2: { path: m2-illegal-klue-roberta }
 llm:
-  provider: ollama                  # env LLM_PROVIDER — ollama(기본) | gemini. gemini 는 M3·M4 를 Google AI Studio API 로 돌린다(로컬에 qwen 을 못 띄울 때). 임베딩·M1·M2 는 그대로.
-  gemini: { model: gemini-3.8-flash, base_url: https://generativelanguage.googleapis.com }  # env GEMINI_MODEL·GEMINI_BASE_URL. 키는 GEMINI_API_KEY(.env, 저장소에 넣지 않음). 구형 모델(예: gemini-2.5-flash)은 신규 키에 404
+  provider: ollama                  # env LLM_PROVIDER — ollama(기본) | gemini(AI Studio, API 키) | vertex(Google Cloud, ADC+GCP 크레딧). 임베딩·M1·M2 는 그대로.
+  gemini: { model: gemini-3.8-flash, base_url: https://generativelanguage.googleapis.com }  # env GEMINI_MODEL·GEMINI_BASE_URL. 키는 GEMINI_API_KEY(.env). 구형(예: gemini-2.5-flash)은 신규 키에 404. 속도는 lite(gemini-3.5-flash-lite ≈1s) 권장
+  vertex: { location: us-central1 }  # env VERTEX_PROJECT(필수)·VERTEX_LOCATION. 인증은 ADC(gcloud auth application-default login). 무료 티어 한도 없이 GCP 크레딧 차감 — 호출 많은 팀용. model 은 GEMINI_MODEL 공용
 
   base_url: http://127.0.0.1:11434  # env OLLAMA_URL — 공유 서버(가이드 1.1)
   keep_alive: 5m                    # 가이드 1.3 필수(5m 이하, -1 금지)

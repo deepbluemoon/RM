@@ -126,6 +126,7 @@ def create_app(
     transport: httpx.AsyncBaseTransport | None = None,
     sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
     classifier_loader: Callable[[Settings], tuple[Classifier, Classifier]] | None = None,
+    vertex_token_provider: Callable[[], str] | None = None,  # 테스트용 — vertex ADC 토큰 주입(기본 None = 실제 ADC)
 ) -> FastAPI:
     s = settings or load_settings()
 
@@ -140,11 +141,15 @@ def create_app(
         client = OllamaClient(s.ollama_url, s.timeout_sec, s.max_attempts, s.backoff_sec, s.concurrency,
                               transport=transport, sleep=sleep)
         inv = Inventory(client, ttl_sec=s.status_cache_sec, resident_sec=_keep_alive_sec(s.keep_alive))
-        # gemini 모드면 M3·M4 는 Gemini 로. 임베딩·M1·M2 는 그대로이므로 Ollama 클라이언트는 늘 둔다.
+        # gemini/vertex 모드면 M3·M4 는 Gemini 로. 임베딩·M1·M2 는 그대로이므로 Ollama 클라이언트는 늘 둔다.
         gemini = None
-        if s.llm_provider == "gemini":
-            gemini = GeminiClient(s.gemini_api_key, s.gemini_model, s.gemini_base_url,
-                                  s.timeout_sec, s.max_attempts, s.backoff_sec, transport=transport, sleep=sleep)
+        if s.llm_provider in ("gemini", "vertex"):
+            gemini = GeminiClient(
+                s.gemini_model, mode=s.llm_provider,
+                api_key=s.gemini_api_key, base_url=s.gemini_base_url,
+                project=s.vertex_project, location=s.vertex_location, token_provider=vertex_token_provider,
+                timeout_sec=s.timeout_sec, max_attempts=s.max_attempts, backoff_sec=s.backoff_sec,
+                transport=transport, sleep=sleep)
         llm = LlmService(s, client, inv, AssertionFilter(s.assertion_terms_path), gemini=gemini)
         st = AppState(s, client, inv, llm, JobRunner(lambda: st.classifiers, s.batch_size,
                                                      s.job_batch_timeout_sec, s.job_ttl_sec))
@@ -155,6 +160,11 @@ def create_app(
             logging.getLogger("crd").info("M3·M4 공급자 = gemini(%s). 임베딩·M1·M2 는 그대로 Ollama", s.gemini_model)
             if not s.gemini_api_key:
                 logging.getLogger("crd").warning("GEMINI_API_KEY 가 설정되지 않아 M3·M4(판정·요약)가 503 으로 거부된다")
+        elif s.llm_provider == "vertex":
+            logging.getLogger("crd").info("M3·M4 공급자 = vertex(%s, project=%s, %s). 임베딩·M1·M2 는 그대로 Ollama",
+                                          s.gemini_model, s.vertex_project, s.vertex_location)
+            if not s.vertex_project:
+                logging.getLogger("crd").warning("VERTEX_PROJECT 가 설정되지 않아 M3·M4(판정·요약)가 503 으로 거부된다")
 
         async def init_classifiers() -> None:  # 적재 중에는 /health status=loading
             try:
