@@ -92,6 +92,7 @@ async function modelNotice(req: RequestRow, run: RunRow | null) {
 }
 
 /** 판정 단계 진행(2026-09-30) — 위험 후보 수·판정 수와 판정을 마친 위험 조항(판정 순서 = 위험 점수 높은 순).
+ *  판정은 병렬이라 저장 순서(assessment_id)가 점수 순을 보장하지 않으므로 판정과 같은 기준(점수 내림차순 → clause_id)으로 정렬한다(#88).
  *  판정 단계 전에는 pending 이 "아직 점수 없음"과 섞이므로 싣지 않는다 */
 async function judgeProgress(runId: number) {
   const rows = await select<{ status: string; display_category: string | null; clause_id: number; seq: number; article_no: string | null;
@@ -101,7 +102,7 @@ async function judgeProgress(runId: number) {
        JOIN v_assessment_display v ON v.assessment_id = a.assessment_id
        JOIN clause c ON c.clause_id = a.clause_id
       WHERE a.run_id = ? AND (a.status IN ('pending', 'judged') OR (a.status = 'unanalyzable' AND a.screen_result = 'risk_candidate'))
-      ORDER BY a.assessment_id`, [runId]);
+      ORDER BY GREATEST(COALESCE(a.score_loophole, 0), COALESCE(a.score_illegal, 0)) DESC, a.clause_id`, [runId]);
   const risky = new Set(['dispute', 'unfair', 'illegal']);
   return {
     riskTotal: rows.length,
