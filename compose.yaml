@@ -3,7 +3,8 @@
 #   docker compose pull && docker compose up -d
 #   → http://localhost:8080
 # 개발(직접 빌드·개발 로그인): docker compose -f compose.yaml -f compose.dev.yaml up -d --build
-# 운영용 설정(compose.prod.yaml)은 배포 서버가 정해지면 추가한다(#48 결정). 운영에서 바뀔 값은 ${변수} 로 둔다.
+# 운영(자원·로그 제한, HTTPS 앞단 전제): docker compose -f compose.yaml -f compose.prod.yaml up -d — 배포 환경 확정 전 최소 구성(#83).
+# 운영에서 바뀔 값은 ${변수} 로 둔다.
 #
 # 프로젝트 이름을 rm 으로 두어 컨테이너 이름이 rm-<서비스>-1 이 된다(운영 대시보드 OPS_NAME_PREFIXES 와 맞춤).
 
