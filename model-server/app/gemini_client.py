@@ -110,16 +110,21 @@ class GeminiClient:
         url = f"{self._base_url}/v1beta/models/{self._model}:generateContent"
         return url, {"x-goog-api-key": self._api_key, "content-type": "application/json"}
 
-    def _body(self, system: str, user: str) -> dict:
+    def _body(self, system: str, user: str, schema: dict | None = None) -> dict:
+        gen: dict = {
+            "temperature": 0,
+            "responseMimeType": "application/json",
+            "maxOutputTokens": MAX_OUTPUT_TOKENS,
+            "thinkingConfig": {"thinkingLevel": "low"},  # Gemini 3.x 사고 억제 — 2.5 의 thinkingBudget 은 안 먹힘
+        }
+        # 스키마 강제는 vertex 에서만 — 실측상 vertex 는 빠르면서(lite ≈1s) 필드 구조를 보장하지만,
+        # AI Studio 는 스키마 강제 시 지연이 크게 늘어(judge 5s→60s+) 쓰지 않는다(필드명은 normalize_claims 가 흡수).
+        if schema is not None and self._mode == "vertex":
+            gen["responseJsonSchema"] = schema
         return {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
-            "generationConfig": {
-                "temperature": 0,
-                "responseMimeType": "application/json",
-                "maxOutputTokens": MAX_OUTPUT_TOKENS,
-                "thinkingConfig": {"thinkingLevel": "low"},  # Gemini 3.x 사고 억제 — 2.5 의 thinkingBudget 은 안 먹힘
-            },
+            "generationConfig": gen,
         }
 
     @staticmethod
@@ -136,10 +141,11 @@ class GeminiClient:
             raise OllamaError(503, f"Gemini 빈 응답{f'(finishReason={fr})' if fr else ''}")
         return text
 
-    async def chat(self, system: str, user: str) -> str:
-        """M3·M4 공통 — 시스템·사용자 프롬프트로 JSON 텍스트를 받는다(파싱은 호출자)."""
+    async def chat(self, system: str, user: str, schema: dict | None = None) -> str:
+        """M3·M4 공통 — 시스템·사용자 프롬프트로 JSON 텍스트를 받는다(파싱은 호출자).
+        schema 는 vertex 모드에서만 responseJsonSchema 로 쓰여 출력 구조를 강제한다."""
         url, headers = self._endpoint()
-        body = self._body(system, user)
+        body = self._body(system, user, schema)
         last: Exception | None = None
         for attempt in range(self.max_attempts):
             try:
