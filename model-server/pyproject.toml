@@ -23,6 +23,16 @@ dev = ["pytest>=8", "pytest-asyncio>=0.23", "jsonschema>=4.22"]
 [tool.uv]
 package = false
 
+# torch 는 CPU 전용 빌드만 받는다 — Linux amd64 기본 휠은 GPU(CUDA) 라이브러리까지 받아 이미지가 수 GB 커진다.
+# 추론은 CPU 로만 한다(config.yaml classifiers.device: cpu). docs/docker-image-policy.md §4
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
