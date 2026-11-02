@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any, Awaitable, Callable
 
 import httpx
@@ -28,6 +29,8 @@ log = logging.getLogger("crd.gemini")
 
 # 사고를 끈 flash 모델의 JSON 한 건은 길지 않다(판정 1문장·요약 5~8문장). 넉넉하게 잡아 잘림을 막는다.
 MAX_OUTPUT_TOKENS = 2048
+# /health 의 인증 준비 확인 캐시 — 토큰 발급·갱신은 네트워크를 쓰므로 요청마다 하지 않는다
+CREDENTIAL_CHECK_TTL_SEC = 60
 CLOUD_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
 TokenProvider = Callable[[], str]
@@ -81,6 +84,8 @@ class GeminiClient:
         self.max_attempts = max_attempts
         self.backoff_sec = backoff_sec
         self._sleep = sleep
+        self._cred_checked_at: float | None = None
+        self._cred_error: str | None = None
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -93,9 +98,9 @@ class GeminiClient:
         if self._mode == "vertex":
             if not self._project:
                 raise OllamaError(503, "VERTEX_PROJECT 가 설정되지 않았습니다 — model-server/.env 에 넣어 주세요")
-            if self._token_provider is None:
-                self._token_provider = default_adc_token_provider()
             try:
+                if self._token_provider is None:  # ADC 파일이 없으면 google.auth.default() 가 여기서 실패한다
+                    self._token_provider = default_adc_token_provider()
                 token = self._token_provider()
             except OllamaError:
                 raise
@@ -109,6 +114,26 @@ class GeminiClient:
             raise OllamaError(503, "GEMINI_API_KEY 가 설정되지 않았습니다 — model-server/.env 에 넣어 주세요")
         url = f"{self._base_url}/v1beta/models/{self._model}:generateContent"
         return url, {"x-goog-api-key": self._api_key, "content-type": "application/json"}
+
+    async def credential_error(self) -> str | None:
+        """호출에 필요한 인증이 준비됐는지 — 문제가 있으면 사유, 없으면 None(/health 용).
+        실제 호출과 같은 검사(_endpoint: 프로젝트·키·ADC 토큰)를 생성 요청 없이 하고, 결과를 CREDENTIAL_CHECK_TTL_SEC 동안 캐시한다."""
+        now = time.monotonic()
+        if self._cred_checked_at is not None and now - self._cred_checked_at < CREDENTIAL_CHECK_TTL_SEC:
+            return self._cred_error
+
+        def check() -> str | None:
+            try:
+                self._endpoint()
+            except OllamaError as e:
+                return e.detail
+            return None
+
+        err = await asyncio.to_thread(check)  # ADC 토큰 갱신은 동기 네트워크 호출
+        if err != self._cred_error and err is not None:
+            log.warning("M3·M4(%s) 인증 준비 안 됨: %s", self._mode, err)
+        self._cred_error, self._cred_checked_at = err, now
+        return err
 
     def _body(self, system: str, user: str, schema: dict | None = None) -> dict:
         gen: dict = {

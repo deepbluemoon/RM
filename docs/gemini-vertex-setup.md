@@ -86,7 +86,7 @@ uv run python -m uvicorn app.main:app --host 127.0.0.1 --port 9542 --workers 1
 curl -H "Authorization: Bearer <MODEL_API_KEY>" http://127.0.0.1:9542/health
 ```
 
-`/health` 의 M3·M4 `state` 가 `ready`, `model` 이 설정한 Gemini 모델명이면 정상이다. `model_version` 은 `gemini:<모델>` 또는 `vertex:<모델>` 로 나온다.
+`/health` 의 M3·M4 `state` 가 `ready`, `model` 이 설정한 Gemini 모델명이면 정상이다. `model_version` 은 `gemini:<모델>` 또는 `vertex:<모델>` 로 나온다. 키(gemini)나 인증 정보(vertex)가 준비되지 않았으면 M3·M4 가 `error` 로 나오고 모델 서버 로그에 이유가 남는다(1분마다 다시 확인).
 
 ## 7. 트러블슈팅
 

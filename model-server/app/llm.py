@@ -111,7 +111,7 @@ class LlmService:
         self.client = client
         self.inv = inventory
         self.pf = pf
-        # M3·M4 공급자. gemini/vertex 면 Ollama 상태(cold/loading/missing)·예열 개념이 없어 항상 ready 로 본다.
+        # M3·M4 공급자. gemini/vertex 면 Ollama 상태(cold/loading/missing)·예열 개념이 없어, 인증이 준비됐으면 ready·아니면 error.
         self.is_gemini = s.llm_provider in ("gemini", "vertex")
         self.gemini = gemini
         self.lock = yaml.safe_load(s.models_lock_path.read_text(encoding="utf-8"))["models"] if s.models_lock_path.is_file() else {}
@@ -135,8 +135,9 @@ class LlmService:
 
     async def resolve(self, mid: str) -> Resolved:
         cfg = self.cfg(mid)
-        if self.is_gemini:  # 클라우드 API — 적재·상주 상태가 없으므로 항상 ready
-            return Resolved(mid, self.s.gemini_model, False, "ready")
+        if self.is_gemini:  # 클라우드 API — 적재·상주 상태가 없다. 키·프로젝트·ADC 토큰이 준비됐는지로만 본다
+            err = await self.gemini.credential_error() if self.gemini else "Gemini 클라이언트가 없습니다"
+            return Resolved(mid, self.s.gemini_model, False, "error" if err else "ready")
         snap = await self.inv.snapshot()
         if not snap.ok:
             return Resolved(mid, cfg.model, False, "error")
