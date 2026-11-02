@@ -1,6 +1,6 @@
 # 개발용 덮어쓰기 — compose.yaml 위에 겹쳐 쓴다.
 #   docker compose -f compose.yaml -f compose.dev.yaml up -d --build
-# 저장소 소스로 이미지를 직접 빌드하고(로컬 태그 tamji-local/*), 개발 모드 로그인과 디버깅용 포트를 연다.
+# 저장소 소스로 이미지를 직접 빌드하고(로컬 태그 tamji-local/*), 개발용 로그인 API 와 디버깅용 포트를 연다.
 # Docker Hub 에 아직 이미지가 없을 때도 이 파일로 실행할 수 있다.
 
 services:
@@ -22,7 +22,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     environment:
-      # development 에서만 개발 모드 로그인(로그인 화면의 "개발 모드 로그인")이 켜진다
+      # development 에서만 개발용 로그인이 켜진다. 로그인 화면에는 버튼이 없고 주소로 들어간다:
+      #   http://localhost:<FRONTEND_PORT>/api/auth/dev/start?devSubject=<아무 이름>  (사용자 권한)
       NODE_ENV: development
       AUTH_DEV_PROVIDER: "true"
       LOG_LEVEL: debug
