@@ -69,9 +69,7 @@
 
           <section id="status-codes" class="panel status-panel" aria-label="HTTP 상태코드">
             <div class="panel-head"><div><p class="eyebrow">HTTP OBSERVABILITY</p><h2>HTTP status signals</h2></div><a href="/docs/http-status-codes.md" class="text-button" target="_blank" rel="noreferrer">Rules doc ↗</a></div>
-            <div id="status-summary" class="status-summary"></div>
-            <div id="status-tags" class="status-tags"></div>
-            <div id="status-container-list" class="status-container-list"></div>
+            <div id="status-summary" class="status-chart" aria-live="polite"></div>
             <p class="status-footnote">상태코드는 Docker access log에서 비식별 파싱합니다. 단일 4xx는 대응 버튼을 활성화하지 않습니다.</p>
           </section>
 
