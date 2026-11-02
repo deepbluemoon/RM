@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .auth import require_bearer
 from .classifiers import CONTRACT_TYPE_KO, Classifier, ClauseText, load_classifiers
 from .config import Settings, load_settings
+from .gemini_client import GeminiClient
 from .health import build_health, build_models
 from .jobs import JobRunner
 from .llm import LlmService
@@ -139,12 +140,21 @@ def create_app(
         client = OllamaClient(s.ollama_url, s.timeout_sec, s.max_attempts, s.backoff_sec, s.concurrency,
                               transport=transport, sleep=sleep)
         inv = Inventory(client, ttl_sec=s.status_cache_sec, resident_sec=_keep_alive_sec(s.keep_alive))
-        llm = LlmService(s, client, inv, AssertionFilter(s.assertion_terms_path))
+        # gemini 모드면 M3·M4 는 Gemini 로. 임베딩·M1·M2 는 그대로이므로 Ollama 클라이언트는 늘 둔다.
+        gemini = None
+        if s.llm_provider == "gemini":
+            gemini = GeminiClient(s.gemini_api_key, s.gemini_model, s.gemini_base_url,
+                                  s.timeout_sec, s.max_attempts, s.backoff_sec, transport=transport, sleep=sleep)
+        llm = LlmService(s, client, inv, AssertionFilter(s.assertion_terms_path), gemini=gemini)
         st = AppState(s, client, inv, llm, JobRunner(lambda: st.classifiers, s.batch_size,
                                                      s.job_batch_timeout_sec, s.job_ttl_sec))
         app.state.crd = st
         if not s.api_key:
             logging.getLogger("crd").warning("MODEL_API_KEY 가 설정되지 않아 모든 요청을 401 로 거부한다")
+        if s.llm_provider == "gemini":
+            logging.getLogger("crd").info("M3·M4 공급자 = gemini(%s). 임베딩·M1·M2 는 그대로 Ollama", s.gemini_model)
+            if not s.gemini_api_key:
+                logging.getLogger("crd").warning("GEMINI_API_KEY 가 설정되지 않아 M3·M4(판정·요약)가 503 으로 거부된다")
 
         async def init_classifiers() -> None:  # 적재 중에는 /health status=loading
             try:
@@ -173,6 +183,8 @@ def create_app(
             await st.jobs.stop()
             await llm.aclose()
             await client.aclose()
+            if gemini is not None:
+                await gemini.aclose()
 
     app = FastAPI(title="crd model-server", version=s.bundle_version, lifespan=lifespan)
 

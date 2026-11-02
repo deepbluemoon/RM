@@ -81,6 +81,12 @@ class Settings:
     job_ttl_sec: float
     assertion_terms_path: Path
     models_lock_path: Path
+    # M3·M4 공급자 — ollama(기본) | gemini(Google AI Studio API). gemini 는 로컬에 qwen 을 못 띄울 때 쓴다.
+    # 임베딩(bge-m3)·M1·M2 는 공급자와 무관하게 그대로다 — gemini 모드에서도 임베딩은 Ollama 를 쓴다.
+    llm_provider: str = "ollama"
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com"
+    gemini_api_key: str | None = field(default=None, repr=False)   # 비밀값 — repr 에 노출하지 않는다
     api_key: str | None = field(default=None, repr=False)  # repr 에 노출하지 않는다
 
 
@@ -116,6 +122,14 @@ def forbidden_reason(name: str) -> str | None:
 
 def validate(s: Settings) -> None:
     """공유 Ollama 규칙 위반 설정을 막는다."""
+    if s.llm_provider not in ("ollama", "gemini"):
+        raise ValueError(f"LLM_PROVIDER 는 ollama|gemini 여야 한다 — 현재 {s.llm_provider!r}")
+    if s.llm_provider == "gemini":
+        # Gemini(클라우드 API)는 공유 Ollama 규칙(동시 1건·keep_alive·num_ctx 등)을 적용하지 않는다.
+        # M3·M4 는 Gemini 로 가고, 임베딩은 여전히 Ollama 를 쓰므로 그 설정만 가볍게 확인한다.
+        if not 16 <= s.embed_max_batch <= 64:
+            raise ValueError(f"embed max_batch {s.embed_max_batch} 는 16~64 여야 한다(가이드 1.7-7)")
+        return
     for m in (s.m3, s.m4):
         if m.num_ctx != MAX_NUM_CTX:
             raise ValueError(f"{m.id} num_ctx 는 {MAX_NUM_CTX} 고정이다(가이드 1.3) — 현재 {m.num_ctx}")
@@ -187,6 +201,11 @@ def load_settings(config_path: str | os.PathLike[str] | None = None) -> Settings
         job_ttl_sec=float(lim.get("job_ttl_sec", 3600)),
         assertion_terms_path=_resolve(os.environ.get("ASSERTION_TERMS_PATH") or raw["postfilter"]["assertion_terms"]),
         models_lock_path=BASE_DIR / "models.lock.yaml",
+        llm_provider=(os.environ.get("LLM_PROVIDER") or llm.get("provider") or "ollama").strip().lower(),
+        gemini_model=os.environ.get("GEMINI_MODEL") or (llm.get("gemini") or {}).get("model", "gemini-3.8-flash"),
+        gemini_base_url=(os.environ.get("GEMINI_BASE_URL") or (llm.get("gemini") or {}).get("base_url")
+                         or "https://generativelanguage.googleapis.com").rstrip("/"),
+        gemini_api_key=os.environ.get("GEMINI_API_KEY") or None,
         api_key=os.environ.get("MODEL_API_KEY") or None,
     )
     validate(s)

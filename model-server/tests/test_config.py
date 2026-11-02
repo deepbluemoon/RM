@@ -10,6 +10,7 @@ def _with(**kw):
     s = load_settings()
     m3 = dataclasses.replace(s.m3, **kw.pop("m3", {}))
     m4 = dataclasses.replace(s.m4, **kw.pop("m4", {}))
+    kw.setdefault("llm_provider", "ollama")  # 이 규칙들은 Ollama 공급자용 — 개발자 .env 의 LLM_PROVIDER 에 휘둘리지 않게 고정
     return dataclasses.replace(s, m3=m3, m4=m4, **kw)
 
 

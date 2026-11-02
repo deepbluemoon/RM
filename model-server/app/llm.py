@@ -24,6 +24,7 @@ import yaml
 
 from .classifiers import CONTRACT_TYPE_KO
 from .config import LlmModelCfg, Settings
+from .gemini_client import GeminiClient
 from .ollama_client import Inventory, OllamaClient, OllamaError, norm_name
 from .postfilter import AssertionFilter
 from .summarize_input import Clause, budget, build
@@ -91,11 +92,15 @@ SUMMARIZE_SYSTEM = """당신은 한국어 계약서 요약 도구입니다. 비�
 
 
 class LlmService:
-    def __init__(self, s: Settings, client: OllamaClient, inventory: Inventory, pf: AssertionFilter):
+    def __init__(self, s: Settings, client: OllamaClient, inventory: Inventory, pf: AssertionFilter,
+                 gemini: GeminiClient | None = None):
         self.s = s
         self.client = client
         self.inv = inventory
         self.pf = pf
+        # M3·M4 공급자. gemini 면 Ollama 상태(cold/loading/missing)·예열 개념이 없어 항상 ready 로 본다.
+        self.is_gemini = s.llm_provider == "gemini"
+        self.gemini = gemini
         self.lock = yaml.safe_load(s.models_lock_path.read_text(encoding="utf-8"))["models"] if s.models_lock_path.is_file() else {}
         self.judge_tpl = json.loads(s.m3.json_schema.read_text(encoding="utf-8"))
         # 판정 속도(2026-09-30): 설명 문장 수·길이를 줄이면 생성 토큰이 줄어 판정 1건 3.8s → 2.1s(40건 측정, training/m3_speed_bench.py)
@@ -117,6 +122,8 @@ class LlmService:
 
     async def resolve(self, mid: str) -> Resolved:
         cfg = self.cfg(mid)
+        if self.is_gemini:  # 클라우드 API — 적재·상주 상태가 없으므로 항상 ready
+            return Resolved(mid, self.s.gemini_model, False, "ready")
         snap = await self.inv.snapshot()
         if not snap.ok:
             return Resolved(mid, cfg.model, False, "error")
@@ -131,6 +138,8 @@ class LlmService:
         return Resolved(mid, cfg.model, False, "missing")
 
     def model_version(self, r: Resolved) -> str:
+        if self.is_gemini:  # 이름이 바뀌면 백엔드 판정 캐시 키가 갈려 Ollama 결과와 섞이지 않는다
+            return f"gemini:{r.name}"
         lk = self.lock.get(r.id, {})
         if r.is_fallback or not lk.get("ollama_name") or norm_name(r.name) != norm_name(lk["ollama_name"]):
             return f"ollama:{r.name}"
@@ -186,12 +195,17 @@ class LlmService:
 
     async def _chat_json(self, mid: str, system: str, user: str, schema: dict) -> tuple[dict, Resolved]:
         r = await self.resolve(mid)
-        if r.state == "missing":
-            raise OllamaError(503, f"{mid} 모델 미설치({r.name}) — ollama list 로 이름을 확인하세요(런타임은 모델을 받지 않는다)")
-        if r.state == "error":
-            raise OllamaError(503, "공유 Ollama 연결 불가 — 관리자 확인 필요")
-        resp = await self._call_chat(r, self._body(self.cfg(mid), r.name, system, user, schema))
-        content = strip_think((resp.get("message") or {}).get("content", "")).strip()
+        if self.is_gemini:
+            assert self.gemini is not None  # gemini 모드면 main.py 가 주입한다
+            raw = await self.gemini.chat(system, user)
+        else:
+            if r.state == "missing":
+                raise OllamaError(503, f"{mid} 모델 미설치({r.name}) — ollama list 로 이름을 확인하세요(런타임은 모델을 받지 않는다)")
+            if r.state == "error":
+                raise OllamaError(503, "공유 Ollama 연결 불가 — 관리자 확인 필요")
+            resp = await self._call_chat(r, self._body(self.cfg(mid), r.name, system, user, schema))
+            raw = (resp.get("message") or {}).get("content", "")
+        content = strip_think(raw).strip()
         try:
             data = json.loads(content)
         except json.JSONDecodeError:
@@ -261,6 +275,8 @@ class LlmService:
     # ---------------------------------------------------------- 예열(기동 시 1회)
     def start_warmup(self) -> None:
         """게이트웨이 기동 시 1회만 부른다. M3·M4 가 같은 모델이므로 하나만 올린다."""
+        if self.is_gemini:  # 클라우드 API — 미리 올릴 것이 없다
+            return
         t = asyncio.create_task(self.warmup("M3"))
         self._tasks.add(t)
         t.add_done_callback(self._tasks.discard)

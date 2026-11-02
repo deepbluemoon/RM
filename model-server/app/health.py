@@ -88,7 +88,8 @@ async def build_models(st: "AppState") -> dict:
             "model_version": st.llm.model_version(r),
             "trained_data_date": None,
             "ollama_digest": r.digest or card.get("ollama_digest"),
-            "state": r.state if snap.ok else "error",
+            # gemini 모드는 Ollama 상태(snap)와 무관하게 resolve 가 ready 를 준다
+            "state": r.state if (snap.ok or st.llm.is_gemini) else "error",
         })
     # 계약에서 path·base·ollama_digest 는 nullable 이 아니다 — 값이 없으면 키를 뺀다
     out = [{k: v for k, v in m.items() if v is not None or k == "trained_data_date"} for m in out]
