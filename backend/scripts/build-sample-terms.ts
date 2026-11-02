@@ -11,10 +11,13 @@ import { extractDocument, supportedFormats } from '../src/modules/extract/index.
 import { sniffFormat } from '../src/modules/intake/formats.js';
 import { splitDocuments } from '../src/modules/structuring/multiDoc.js';
 import { classifyContract } from '../src/modules/structuring/classifier.js';
+import { findBackendRoot } from '../src/config/backendRoot.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const SRC = path.resolve(here, '..', '..', 'frontend', 'samples-src');
-const OUT = path.resolve(here, '..', '..', 'frontend', 'public', 'samples');
+// 저장소 루트 — 빌드본(dist/scripts/)에서도 backend/ 의 한 단계 위(#76)
+const REPO = path.resolve(findBackendRoot(here, path.resolve(here, '..')), '..');
+const SRC = path.join(REPO, 'frontend', 'samples-src');
+const OUT = path.join(REPO, 'frontend', 'public', 'samples');
 
 /** 원천 → 결과 파일. 순서 = 화면 카드 순서(짧은 것부터 — 처음 써 보는 사람이 빨리 결과를 본다) */
 const SAMPLES = [

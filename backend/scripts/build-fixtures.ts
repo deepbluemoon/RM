@@ -6,9 +6,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import PDFDocument from 'pdfkit';
 import { PII_CONTRACT_LINES, PII_CONTRACT_TEXT } from '../tests/fixtures/pii/contract-with-pii.js';
+import { findBackendRoot } from '../src/config/backendRoot.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const FX = path.resolve(here, '..', 'tests', 'fixtures');
+const FX = path.join(findBackendRoot(here, path.resolve(here, '..')), 'tests', 'fixtures');  // 빌드본에서도 backend/ 기준(#76)
 const FONT = '/System/Library/Fonts/Supplemental/AppleGothic.ttf';
 
 export interface Article {

@@ -4,7 +4,12 @@
 if (process.argv.includes('--db') && process.argv[process.argv.indexOf('--db') + 1] === 'test') {
   // env.ts 가 읽기 전에 테스트 DB 로 바꾼다(tests/setup-env.ts 와 같은 규칙)
   const { config } = await import('dotenv');
-  const parsed = config({ path: new URL('../.env', import.meta.url).pathname }).parsed ?? {};
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const { findBackendRoot } = await import('../src/config/backendRoot.js');
+  // URL.pathname 은 Windows 에서 /C:/… 가 되고 빌드본에서는 dist/ 를 가리켜 backend/ 를 직접 찾는다(#76)
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const parsed = config({ path: path.join(findBackendRoot(here, path.resolve(here, '..')), '.env') }).parsed ?? {};
   const e = { ...parsed, ...process.env };
   process.env.DB_HOST = e.TEST_DB_HOST ?? '127.0.0.1';
   process.env.DB_PORT = e.TEST_DB_PORT ?? '23610';
