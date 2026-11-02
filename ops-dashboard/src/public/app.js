@@ -126,6 +126,8 @@ function appendLog(line) {
 function selectContainer(containerId) {
   state.selectedId = containerId
   if (state.logSource) state.logSource.close()
+  $('logs').classList.remove('hidden')
+  $('container-workspace').classList.add('has-selection')
   $('logs-title').textContent = '로그 · ' + (state.overview.containers.find((item) => item.id === containerId)?.name || containerId)
   $('log-output').innerHTML = '<div class="log-empty"><span>⌁</span><p>로그 스트림에 연결하는 중…</p></div>'
   state.logSource = new EventSource(`/api/logs/stream?containerId=${encodeURIComponent(containerId)}&tail=200`)
