@@ -1,10 +1,11 @@
 """Gemini(Google AI Studio) 채팅 클라이언트 — LLM_PROVIDER=gemini 일 때 M3(판정)·M4(요약)를
 공유 Ollama 대신 Google AI Studio 의 generateContent 로 돌린다(로컬에 qwen3:4b 를 못 띄우는 PC 용).
 
-- Ollama 의 think:false 에 대응해 thinkingConfig.thinkingBudget=0 으로 사고 과정을 끈다(결정적 JSON 출력).
-- 구조화 출력은 responseMimeType=application/json 으로 받는다. responseSchema(스키마 강제)는 쓰지 않는다 —
-  Gemini 스키마 방언이 JSON Schema 와 달라 조항별 evidence_ids enum 제약을 그대로 옮기기 어렵다.
-  출력 검증·보정은 게이트웨이(llm.py 의 judge/summarize)가 지금처럼 그대로 한다.
+- Ollama 의 think:false 에 대응해 thinkingConfig.thinkingLevel="low" 로 사고를 줄인다(지연 완화).
+  주의: Gemini 3.x 는 thinkingBudget 이 아니라 thinkingLevel 을 쓴다(budget 은 무시돼 기본 사고 → 느려짐).
+- 구조화 출력은 responseMimeType=application/json 으로 받는다. responseJsonSchema(스키마 강제)는 쓰지 않는다 —
+  실측상 스키마 강제가 지연을 크게 키운다(judge 5s→60s+). 대신 필드명 차이(claim vs sentence/text)는
+  게이트웨이(llm.py normalize_claims)가 흡수하고, 값 검증·보정은 judge/summarize 가 지금처럼 그대로 한다.
 - 오류는 OllamaClient 와 같은 OllamaError(모델 상류 오류)로 돌려 main.py 의 예외 사상을 함께 쓴다.
 - 요청·응답 본문은 로그에 남기지 않는다(BR-MDL-01).
 """
@@ -54,7 +55,7 @@ class GeminiClient:
                 "temperature": 0,
                 "responseMimeType": "application/json",
                 "maxOutputTokens": MAX_OUTPUT_TOKENS,
-                "thinkingConfig": {"thinkingBudget": 0},
+                "thinkingConfig": {"thinkingLevel": "low"},  # Gemini 3.x 사고 억제 — 2.5 의 thinkingBudget 은 안 먹힘
             },
         }
 

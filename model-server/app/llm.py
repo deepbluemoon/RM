@@ -37,6 +37,19 @@ NUM_CTX = 8192  # 가이드 1.3 고정값 — 미리 올리기도 같은 값(다
 def strip_think(text: str) -> str:
     """think:false 여도 사고 과정이 섞여 나오면 '</think>' 앞부분을 버린다(가이드 1.4, 2.2 _strip_think)."""
     return text.split("</think>", 1)[1].lstrip() if "</think>" in text else text
+
+
+def normalize_claims(claims: list) -> list[dict]:
+    """설명 주장을 postfilter 가 기대하는 {claim, evidence_ids} 모양으로 맞춘다.
+    Ollama 는 스키마(format)로 claim 필드를 강제하지만, Gemini 는 스키마 강제 없이 쓰므로(지연 때문)
+    같은 내용을 sentence/text 로 낼 때가 있다 — 그 필드명 차이만 흡수한다(값 검증은 postfilter 가 한다)."""
+    out: list[dict] = []
+    for c in claims:
+        if not isinstance(c, dict):
+            continue
+        out.append({"claim": c.get("claim") or c.get("sentence") or c.get("text") or "",
+                    "evidence_ids": c.get("evidence_ids") or []})
+    return out
 CONTRACT_TYPES = list(CONTRACT_TYPE_KO)
 RISK_TYPES_ALL = ["rights_limit", "liability_avoid", "refund_cancel_limit", "unilateral_change",
                   "excessive_penalty", "vague", "other"]
@@ -248,7 +261,7 @@ class LlmService:
             rl = data.get("risk_level") if data.get("risk_level") in ("high", "mid", "low") else "low"
             cf = data.get("confidence") if data.get("confidence") in ("high", "medium", "low") else "low"
         claims = data.get("explanation") if isinstance(data.get("explanation"), list) else []
-        explanation = self.pf.filter([c for c in claims if isinstance(c, dict)][:3], set(ev_ids))
+        explanation = self.pf.filter(normalize_claims(claims)[:3], set(ev_ids))
         return {"risk_class": rc, "risk_type": rt, "risk_level": rl, "confidence": cf,
                 "explanation": explanation, "model_version": self.model_version(r),
                 "knowledge_date": req["knowledge_date"]}

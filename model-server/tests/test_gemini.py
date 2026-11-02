@@ -14,6 +14,8 @@ def test_gemini_judge(make_client, fake):
     assert_contract("/v1/judge", "post", 200, body)
     assert body["model_version"] == "gemini:gemini-3.8-flash"
     assert body["knowledge_date"] == "2026-09-01"
+    # Gemini 가 sentence 로 줘도 normalize_claims 가 claim 으로 맞춰 설명이 살아남는다(빈 배열 버그 회귀 방지)
+    assert len(body["explanation"]) == 1 and body["explanation"][0]["evidence_ids"] == ["ev1"]
     # Gemini generateContent 로만 갔고 Ollama /api/chat 는 부르지 않았다
     paths = fake.paths()
     assert any(p.endswith(":generateContent") for p in paths)
@@ -43,6 +45,22 @@ def test_gemini_health_ready_without_ollama(make_client, fake):
         body = c.get("/health", headers=AUTH).json()
     state = {m["id"]: m["state"] for m in body["models"]}
     assert state["M3"] == "ready" and state["M4"] == "ready"
+
+
+def test_normalize_claims_field_names():
+    """Ollama 의 claim 은 그대로, Gemini 의 sentence/text 는 claim 으로 맞춘다."""
+    from app.llm import normalize_claims
+    out = normalize_claims([
+        {"claim": "올라마 주장", "evidence_ids": ["a"]},
+        {"sentence": "제미나이 문장", "evidence_ids": ["b"]},
+        {"text": "텍스트 필드", "evidence_ids": ["c"]},
+        "문자열은 건너뜀",
+    ])
+    assert out == [
+        {"claim": "올라마 주장", "evidence_ids": ["a"]},
+        {"claim": "제미나이 문장", "evidence_ids": ["b"]},
+        {"claim": "텍스트 필드", "evidence_ids": ["c"]},
+    ]
 
 
 def test_gemini_4xx_not_retried(make_client, fake, sleeps):
