@@ -28,7 +28,7 @@ class FakeOllama:
         self.installed: dict[str, int] = {SHARED: int(2.5 * GB), "gemma3:4b": int(3.34 * GB), "bge-m3:latest": int(1.16 * GB)}
         self.resident: set[str] = {SHARED}
         self.calls: list[tuple[str, dict | None]] = []
-        self.chat_status: list[int] = []   # 앞에서부터 꺼내 쓰는 오류 상태
+        self.chat_status: list[int] = []   # 앞에서부터 꺼내 쓰는 오류 상태(Ollama·Gemini 공용)
         self.judge_reply: dict = {
             "risk_class": "unfair", "risk_type": "refund_cancel_limit", "risk_level": "high", "confidence": "medium",
             "explanation": [
@@ -71,6 +71,13 @@ class FakeOllama:
             reply = self.judge_reply if "risk_class" in body["format"]["properties"] else self.summary_reply
             return httpx.Response(200, json={"message": {"role": "assistant", "content": json.dumps(reply, ensure_ascii=False)},
                                              "done": True, "load_duration": self.load_duration_ns})
+        if p.startswith("/v1beta/models/") and p.endswith(":generateContent"):  # Gemini(LLM_PROVIDER=gemini)
+            if self.chat_status:
+                return httpx.Response(self.chat_status.pop(0), json={"error": {"message": "boom"}})
+            sys_text = body["systemInstruction"]["parts"][0]["text"]
+            reply = self.judge_reply if "risk_class" in sys_text else self.summary_reply
+            return httpx.Response(200, json={"candidates": [
+                {"content": {"parts": [{"text": json.dumps(reply, ensure_ascii=False)}]}, "finishReason": "STOP"}]})
         if p == "/api/embed":
             if body["model"] not in self.installed and f"{body['model']}:latest" not in self.installed:
                 return httpx.Response(404, json={"error": f"model '{body['model']}' not found"})
@@ -93,6 +100,7 @@ def sleeps() -> list[float]:
 def make_client(fake, sleeps, monkeypatch):
     def _make(**overrides) -> TestClient:
         overrides.setdefault("warmup_on_start", False)  # 예열은 test_health 에서만 켠다
+        overrides.setdefault("llm_provider", "ollama")   # 개발자 .env 의 LLM_PROVIDER 에 휘둘리지 않게 고정(gemini 테스트만 바꾼다)
         s = dataclasses.replace(load_settings(), api_key=API_KEY, **overrides)
 
         async def fake_sleep(d: float) -> None:
