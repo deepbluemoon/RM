@@ -88,6 +88,15 @@ def test_vertex_endpoint_url_and_auth():
     assert headers["Authorization"] == "Bearer tok-123" and "x-goog-api-key" not in headers
 
 
+def test_schema_only_forced_on_vertex():
+    """responseJsonSchema 는 vertex 에서만 붙는다(AI Studio 는 지연 때문에 제외)."""
+    schema = {"type": "object"}
+    v = GeminiClient("m", mode="vertex", project="p", location="global", token_provider=lambda: "t")
+    assert v._body("sys", "usr", schema)["generationConfig"].get("responseJsonSchema") == schema
+    g = GeminiClient("m", mode="gemini", api_key="k")
+    assert "responseJsonSchema" not in g._body("sys", "usr", schema)["generationConfig"]
+
+
 def test_vertex_global_location_host():
     c = GeminiClient("m", mode="vertex", project="p", location="global", token_provider=lambda: "t")
     url, _ = c._endpoint()

@@ -210,7 +210,7 @@ class LlmService:
         r = await self.resolve(mid)
         if self.is_gemini:
             assert self.gemini is not None  # gemini 모드면 main.py 가 주입한다
-            raw = await self.gemini.chat(system, user)
+            raw = await self.gemini.chat(system, user, schema)  # schema 는 vertex 에서만 강제됨
         else:
             if r.state == "missing":
                 raise OllamaError(503, f"{mid} 모델 미설치({r.name}) — ollama list 로 이름을 확인하세요(런타임은 모델을 받지 않는다)")
