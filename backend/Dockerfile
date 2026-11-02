@@ -51,7 +51,7 @@ COPY backend/tests/fixtures/knowledge/initial.json ./tests/fixtures/knowledge/in
 # 실행 중 읽는 저장소 파일: 설명 단정 표현 사전, 모델 API 계약(S9), 모델 서버 운영 문서(S9)
 COPY shared/assertion-terms.json /app/shared/assertion-terms.json
 COPY specs/002-contract-risk-detection/contracts/model-api.openapi.yaml /app/specs/002-contract-risk-detection/contracts/model-api.openapi.yaml
-COPY model-server/docs/GUIDELINE.md model-server/docs/USER_MANUAL.md /app/model-server/docs/
+COPY model-server/docs/GUIDELINE.md model-server/docs/USER_MANUAL.md model-server/docs/service-test-result.json /app/model-server/docs/
 COPY model-server/reports/baseline_v0/MODEL_TEST_REPORT.md /app/model-server/reports/baseline_v0/MODEL_TEST_REPORT.md
 # 원본 파일 임시 보관·지식 스테이징·벡터 캐시(RAW_STORAGE_DIR 등 기본값 ./var/...). 운영에서는 볼륨으로 연결한다
 RUN mkdir -p var/raw var/knowledge var/cache && chown -R app:app var
