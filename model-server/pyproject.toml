@@ -17,7 +17,8 @@ classifiers = ["torch>=2.3", "transformers>=4.44"]
 # 모델 원본 받기(scripts/fetch_models.py): uv sync --extra tools
 tools = ["huggingface_hub>=0.24"]
 # LLM_PROVIDER=vertex 로 M3·M4 를 Google Cloud(Vertex AI)로 돌릴 때만: uv sync --extra vertex
-vertex = ["google-auth>=2.30"]
+# requests 는 google-auth 의 토큰 refresh 전송(google.auth.transport.requests)에 쓰인다
+vertex = ["google-auth>=2.30", "requests>=2.31"]
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "jsonschema>=4.22"]
