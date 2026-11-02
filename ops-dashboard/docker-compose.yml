@@ -1,0 +1,15 @@
+services:
+  ops-dashboard:
+    build: .
+    ports:
+      - "9760:9760"
+    environment:
+      OPS_DASHBOARD_PORT: 9760
+      OPS_RESOURCE_THRESHOLD: 80
+      OPS_COMPOSE_FILE: ${OPS_COMPOSE_FILE:-/workspace/compose.yml}
+      OPS_SCALE_SERVICE: ${OPS_SCALE_SERVICE:-backend}
+      OPS_SCALE_TARGET: ${OPS_SCALE_TARGET:-2}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${OPS_PROJECT_DIR:-.}:/workspace:ro
+    restart: unless-stopped

@@ -1,0 +1,16 @@
+{
+  "name": "rm-ops-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RM 컨테이너 운영 모니터링 대시보드",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.mjs",
+    "start": "node src/server.mjs",
+    "test": "node --test",
+    "check": "node --check src/server.mjs && node --check src/docker.mjs && node --check src/monitor.mjs && node --check src/actions.mjs"
+  }
+}
