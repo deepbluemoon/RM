@@ -15,7 +15,7 @@
 | 파일 | 용도 |
 |---|---|
 | `compose.yaml` | 기본. Docker Hub 이미지를 받아 실행 |
-| `compose.dev.yaml` | 개발. 기본 위에 겹쳐 직접 빌드·개발 모드 로그인·디버깅 포트 |
+| `compose.dev.yaml` | 개발. 기본 위에 겹쳐 직접 빌드·개발용 로그인·디버깅 포트 |
 | `.env.example` | 환경 변수 예시. 복사해 `.env`로 쓴다(`.env`는 git 제외) |
 
 운영용 `compose.prod.yaml`은 배포 환경이 정해지면 추가한다.
@@ -69,10 +69,12 @@ docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 ```
 
 - 이미지를 소스로 빌드한다(로컬 태그 `tamji-local/*`). Docker Hub에 이미지가 없어도 된다.
-- 로그인 화면의 "개발 모드 로그인"이 켜진다.
+- 개발용 로그인이 켜진다. **로그인 화면에는 버튼이 없으므로** 주소로 들어간다: `http://localhost:8080/api/auth/dev/start?devSubject=<아무 이름>` → 사용자 권한으로 로그인된다.
 - 디버깅 포트: 백엔드 `127.0.0.1:19522`, DB `127.0.0.1:13306`
 
 ### 계정 만들기
+
+새로 띄운 DB에는 계정이 없다. 로그인 화면의 아이디·비밀번호로 들어가려면 아래처럼 계정을 만들거나, 화면의 **회원가입**으로 만든다(회원가입 계정은 사용자 권한).
 
 ```bash
 docker compose exec -e CRD_NEW_PASSWORD='<비밀번호>' backend \
