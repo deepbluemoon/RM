@@ -56,20 +56,16 @@ async function serveStatic(req, res) {
   const target = path.resolve(publicDir, requested)
   if (target !== publicDir && !target.startsWith(`${publicDir}${path.sep}`)) return sendJson(res, 403, { error: 'forbidden' })
   const docFiles = new Set(['docs/error-codes.md', 'docs/http-status-codes.md'])
-  if (docFiles.has(requested)) {
-    const markdown = await fs.readFile(path.join(root, '..', requested))
-    res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' })
-    res.end(markdown)
-    return
-  }
   try {
-    const body = await fs.readFile(target)
-    res.writeHead(200, { 'content-type': contentTypes[path.extname(target)] || 'application/octet-stream', 'cache-control': 'no-store' })
+    const isDoc = docFiles.has(requested)
+    const body = await fs.readFile(isDoc ? path.join(root, '..', requested) : target)
+    res.writeHead(200, { 'content-type': isDoc ? 'text/markdown; charset=utf-8' : (contentTypes[path.extname(target)] || 'application/octet-stream'), 'cache-control': 'no-store' })
     res.end(body)
-  } catch {
-    const body = await fs.readFile(path.join(publicDir, 'index.html'))
-    res.writeHead(200, { 'content-type': contentTypes['.html'], 'cache-control': 'no-store' })
-    res.end(body)
+  } catch (error) {
+    if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR' && error.code !== 'EISDIR') throw error
+    if (requested.startsWith('api/')) return sendJson(res, 404, { error: 'not found' })
+    res.writeHead(404, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    res.end('<!doctype html><html lang="ko"><meta charset="utf-8"><title>404 찾을 수 없음</title><h1>404 페이지를 찾을 수 없습니다</h1><p><a href="/">대시보드로 돌아가기</a></p></html>')
   }
 }
 
@@ -126,7 +122,12 @@ async function handle(req, res) {
   return serveStatic(req, res)
 }
 
-const server = http.createServer((req, res) => { void handle(req, res) })
+const server = http.createServer((req, res) => {
+  void handle(req, res).catch(() => {
+    if (!res.headersSent) return sendJson(res, 500, { error: 'internal server error' })
+    res.destroy()
+  })
+})
 await monitor.tick()
 setInterval(() => { void monitor.tick() }, pollMs).unref()
 server.listen(port, '0.0.0.0', () => process.stdout.write(`RM ops dashboard listening on http://127.0.0.1:${port}\n`))
