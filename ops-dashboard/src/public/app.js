@@ -1,7 +1,7 @@
 import { summarizeMetrics, formatPercent } from './metric-display.js'
 import { httpChartData } from './http-chart.js'
 
-const state = { overview: null, catalog: null, selectedId: null, logSource: null }
+const state = { overview: null, catalog: null, selectedId: null, logSource: null, alertPopoverOpen: false, highlightedAlertId: null, uiError: null }
 const $ = (id) => document.getElementById(id)
 
 function showView() {
@@ -16,7 +16,7 @@ function showView() {
     if (active) link.setAttribute('aria-current', 'page')
     else link.removeAttribute('aria-current')
   })
-  if (hash === 'error-codes') $('error-codes').open = true
+  if (hash === 'error-codes' && !$('error-codes').open) $('error-codes').showModal()
 }
 
 function formatDuration(seconds) {
@@ -50,20 +50,58 @@ function renderOverview() {
   renderStatusCodes(overview.statusCodes, overview.dockerAvailable)
   renderContainers(containers, overview.alerts || [], overview.dockerAvailable)
   renderActions(overview.alerts || [])
-  const banner = $('error-banner')
-  if (overview.error) { banner.classList.remove('hidden'); banner.innerHTML = `<strong>OPS-DOCKER-001</strong> · ${escapeHtml(overview.error)}` } else banner.classList.add('hidden')
+  renderAlertTarget(overview.alerts || [])
 }
 
 function renderAlerts(alerts) {
   const list = $('alerts-list')
+  const popover = $('alerts-popover')
+  const toggle = $('alert-toggle')
+  popover.classList.toggle('hidden', !state.alertPopoverOpen)
+  toggle.setAttribute('aria-expanded', String(state.alertPopoverOpen))
+  if (state.uiError) {
+    list.innerHTML = `<div class="empty">대시보드 데이터를 불러오지 못했습니다.<br />${escapeHtml(state.uiError)}</div>`
+    return
+  }
   if (!alerts.length) {
     list.innerHTML = '<div class="alert-nominal">활성 경고가 없습니다.</div>'
     return
   }
-  list.innerHTML = alerts.map((alert) => `<article class="alert-card">
-    <div class="alert-card-top"><strong>${escapeHtml(alert.code)}</strong><span class="alert-resource">${escapeHtml(alert.resource)}</span></div>
-    <p>${alert.code === 'OPS-DOCKER-001' ? 'Docker 연결을 확인해 주세요.' : `<b>${escapeHtml(alert.containerName || alert.containerId)}</b> · ${alert.kind === 'http' ? `${escapeHtml(String(alert.count))}/${escapeHtml(String(alert.total))}건 · ${escapeHtml(String(alert.value))}%` : `${escapeHtml(String(alert.value))}% 사용`} · ${formatDuration(alert.durationSec)} 지속`}</p>
-  </article>`).join('')
+  list.innerHTML = alerts.map((alert) => `<button class="alert-card${state.highlightedAlertId === alert.id ? ' is-highlighted' : ''}" data-alert-id="${escapeHtml(alert.id)}" type="button">
+    <span class="alert-card-top"><strong>${escapeHtml(alert.code)}</strong><span class="alert-resource">${escapeHtml(alert.resource)}</span></span>
+    <span class="alert-message">${escapeHtml(alert.message || `${alert.containerName || alert.containerId} · ${formatDuration(alert.durationSec)} 지속`)}</span>
+  </button>`).join('')
+  list.querySelectorAll('[data-alert-id]').forEach((button) => button.addEventListener('click', () => focusAlert(button.dataset.alertId)))
+}
+
+function renderAlertTarget(alerts) {
+  const activeAlert = alerts.find((alert) => alert.id === state.highlightedAlertId)
+  if (!activeAlert) state.highlightedAlertId = null
+  $('engine-warning-lamp').classList.toggle('hidden', !activeAlert || activeAlert.code !== 'OPS-DOCKER-001')
+  $('http-warning-lamp').classList.toggle('hidden', !activeAlert || activeAlert.kind !== 'http')
+  document.querySelectorAll('.container-row').forEach((row) => {
+    const targeted = Boolean(activeAlert && activeAlert.kind !== 'http' && activeAlert.code !== 'OPS-DOCKER-001' && row.dataset.containerId === activeAlert.containerId)
+    row.classList.toggle('is-alert-target', targeted)
+    const lamp = row.querySelector('.row-warning-lamp')
+    if (lamp) lamp.classList.toggle('hidden', !targeted)
+  })
+}
+
+function focusAlert(alertId) {
+  const alert = state.overview?.alerts?.find((item) => item.id === alertId)
+  if (!alert) return
+  state.highlightedAlertId = alert.id
+  state.alertPopoverOpen = false
+  renderOverview()
+  $('alert-toggle').focus()
+  if (alert.containerId && alert.kind !== 'http') {
+    const row = [...document.querySelectorAll('.container-row')].find((item) => item.dataset.containerId === alert.containerId)
+    const list = row?.closest('.container-list')
+    if (row && list) {
+      const rowTop = row.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop
+      list.scrollTop = Math.max(0, rowTop - (list.clientHeight - row.clientHeight) / 2)
+    }
+  }
 }
 
 function renderStatusCodes(statusState, dockerAvailable) {
@@ -87,7 +125,7 @@ function renderContainers(containers, alerts, dockerAvailable) {
       <span class="status${container.running ? '' : ' stopped'}">${container.running ? '실행 중' : '중지'}</span>
       <span class="container-metric"><small>CPU</small><b>${formatPercent(stats?.cpuPercent, '-')}</b></span>
       <span class="container-metric"><small>MEM</small><b>${formatPercent(stats?.memoryPercent, '-')}</b></span>
-      ${ownAlerts.length ? `<span class="row-alert">경고 ${ownAlerts.length}</span>` : ''}
+      ${ownAlerts.length ? `<span class="row-alert">경고 ${ownAlerts.length}</span><span class="warning-lamp row-warning-lamp hidden" aria-label="선택한 경고 대상">!</span>` : ''}
     </button>`
   }).join('')
   lists.forEach((list) => {
@@ -143,7 +181,9 @@ function selectContainer(containerId) {
 
 async function refresh() {
   const response = await fetch('/api/overview', { cache: 'no-store' })
+  if (!response.ok) throw new Error(`요약 정보를 불러오지 못했습니다 (${response.status})`)
   state.overview = await response.json()
+  state.uiError = null
   renderOverview()
 }
 
@@ -152,10 +192,24 @@ async function init() {
   window.addEventListener('hashchange', showView)
   state.catalog = await fetch('/api/error-codes').then((response) => response.json())
   $('codes-list').innerHTML = state.catalog.codes.map((item) => `<article class="code-item"><code>${escapeHtml(item.code)}</code><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.trigger)}<br />대응: ${escapeHtml(item.response)}</p></article>`).join('')
+  $('alert-toggle').addEventListener('click', () => { state.alertPopoverOpen = !state.alertPopoverOpen; renderAlerts(state.overview?.alerts || []) })
+  $('close-alerts').addEventListener('click', () => { state.alertPopoverOpen = false; renderAlerts(state.overview?.alerts || []); $('alert-toggle').focus() })
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.alertPopoverOpen) { state.alertPopoverOpen = false; renderAlerts(state.overview?.alerts || []); $('alert-toggle').focus() }
+  })
+  $('open-error-codes').addEventListener('click', () => $('error-codes').showModal())
+  $('close-error-codes').addEventListener('click', () => $('error-codes').close())
+  $('error-codes').addEventListener('click', (event) => { if (event.target === $('error-codes')) $('error-codes').close() })
   $('clear-logs').addEventListener('click', () => { $('log-output').innerHTML = '<div class="log-empty"><span>⌁</span><p>로그를 선택하세요.</p></div>' })
   $('refresh-now').addEventListener('click', () => { void refresh().catch(() => {}) })
   await refresh()
   setInterval(() => { void refresh().catch(() => {}) }, 5_000)
 }
 
-void init().catch((error) => { $('connection-label').textContent = '대시보드 초기화 오류'; $('error-banner').classList.remove('hidden'); $('error-banner').textContent = error.message })
+void init().catch((error) => {
+  state.uiError = error instanceof Error ? error.message : String(error)
+  $('connection-label').textContent = '대시보드 연결 오류'
+  $('alert-count').textContent = '확인 필요'
+  $('alert-toggle').setAttribute('aria-label', '대시보드 오류 상세 보기')
+  renderAlerts([])
+})
