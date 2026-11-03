@@ -30,6 +30,18 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char])
 }
 
+function positionSummaryPopover(popover, trigger) {
+  if (!trigger) return
+  const gridRect = $('summary-grid').getBoundingClientRect()
+  const triggerRect = trigger.getBoundingClientRect()
+  const popoverWidth = popover.getBoundingClientRect().width
+  const maxLeft = Math.max(0, gridRect.width - popoverWidth)
+  const left = Math.min(Math.max(0, triggerRect.left - gridRect.left), maxLeft)
+  const top = Math.max(0, triggerRect.bottom - gridRect.top + 8)
+  popover.style.left = `${left}px`
+  popover.style.top = `${top}px`
+}
+
 function renderOverview() {
   const overview = state.overview
   if (!overview) return
@@ -89,6 +101,8 @@ function renderSummaryDetail(containers, metrics, dockerAvailable) {
   detail.classList.toggle('hidden', !state.summaryOpen)
   if (!state.summaryOpen) return
   detail.dataset.summary = state.summaryOpen
+  const trigger = [...document.querySelectorAll('[data-summary]')].find((button) => button.dataset.summary === state.summaryOpen)
+  positionSummaryPopover(detail, trigger)
 
   if (state.summaryOpen === 'running') {
     const running = containers.filter((container) => container.running)
@@ -130,6 +144,7 @@ function renderAlerts(alerts) {
   const toggle = $('alert-toggle')
   popover.classList.toggle('hidden', !state.alertPopoverOpen)
   toggle.setAttribute('aria-expanded', String(state.alertPopoverOpen))
+  if (state.alertPopoverOpen) positionSummaryPopover(popover, toggle)
   if (state.uiError) {
     list.innerHTML = `<div class="empty">대시보드 데이터를 불러오지 못했습니다.<br />${escapeHtml(state.uiError)}</div>`
     return
@@ -188,13 +203,13 @@ function renderContainers(containers, alerts, dockerAvailable) {
   const selector = $('activity-container-select')
   if (!dockerAvailable) {
     list.innerHTML = '<div class="empty">Docker 연결을 확인해 주세요.</div>'
-    selector.innerHTML = '<option value="">Docker 연결을 확인해 주세요</option>'
+    selector.innerHTML = ''
     selector.disabled = true
     return
   }
   if (!containers.length) {
     list.innerHTML = '<div class="empty">표시할 컨테이너가 없습니다.</div>'
-    selector.innerHTML = '<option value="">표시할 컨테이너가 없습니다</option>'
+    selector.innerHTML = ''
     selector.disabled = true
     return
   }
@@ -316,7 +331,7 @@ void init().catch((error) => {
   state.uiError = error instanceof Error ? error.message : String(error)
   $('sidebar-engine').textContent = 'Dashboard unavailable'
   $('sidebar-engine-dot').className = 'engine-dot is-offline'
-  $('alert-count').textContent = '확인 필요'
+  $('alert-count').textContent = '-'
   $('alert-toggle').setAttribute('aria-label', '대시보드 오류 상세 보기')
   renderAlerts([])
 })
