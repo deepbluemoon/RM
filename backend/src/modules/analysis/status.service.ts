@@ -4,6 +4,7 @@ import { getPool, select, selectOne } from '../../db/pool.js';
 import { openGate, type OpenGate } from '../gates/GateError.js';
 import { NOTICES, type GateCode } from '../gates/messages.js';
 import { getServerStatus, isCold, queueDepth } from '../modelApi/status.js';
+import { modelApi } from '../modelApi/client.js';
 import { judgeGate } from '../../jobs/runner.js';
 import { getDocuments, getRequest, latestRun, type RequestRow, type RunRow } from './analysis.repo.js';
 
@@ -125,6 +126,15 @@ export async function analysisStatus(requestId: number) {
     : null;
   const gates = await openGatesFor(requestId, run?.run_id ?? null);
   const prog = progress ? { total: Number(progress.clause_total), scored: Number(progress.scored_cnt) } : null;
+  let detectProgress: { done: number; total: number; status: 'queued' | 'running' | 'done' | 'failed' } | null = null;
+  if (run?.stage === 'detecting' && run.job_ref) {
+    try {
+      const job = await modelApi.getJob(run.job_ref);
+      detectProgress = { done: job.done, total: job.total, status: job.status };
+    } catch {
+      // 작업 진행률을 읽지 못해도 분석 상태 API는 DB 진행률로 응답한다.
+    }
+  }
   return {
     requestId,
     perspective: req.perspective,
@@ -144,6 +154,7 @@ export async function analysisStatus(requestId: number) {
     })),
     run: run
       ? { runId: run.run_id, runKind: run.run_kind, stage: run.stage, clauseTotal: prog?.total ?? 0, scoredCount: prog?.scored ?? 0,
+          ...(detectProgress ? { detectProgress } : {}),
           ...(['explaining', 'completed', 'saved'].includes(run.stage) ? await judgeProgress(run.run_id) : {}) }
       : null,
     openGates: gates,

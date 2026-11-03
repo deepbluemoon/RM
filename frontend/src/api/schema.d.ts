@@ -3279,6 +3279,12 @@ export interface components {
                 stage?: "detecting" | "searching" | "explaining" | "completed" | "saved" | "aborted";
                 clauseTotal?: number;
                 scoredCount?: number;
+                detectProgress?: {
+                    done?: number;
+                    total?: number;
+                    /** @enum {string} */
+                    status?: "queued" | "running" | "done" | "failed";
+                };
                 /** @description 판정(M3) 대상 위험 후보 수. 판정 단계(explaining) 이후에만 싣는다(2026-09-30 진행 중 결과 표시) */
                 riskTotal?: number;
                 /** @description 위험 후보 중 판정을 마친 수(분석 불가 포함) */
