@@ -1,6 +1,6 @@
 # HTTP 상태코드 운영 카탈로그
 
-이 문서는 `OPS-*` 운영 이벤트 코드와 분리된 HTTP 응답 상태코드 운영 기준이다. 대시보드는 실행 중인 프로젝트 컨테이너의 Docker access log tail을 읽고, 응답 상태코드만 비식별 파싱해 컨테이너별·전체별로 집계한다.
+이 문서는 `OPS-*` 운영 이벤트 코드와 분리된 HTTP 응답 상태코드 운영 기준이다. 대시보드는 실행 중인 프로젝트 컨테이너의 Docker access log tail을 읽고, 컨테이너·Compose 서비스·전체별 상태코드와 JSON 로그의 명시적 route template별 집계를 제공한다.
 
 표준 코드명은 [IANA HTTP Status Code Registry](https://www.iana.org/assignments/http-status-codes)를 기준으로 관리한다. 등록되지 않은 숫자나 지원하지 않는 로그 포맷은 상태코드로 추정하지 않는다.
 
@@ -60,6 +60,8 @@ HTTP/1.1 429
 정규화 메타데이터는 파서 결과이며 현재 수집기에서 요청별로 저장하지 않는다. 경로에 포함된 서비스별 민감 식별자는 자동 판별할 수 없으므로, 다음 서비스·라우트 집계에서는 명시적인 route template만 그룹 키로 사용하고 원시 URL을 표시하지 않는다.
 
 ## 운영 경고 기준
+
+서비스는 Compose service label을 우선 사용하고 없으면 컨테이너 이름으로 구분한다. 라우트 집계는 JSON 로그의 `route`, `routePattern`, `pathTemplate` 필드만 사용한다. 원시 요청 URL과 query string은 집계 결과·화면에 포함하지 않으며, route template이 없는 로그는 서비스·컨테이너 집계에는 포함하되 라우트 목록에서는 제외한다.
 
 단일 4xx는 정상적인 사용자 입력·권한 거부일 수 있으므로 자동 대응하지 않는다. 다음 조건을 모두 만족할 때만 상태코드 경고를 활성화한다.
 

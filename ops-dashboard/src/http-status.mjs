@@ -42,6 +42,12 @@ function safePath(value) {
   return text
 }
 
+function safeRoute(value) {
+  const route = safePath(value)
+  if (!route || !/^\/[A-Za-z0-9_{}:./-]*$/.test(route)) return ''
+  return route
+}
+
 function jsonAdapter(text) {
   let data
   try { data = JSON.parse(text) } catch { return null }
@@ -51,11 +57,11 @@ function jsonAdapter(text) {
   const status = data.status ?? data.statusCode ?? data.httpStatus ?? data.responseStatus ?? response.status
   const method = data.method ?? request.method
   const route = data.route ?? data.routePattern ?? data.pathTemplate
-  const path = route ?? data.path ?? data.url ?? request.path ?? request.url
+  const path = data.path ?? data.url ?? request.path ?? request.url
   const requestId = data.requestId ?? data.request_id ?? request.id
   const traceId = data.traceId ?? data.trace_id ?? data['trace.id'] ?? data.trace?.id
   const deploymentVersion = data.deploymentVersion ?? data.release ?? data.version
-  return { status, method, path, requestId, traceId, deploymentVersion }
+  return { status, method, path, route, requestId, traceId, deploymentVersion }
 }
 
 function combinedAccessLogAdapter(text) {
@@ -94,6 +100,7 @@ export function parseHttpLogLine(line) {
     status,
     method: /^[A-Z]{3,12}$/.test(String(parsed.method ?? '').toUpperCase()) ? String(parsed.method).toUpperCase() : '',
     path: safePath(routeValue),
+    route: safeRoute(parsed.route),
     requestId: safeField(parsed.requestId),
     traceId: safeField(parsed.traceId),
     deploymentVersion: safeField(parsed.deploymentVersion),
@@ -110,6 +117,14 @@ function round(value) {
 
 function emptyCounts() {
   return Object.fromEntries(HTTP_STATUS_CODES.map((item) => [item.code, 0]))
+}
+
+function summaryFromEvents(events) {
+  const counts = emptyCounts()
+  for (const event of events) counts[event.status.code] += 1
+  const classCounts = { '1xx': 0, '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0 }
+  for (const item of HTTP_STATUS_CODES) classCounts[item.class] += counts[item.code]
+  return { total: events.length, counts, classCounts }
 }
 
 export function summarizeHttpStatusLines(lines = []) {
@@ -142,21 +157,32 @@ export function createHttpStatusAggregator({
   let latest = { observedAt: now(), containers: [], totals: summarizeHttpStatusLines([]), alerts: [], collectionErrors: [] }
 
   function observe(containers, logsByContainer = {}, observedAt = now(), collectionErrors = []) {
-    const containerSummaries = containers.filter((container) => container.running).map((container) => ({
-      id: container.id,
-      name: container.name,
-      image: container.image,
-      ...summarizeHttpStatusLines(logsByContainer[container.id] || []),
-    }))
-    const totals = summarizeHttpStatusLines([])
-    for (const summary of containerSummaries) {
-      totals.total += summary.total
-      for (const item of HTTP_STATUS_CODES) {
-        totals.counts[item.code] += summary.counts[item.code]
-        totals.classCounts[item.class] += summary.classCounts[item.class]
+    const activeContainers = containers.filter((container) => container.running)
+    const eventsByContainer = new Map(activeContainers.map((container) => [
+      container.id,
+      (logsByContainer[container.id] || []).map(parseHttpLogLine).filter(Boolean),
+    ]))
+    const containerSummaries = activeContainers.map((container) => {
+      const events = eventsByContainer.get(container.id)
+      return { id: container.id, name: container.name, image: container.image, ...summaryFromEvents(events) }
+    })
+    const totals = summaryFromEvents([...eventsByContainer.values()].flat())
+    const serviceMap = new Map()
+    const routeMap = new Map()
+    for (const container of activeContainers) {
+      const service = container.composeService || container.name || container.id
+      const serviceEvents = eventsByContainer.get(container.id)
+      if (!serviceMap.has(service)) serviceMap.set(service, [])
+      serviceMap.get(service).push(...serviceEvents)
+      for (const event of serviceEvents) {
+        if (!event.route) continue
+        const key = `${service}\u0000${event.method}\u0000${event.route}`
+        if (!routeMap.has(key)) routeMap.set(key, { service, method: event.method, route: event.route, events: [] })
+        routeMap.get(key).events.push(event)
       }
     }
-
+    const services = [...serviceMap].map(([service, events]) => ({ service, ...summaryFromEvents(events) }))
+    const routes = [...routeMap.values()].map(({ events, ...group }) => ({ ...group, ...summaryFromEvents(events) }))
     const alerts = []
     const activeKeys = new Set()
     for (const container of containerSummaries) {
@@ -196,7 +222,7 @@ export function createHttpStatusAggregator({
       }
     }
     for (const key of startedAt.keys()) if (!activeKeys.has(key)) startedAt.delete(key)
-    latest = { observedAt, containers: containerSummaries, totals, alerts, collectionErrors }
+    latest = { observedAt, containers: containerSummaries, services, routes, totals, alerts, collectionErrors }
     return latest
   }
 

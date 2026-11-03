@@ -121,3 +121,27 @@ test('HTTP 5xx 비율이 지속되면 운영 경고를 만들고 단일 404는 �
   const single404 = monitor.observe(containers, { api: ['HTTP/1.1 404'] }, time + 30_000)
   assert.equal(single404.alerts.length, 0)
 })
+
+test('HTTP 응답을 Compose 서비스와 명시된 route template별로 집계한다', () => {
+  const aggregator = createHttpStatusAggregator()
+  const containers = [
+    { id: 'api-1', name: 'rm-api-1', composeService: 'backend', running: true },
+    { id: 'api-2', name: 'rm-api-2', composeService: 'backend', running: true },
+    { id: 'web', name: 'rm-web', composeService: 'frontend', running: true },
+  ]
+  const state = aggregator.observe(containers, {
+    'api-1': [
+      JSON.stringify({ status: 200, method: 'GET', route: '/api/contracts/{contractId}' }),
+      '"GET /private-user-value?secret=hidden HTTP/1.1" 404 0',
+    ],
+    'api-2': [JSON.stringify({ status: 500, method: 'GET', route: '/api/contracts/{contractId}' })],
+    web: [JSON.stringify({ status: 204, method: 'GET', route: '/health' })],
+  })
+  assert.equal(state.totals.total, 4)
+  assert.deepEqual(state.services.map(({ service, total }) => [service, total]), [['backend', 3], ['frontend', 1]])
+  assert.deepEqual(state.routes.map(({ service, method, route, total }) => [service, method, route, total]), [
+    ['backend', 'GET', '/api/contracts/{contractId}', 2],
+    ['frontend', 'GET', '/health', 1],
+  ])
+  assert.equal(JSON.stringify(state.routes).includes('private-user-value'), false)
+})

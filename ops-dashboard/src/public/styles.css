@@ -140,6 +140,14 @@ button.summary-card.accent-pink:hover, button.summary-card.accent-pink:focus-vis
 .status-chart-row.status-2xx .status-chart-track span { background: var(--green); }
 .status-chart-row.status-4xx .status-chart-track span { background: var(--amber); }
 .status-chart-row.status-5xx .status-chart-track span { background: var(--red); }
+.status-breakdowns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.status-breakdowns h3 { margin: 0 0 6px; color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; }
+.status-breakdowns ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.status-breakdowns li { display: flex; justify-content: space-between; gap: 8px; min-width: 0; color: var(--ink); font-size: 10px; }
+.status-breakdowns li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-breakdowns li b { color: var(--muted); font: 10px var(--mono); }
+.status-breakdowns li small { flex: 0 0 auto; color: var(--muted); font-size: 9px; }
+.status-breakdowns .status-breakdown-empty { color: var(--muted); }
 .alerts-popover { position: absolute; z-index: 10; top: 0; left: 0; display: flex; width: min(440px, 72%); max-height: min(55vh, 440px); flex-direction: column; padding: 14px; border: 1px solid rgba(239,68,68,.55); border-radius: 6px; background: var(--surface); box-shadow: 0 12px 32px rgba(0,0,0,.45); }
 .alerts-popover.hidden { display: none; }
 .alerts-popover .panel-head { margin-bottom: 8px; }
