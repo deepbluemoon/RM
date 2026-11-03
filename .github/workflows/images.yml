@@ -1,5 +1,6 @@
-# 이미지 3개(fe·be·ms) amd64·arm64 빌드·확인(#84) — 규칙: docs/docker-image-policy.md
-# - PR·main: 각 플랫폼의 네이티브 러너에서 빌드하고 compose 로 네 컨테이너를 띄워 확인한다. push 하지 않는다.
+# 이미지 4개(fe·be·ms·ol) amd64·arm64 빌드·확인(#84) — 규칙: docs/docker-image-policy.md
+# - PR·main: 각 플랫폼의 네이티브 러너에서 빌드하고 compose 로 컨테이너를 띄워 확인한다. push 하지 않는다.
+#   ol(임베딩 전용 ollama)은 빌드 중 bge-m3 를 받아 구우므로(baked) 각 아키텍처 네이티브 러너에서 돈다(QEMU 아님).
 # - Docker Hub push: 수동 실행(workflow_dispatch)에서 push 를 켰을 때만. 태그 <약어>-sha-<커밋 12자리>,
 #   릴리스 버전을 넣으면 <약어>-<버전>·<약어>-latest 도(main 에서만). 이미 있는 sha·릴리스 태그는 덮어쓰지 않는다.
 # - 필요한 Secrets(관리자 등록): DOCKERHUB_USERNAME, DOCKERHUB_TOKEN(moonsangjin/tamji 쓰기 권한 접근 토큰)
@@ -11,6 +12,7 @@ on:
       - frontend/**
       - backend/**
       - model-server/**
+      - ollama/**
       - shared/**
       - specs/002-contract-risk-detection/contracts/**
       - compose.yaml
@@ -21,6 +23,7 @@ on:
       - frontend/**
       - backend/**
       - model-server/**
+      - ollama/**
       - shared/**
       - specs/002-contract-risk-detection/contracts/**
       - compose.yaml
@@ -121,6 +124,16 @@ jobs:
           load: true
           cache-from: type=gha,scope=ms-${{ matrix.arch }}
           cache-to: type=gha,scope=ms-${{ matrix.arch }},mode=max
+      - name: build ol
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ollama/Dockerfile
+          platforms: ${{ matrix.platform }}
+          tags: tamji-ci:ol-ci
+          load: true
+          cache-from: type=gha,scope=ol-${{ matrix.arch }}
+          cache-to: type=gha,scope=ol-${{ matrix.arch }},mode=max
 
       # compose.yaml 로 네 컨테이너를 띄운다. 비밀값은 실행마다 새로 만든 시험값, Vertex 인증은 빈 파일(M3·M4 는 error 가 정상)
       - name: compose 기동
@@ -177,6 +190,25 @@ jobs:
           assert s == 200 and r["results"][0]["clause_id"] == "c1", (s, r)
           print("M1 추론", r["model_version"], r["results"][0]["score"])
           EOF
+      - name: 확인 — 임베딩 ollama·초기 벡터 적재(하이브리드 RAG)
+        run: |
+          # bge-m3 를 구운 ollama 가 healthy
+          for _ in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' rm-ollama-1 2>/dev/null)" = healthy ] && break
+            sleep 5
+          done
+          [ "$(docker inspect -f '{{.State.Health.Status}}' rm-ollama-1)" = healthy ]
+          # 1회성 backend-embed 가 끝날 때까지 기다렸다가 종료코드 0 확인(M3·M4 Vertex 없이도 임베딩은 동작)
+          for _ in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Status}}' rm-backend-embed-1 2>/dev/null)" = exited ] && break
+            sleep 5
+          done
+          docker compose ps -a
+          docker logs rm-backend-embed-1
+          [ "$(docker inspect -f '{{.State.ExitCode}}' rm-backend-embed-1)" = 0 ]
+          # 초기 근거 벡터가 빠짐 없이 적재됐는지 — embed-evidence 출력의 "남은 것 0"
+          docker logs rm-backend-embed-1 2>&1 | grep -q '남은 것 0'
+
       - name: 실패 시 로그
         if: failure()
         run: docker compose logs --no-color --tail 200
@@ -220,6 +252,16 @@ jobs:
           platforms: ${{ matrix.platform }}
           cache-from: type=gha,scope=ms-${{ matrix.arch }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: push ol
+        id: push-ol
+        if: env.PUSH == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ollama/Dockerfile
+          platforms: ${{ matrix.platform }}
+          cache-from: type=gha,scope=ol-${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
       - name: digest 기록
         if: env.PUSH == 'true'
         run: |
@@ -227,6 +269,7 @@ jobs:
           echo "${{ steps.push-fe.outputs.digest }}" > digests/fe-${{ matrix.arch }}
           echo "${{ steps.push-be.outputs.digest }}" > digests/be-${{ matrix.arch }}
           echo "${{ steps.push-ms.outputs.digest }}" > digests/ms-${{ matrix.arch }}
+          echo "${{ steps.push-ol.outputs.digest }}" > digests/ol-${{ matrix.arch }}
       - uses: actions/upload-artifact@v4
         if: env.PUSH == 'true'
         with:
@@ -262,7 +305,7 @@ jobs:
             echo "| 태그 | digest(멀티 아키텍처) |"
             echo "|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
-          for s in fe be ms; do
+          for s in fe be ms ol; do
             tags=()
             if exists "$s-sha-$sha"; then echo "$s-sha-$sha 는 이미 있어 그대로 둔다"; else tags+=(-t "$IMAGE:$s-sha-$sha"); fi
             if [ -n "$RELEASE" ]; then

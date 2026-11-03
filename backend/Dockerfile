@@ -20,6 +20,7 @@ COPY backend/src ./src
 # 운영 스크립트만 컴파일한다(픽스처 생성·평가 스크립트는 tests/ 를 참조해 이미지 대상이 아니다)
 COPY backend/scripts/migrate.ts \
      backend/scripts/seed-knowledge.ts \
+     backend/scripts/embed-evidence.ts \
      backend/scripts/admin-create-account.ts \
      backend/scripts/admin-grant-role.ts \
      backend/scripts/ops-gates.ts \
@@ -43,7 +44,7 @@ WORKDIR /app/backend
 COPY backend/package.json ./
 COPY --from=deps /src/backend/node_modules ./node_modules
 COPY --from=build /src/backend/dist/src ./src
-# 운영 스크립트: 마이그레이션·초기 지식 적재·계정·운영 점검 (node scripts/<이름>.js)
+# 운영 스크립트: 마이그레이션·초기 지식 적재·근거 임베딩 적재·계정·운영 점검 (node scripts/<이름>.js)
 COPY --from=build /src/backend/dist/scripts ./scripts
 COPY backend/db/migrations ./db/migrations
 # 최초 지식 기준일 적재용(UC1 사전조건 — 이것 없이 분석을 시작할 수 없다)
