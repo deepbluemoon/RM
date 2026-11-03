@@ -47,7 +47,17 @@ responseStatus=503
 HTTP/1.1 429
 ```
 
-현재 파서는 `HTTP/x.y status`, `status/statusCode/responseStatus=...`, 일반적인 combined access log의 상태 위치를 인식한다. 애플리케이션별 사용자 정의 로그 포맷은 추후 파서 어댑터로 확장한다.
+파서는 어댑터 순서대로 JSON, combined access log, 상태코드 단독 형식을 검사한다. 정규화 이벤트는 상태코드와 선택적 method/path/request ID/trace ID/deployment version을 제공한다. `path`는 query string과 fragment를 제거하고, 식별 필드는 허용 문자와 128자 길이 제한을 적용한다. 잘못된 JSON, 미등록 상태코드, 지원하지 않는 줄은 무시한다. 애플리케이션별 포맷은 `HTTP_LOG_ADAPTERS`에 어댑터를 추가하고 형식별 회귀 사례로 지원한다.
+
+현재 제공 어댑터:
+
+| 형식 | 인식 예 | 정규화 필드 |
+|---|---|---|
+| JSON | `{"status": 404, "request": {"method": "GET", "url": "/health?key=..."}}` | 상태코드, method, query를 제거한 path, 알려진 request/trace/deployment ID 키 |
+| Combined access log | `"GET /health HTTP/1.1" 200 41` | 상태코드, method, query를 제거한 path |
+| 상태코드 단독 | `responseStatus=503`, `HTTP/1.1 429` | 상태코드 |
+
+정규화 메타데이터는 파서 결과이며 현재 수집기에서 요청별로 저장하지 않는다. 경로에 포함된 서비스별 민감 식별자는 자동 판별할 수 없으므로, 다음 서비스·라우트 집계에서는 명시적인 route template만 그룹 키로 사용하고 원시 URL을 표시하지 않는다.
 
 ## 운영 경고 기준
 

@@ -31,19 +31,77 @@ export function statusClassFor(code) {
   return parsed ? `${Math.floor(parsed / 100)}xx` : null
 }
 
-export function parseHttpStatusLine(line) {
-  const text = String(line || '')
+function safeField(value) {
+  const text = String(value ?? '').trim()
+  return /^[A-Za-z0-9._:-]{1,128}$/.test(text) ? text : ''
+}
+
+function safePath(value) {
+  const text = String(value ?? '').split(/[?#]/, 1)[0]
+  if (!text.startsWith('/') || text.length > 512 || /[\u0000-\u001f\u007f]/.test(text)) return ''
+  return text
+}
+
+function jsonAdapter(text) {
+  let data
+  try { data = JSON.parse(text) } catch { return null }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+  const request = data.request && typeof data.request === 'object' ? data.request : {}
+  const response = data.response && typeof data.response === 'object' ? data.response : {}
+  const status = data.status ?? data.statusCode ?? data.httpStatus ?? data.responseStatus ?? response.status
+  const method = data.method ?? request.method
+  const route = data.route ?? data.routePattern ?? data.pathTemplate
+  const path = route ?? data.path ?? data.url ?? request.path ?? request.url
+  const requestId = data.requestId ?? data.request_id ?? request.id
+  const traceId = data.traceId ?? data.trace_id ?? data['trace.id'] ?? data.trace?.id
+  const deploymentVersion = data.deploymentVersion ?? data.release ?? data.version
+  return { status, method, path, requestId, traceId, deploymentVersion }
+}
+
+function combinedAccessLogAdapter(text) {
+  const match = text.match(/"([A-Z]{3,12})\s+(\S+)\s+HTTP\/\d(?:\.\d)?"\s+([1-5]\d{2})\s+(?:\d+|-)(?:\s|$)/)
+  return match ? { method: match[1], path: match[2], status: match[3] } : null
+}
+
+function statusOnlyAdapter(text) {
   const patterns = [
     /["']?(?:status|statusCode|httpStatus|responseStatus)["']?\s*[:=]\s*["']?([1-5]\d{2})\b/i,
     /\bHTTP\/\d(?:\.\d)?\s+([1-5]\d{2})\b/i,
-    /"\s+([1-5]\d{2})\s+(?:\d+|-)(?:\s|$)/,
   ]
   for (const pattern of patterns) {
     const match = text.match(pattern)
-    const code = toStatusCode(match?.[1])
-    if (code && HTTP_STATUS_CODE_MAP.has(code)) return HTTP_STATUS_CODE_MAP.get(code)
+    if (match) return { status: match[1] }
   }
   return null
+}
+
+export const HTTP_LOG_ADAPTERS = [jsonAdapter, combinedAccessLogAdapter, statusOnlyAdapter]
+
+export function parseHttpLogLine(line) {
+  const text = String(line ?? '')
+  if (!text) return null
+  let parsed = null
+  for (const adapter of HTTP_LOG_ADAPTERS) {
+    parsed = adapter(text)
+    if (parsed) break
+  }
+  if (!parsed) return null
+  const code = toStatusCode(parsed.status)
+  const status = code && HTTP_STATUS_CODE_MAP.get(code)
+  if (!status) return null
+  const routeValue = parsed.path
+  return {
+    status,
+    method: /^[A-Z]{3,12}$/.test(String(parsed.method ?? '').toUpperCase()) ? String(parsed.method).toUpperCase() : '',
+    path: safePath(routeValue),
+    requestId: safeField(parsed.requestId),
+    traceId: safeField(parsed.traceId),
+    deploymentVersion: safeField(parsed.deploymentVersion),
+  }
+}
+
+export function parseHttpStatusLine(line) {
+  return parseHttpLogLine(line)?.status || null
 }
 
 function round(value) {
