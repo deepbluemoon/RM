@@ -4,80 +4,67 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="RM 컨테이너 운영 모니터링 대시보드" />
-    <title>RM Ops · 운영 대시보드</title>
+    <title>RM Ops · Monitor</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar" aria-label="운영 대시보드 메뉴">
-        <button id="brand-refresh" class="brand-lockup" type="button" aria-label="페이지 새로고침" title="페이지 새로고침"><span class="brand-mark">RM</span><span><b>Ops Control</b></span></button>
-        <p class="sidebar-section-label">WORKSPACE</p>
+        <button type="button" id="brand-refresh" class="brand-lockup" title="페이지 새로고침" aria-label="페이지 새로고침"><span class="brand-mark">R</span><span><b>RM Ops</b><small>MONITORING</small></span></button>
+        <div class="sidebar-section-label">WORKSPACE</div>
         <nav class="side-nav" aria-label="화면 선택">
-          <a class="nav-item active" href="#overview" data-view-link="overview" aria-current="page"><span class="nav-icon" aria-hidden="true">◈</span> 현황</a>
-          <a class="nav-item" href="#activity" data-view-link="activity"><span class="nav-icon" aria-hidden="true">⌁</span> 로그 · 대응</a>
+          <a class="nav-item" href="#overview" data-view-link="overview"><span class="nav-icon" aria-hidden="true">◫</span><span>운영 현황</span></a>
+          <a class="nav-item" href="#containers" data-view-link="containers"><span class="nav-icon" aria-hidden="true">▦</span><span>컨테이너</span></a>
+          <a class="nav-item" href="#logs" data-view-link="logs"><span class="nav-icon" aria-hidden="true">▤</span><span>실시간 로그</span></a>
+          <a class="nav-item" href="#status-codes" data-view-link="status-codes"><span class="nav-icon" aria-hidden="true">⌁</span><span>HTTP 응답</span></a>
+          <a class="nav-item" href="#alerts" data-view-link="alerts"><span class="nav-icon" aria-hidden="true">◬</span><span>활성 경고</span><span class="nav-count" id="nav-alert-count">-</span></a>
+          <a class="nav-item" href="#playbooks" data-view-link="playbooks"><span class="nav-icon" aria-hidden="true">⚙</span><span>오류 대응</span></a>
+          <a class="nav-item" href="#error-codes" data-view-link="error-codes"><span class="nav-icon" aria-hidden="true">≡</span><span>오류 코드</span></a>
         </nav>
-        <div class="sidebar-bottom"><div id="engine-card" class="engine-card"><span id="sidebar-engine-dot" class="engine-dot"></span><div><small>DOCKER ENGINE</small><strong id="sidebar-engine">연결 확인 중</strong></div><span id="engine-warning-lamp" class="warning-lamp hidden" aria-label="선택한 경고 대상">!</span></div></div>
+        <div class="sidebar-bottom">
+          <div id="engine-card" class="engine-card"><span id="sidebar-engine-dot" class="engine-dot"></span><div><small>DOCKER ENGINE</small><strong id="sidebar-engine">확인 중</strong></div><span id="engine-warning" class="target-indicator hidden" aria-label="선택한 경고 대상">!</span></div>
+          <p class="sidebar-note">5초마다 지표 갱신</p>
+        </div>
       </aside>
+
       <div class="app-main">
         <header class="topbar">
-          <div><p class="top-label">RM OPERATIONS</p><h1 id="page-title">운영 현황</h1></div>
+          <div class="breadcrumb"><span>RM OPS</span><span class="breadcrumb-divider">/</span><strong id="page-title">운영 현황</strong></div>
           <div class="top-actions">
-            <span class="scope-pill"><span class="scope-dot"></span><span id="scope-label">PROJECT SCOPE</span></span>
-            <time id="last-updated">--:--:--</time>
-            <button id="refresh-now" class="refresh-button" type="button" title="최신 지표 갱신">↻ <span>지표 갱신</span></button>
+            <span class="scope-pill" id="scope-label">CONTAINER MONITOR</span>
+            <span class="connection-state"><span class="live-dot"></span><span id="connection-label">Docker 연결 확인 중</span></span>
+            <span class="updated-label">갱신 <time id="last-updated">--:--:--</time></span>
+            <button id="refresh-now" class="refresh-button" type="button" title="지표 갱신"><span aria-hidden="true">↻</span> 갱신</button>
           </div>
         </header>
-        <main class="content-shell">
-          <section id="overview" class="dashboard-view overview-view" aria-label="운영 현황">
-            <div id="summary-grid" class="summary-grid" aria-label="전체 요약">
-              <button class="summary-card accent-teal" type="button" data-summary="running" aria-expanded="false" aria-controls="summary-detail"><span class="summary-top"><span class="card-label">실행 중</span><span class="summary-icon" aria-hidden="true">▦</span></span><strong id="running-count">-</strong></button>
-              <button id="alert-toggle" class="summary-card accent-red" type="button" aria-expanded="false" aria-controls="alerts-popover"><span class="summary-top"><span class="card-label">활성 경고</span><span class="summary-icon" aria-hidden="true">!</span></span><strong id="alert-count">-</strong></button>
-              <button class="summary-card accent-blue" type="button" data-summary="cpu" aria-expanded="false" aria-controls="summary-detail"><span class="summary-top"><span class="card-label">CPU 사용량</span><span class="summary-icon" aria-hidden="true">⌁</span></span><strong id="cpu-total">-</strong></button>
-              <button class="summary-card accent-pink" type="button" data-summary="memory" aria-expanded="false" aria-controls="summary-detail"><span class="summary-top"><span class="card-label">메모리 사용률</span><span class="summary-icon" aria-hidden="true">◇</span></span><strong id="memory-total">-</strong></button>
-              <section id="alerts-popover" class="alerts-popover hidden" role="region" aria-label="활성 경고 상세" aria-live="polite">
-                <div class="panel-head"><div><p class="eyebrow">ACTIVE ALERTS</p><h2>활성 경고</h2></div><button id="close-alerts" class="text-button" type="button">닫기</button></div>
-                <div id="alerts-list" class="alerts-list scroll-region"></div>
-              </section>
-              <section id="summary-detail" class="summary-detail hidden" role="region" aria-label="요약 상세" aria-live="polite">
-                <div class="summary-detail-head"><h2 id="summary-detail-title"></h2><button id="close-summary-detail" class="text-button" type="button">닫기</button></div>
-                <div id="summary-detail-content"></div>
-              </section>
+
+        <main class="content-shell" id="main-content">
+          <div id="error-banner" class="error-banner hidden" role="status" aria-live="polite"></div>
+
+          <section class="view" id="view-overview" aria-labelledby="overview-title">
+            <div class="view-heading"><div><p class="eyebrow">OVERVIEW</p><h1 id="overview-title">운영 현황</h1><p class="view-description">컨테이너의 상태와 자원 사용량을 확인합니다.</p></div><span id="monitor-status" class="live-label"><span></span><span id="monitor-status-text">연결 확인 중</span></span></div>
+            <div class="summary-grid" aria-label="전체 요약">
+              <a href="#containers" class="summary-card"><span class="summary-label">실행 중인 컨테이너</span><strong id="running-count">-</strong><span class="summary-foot">전체 <b id="total-count">-</b>개 중</span><span class="summary-symbol cyan" aria-hidden="true">▦</span></a>
+              <a href="#alerts" class="summary-card"><span class="summary-label">활성 경고</span><strong id="alert-count">-</strong><span class="summary-foot">현재 감지된 경고</span><span class="summary-symbol red" aria-hidden="true">!</span></a>
+              <div class="summary-card"><span class="summary-label">CPU 사용량</span><strong id="cpu-total">-</strong><span class="summary-foot">실행 중인 컨테이너 합계</span><span class="summary-symbol purple" aria-hidden="true">⌁</span></div>
+              <div class="summary-card"><span class="summary-label">메모리 사용률</span><strong id="memory-total">-</strong><span class="summary-foot">컨테이너 한도 기준</span><span class="summary-symbol green" aria-hidden="true">▥</span></div>
             </div>
-            <div class="overview-grid">
-              <section id="containers" class="panel containers-panel">
-                <div class="panel-head"><div><p class="eyebrow">CONTAINERS</p><h2>컨테이너</h2></div><span class="panel-hint">선택해 로그 보기</span></div>
-                <div id="container-list" class="container-list scroll-region" aria-label="컨테이너 목록"></div>
-              </section>
-              <div class="overview-side">
-                <section id="status-codes" class="panel status-panel">
-                  <div class="panel-head"><div><p class="eyebrow">HTTP RESPONSES</p><h2>HTTP 응답 <span id="http-warning-lamp" class="warning-lamp hidden" aria-label="선택한 경고 대상">!</span></h2></div><a href="/docs/http-status-codes.md" class="text-button" target="_blank" rel="noreferrer">상세 ↗</a></div>
-                  <div id="status-summary" class="status-chart" aria-live="polite"></div>
-                  <p class="panel-caption">최근 수집된 접근 로그 기준</p>
-                </section>
-              </div>
+            <div class="monitor-grid">
+              <section class="panel gauge-panel"><div class="panel-head"><div><p class="eyebrow">RESOURCE</p><h2>CPU 사용량</h2></div><span class="panel-tag">합계</span></div><div class="gauge-wrap"><svg class="gauge" viewBox="0 0 200 115" aria-hidden="true"><path class="gauge-track" d="M 20 100 A 80 80 0 0 1 180 100" pathLength="100"/><path id="cpu-gauge" class="gauge-value cpu-stroke" d="M 20 100 A 80 80 0 0 1 180 100" pathLength="100"/></svg><strong id="cpu-gauge-value">-</strong></div><p class="gauge-note">컨테이너 CPU 합계 · 100% 초과 가능</p><div class="panel-meta"><span>0%</span><span>100% 기준</span></div></section>
+              <section class="panel history-panel"><div class="panel-head"><div><p class="eyebrow">RESOURCE HISTORY</p><h2>자원 사용 추이</h2></div><span class="panel-tag">최근 5분</span></div><div id="resource-history" class="history-chart" aria-live="polite"><div class="chart-empty">수집된 지표가 없습니다.</div></div><div class="legend"><span><i class="legend-cpu"></i>CPU 합계</span><span><i class="legend-memory"></i>메모리</span><small>페이지를 연 이후 수집한 값</small></div></section>
+              <section class="panel gauge-panel"><div class="panel-head"><div><p class="eyebrow">RESOURCE</p><h2>메모리 사용률</h2></div><span class="panel-tag">한도 기준</span></div><div class="gauge-wrap"><svg class="gauge" viewBox="0 0 200 115" aria-hidden="true"><path class="gauge-track" d="M 20 100 A 80 80 0 0 1 180 100" pathLength="100"/><path id="memory-gauge" class="gauge-value memory-stroke" d="M 20 100 A 80 80 0 0 1 180 100" pathLength="100"/></svg><strong id="memory-gauge-value">-</strong></div><p class="gauge-note">컨테이너 메모리 합산 한도</p><div class="panel-meta"><span>0%</span><span>100%</span></div></section>
+              <section class="panel overview-alerts"><div class="panel-head"><div><p class="eyebrow">ATTENTION</p><h2>활성 경고</h2></div><a class="text-button" href="#alerts">전체 보기 ↗</a></div><div id="alert-preview" class="compact-list"></div></section>
+              <section class="panel io-panel"><div class="panel-head"><div><p class="eyebrow">CONTAINER I/O</p><h2>네트워크 · 디스크 I/O</h2></div><a class="text-button" href="#containers">컨테이너 ↗</a></div><div id="io-summary" class="io-list"></div></section>
             </div>
           </section>
-          <section id="activity" class="dashboard-view activity-view hidden" aria-label="로그와 대응">
-            <div class="activity-grid">
-              <section class="panel activity-containers">
-                <div class="panel-head"><div><p class="eyebrow">LOG SOURCE</p><h2>로그 대상</h2></div></div>
-                <select id="activity-container-select" class="container-select" aria-label="로그 대상 컨테이너" disabled></select>
-              </section>
-              <section id="logs" class="panel logs-panel" aria-label="컨테이너 로그">
-                <div class="panel-head"><div><p class="eyebrow">LIVE LOGS</p><h2 id="logs-title">컨테이너 로그</h2></div><button id="clear-logs" class="text-button" type="button">화면 비우기</button></div>
-                <div id="log-output" class="log-output" role="log" aria-label="실시간 로그"><div class="log-empty"><span aria-hidden="true">⌁</span><p>컨테이너를 선택하면 로그가 표시됩니다.</p></div></div>
-              </section>
-              <section id="playbooks" class="panel actions-panel">
-                <div class="panel-head"><div><p class="eyebrow">RESPONSE</p><h2>오류 대응</h2></div><div class="response-tools"><span class="panel-hint">활성 경고에만 실행</span><button id="open-error-codes" class="text-button" type="button">오류코드 안내</button></div></div>
-                <div id="actions-list" class="actions-list scroll-region"></div>
-              </section>
-              <dialog id="error-codes" class="code-dialog" aria-labelledby="error-codes-title">
-                <div class="code-dialog-head"><div><p class="eyebrow">REFERENCE</p><h2 id="error-codes-title">오류코드 안내</h2></div><button id="close-error-codes" class="text-button" type="button">닫기</button></div>
-                <div id="codes-list" class="codes-list"></div>
-                <a href="/docs/error-codes.md" class="text-button" target="_blank" rel="noreferrer">전체 오류코드 문서 ↗</a>
-              </dialog>
-            </div>
-          </section>
+
+          <section class="view hidden" id="view-containers" aria-labelledby="containers-title"><div class="view-heading"><div><p class="eyebrow">INVENTORY</p><h1 id="containers-title">컨테이너</h1><p class="view-description">컨테이너를 선택하면 실시간 로그가 열립니다.</p></div></div><section id="containers" class="panel fill-panel"><div class="panel-head"><div><p class="eyebrow">RUNTIME INVENTORY</p><h2>컨테이너 상태</h2></div><span class="panel-tag">CPU · MEMORY</span></div><div id="container-list" class="container-list scroll-region"></div></section></section>
+          <section class="view hidden" id="view-logs" aria-labelledby="logs-page-title"><div class="view-heading"><div><p class="eyebrow">LIVE LOGS</p><h1 id="logs-page-title">실시간 로그</h1><p class="view-description">컨테이너를 선택해 최근 로그를 확인합니다.</p></div></div><section id="logs" class="panel logs-panel fill-panel"><div class="panel-head"><div><p class="eyebrow">STDOUT / STDERR</p><h2 id="logs-title">컨테이너 로그</h2></div><div class="log-controls"><label class="sr-only" for="log-container-select">로그 대상 컨테이너</label><select id="log-container-select" disabled><option value="">컨테이너 선택</option></select><button id="clear-logs" class="text-button" type="button">화면 비우기</button></div></div><div class="log-legend" aria-label="로그 수준 색상 안내"><span class="info"><i aria-hidden="true"></i>INFO</span><span class="warning"><i aria-hidden="true"></i>WARN</span><span class="error"><i aria-hidden="true"></i>ERROR</span></div><div id="log-output" class="log-output" role="log" aria-live="polite"><div class="log-empty">컨테이너를 선택하면 로그가 표시됩니다.</div></div></section></section>
+          <section class="view hidden" id="view-status-codes" aria-labelledby="http-title"><div class="view-heading"><div><p class="eyebrow">HTTP OBSERVABILITY</p><h1 id="http-title">HTTP 응답 <span id="http-warning" class="target-indicator hidden" aria-label="선택한 경고 대상">!</span></h1><p class="view-description">수집된 컨테이너 로그의 응답 상태를 표시합니다.</p></div></div><section id="status-codes" class="panel fill-panel"><div class="panel-head"><div><p class="eyebrow">RESPONSE CODES</p><h2>HTTP 상태 분포</h2></div><a href="/docs/http-status-codes.md" class="text-button" target="_blank" rel="noreferrer">상세 안내 ↗</a></div><div id="status-summary" class="status-chart" aria-live="polite"></div><p class="panel-caption">최근 수집된 로그 기준 · 일부 로그 수집 실패 시 별도 표시</p></section></section>
+          <section class="view hidden" id="view-alerts" aria-labelledby="alerts-title"><div class="view-heading"><div><p class="eyebrow">ACTIVE ALERTS</p><h1 id="alerts-title">활성 경고</h1><p class="view-description">현재 감지된 경고와 영향을 받은 대상을 확인합니다.</p></div><a href="#playbooks" class="secondary-button">오류 대응 ↗</a></div><section class="panel fill-panel"><div class="panel-head"><div><p class="eyebrow">ATTENTION REQUIRED</p><h2>경고 목록</h2></div></div><div id="alerts-list" class="alerts-list scroll-region"></div></section></section>
+          <section class="view hidden" id="view-playbooks" aria-labelledby="playbooks-title"><div class="view-heading"><div><p class="eyebrow">RESPONSE PLAYBOOK</p><h1 id="playbooks-title">오류 대응</h1><p class="view-description">활성 경고에 연결된 대응 스크립트를 실행합니다.</p></div><a href="#error-codes" class="secondary-button">오류 코드 안내 ↗</a></div><section id="playbooks" class="panel fill-panel"><div class="panel-head"><div><p class="eyebrow">ACTIONS</p><h2>대응 스크립트</h2></div><span class="panel-tag">활성 경고에만 실행</span></div><div id="actions-list" class="actions-list scroll-region"></div><p class="panel-caption">스크립트 실행에는 서버의 Compose 환경 설정이 필요합니다.</p></section></section>
+          <section class="view hidden" id="view-error-codes" aria-labelledby="codes-title"><div class="view-heading"><div><p class="eyebrow">REFERENCE</p><h1 id="codes-title">오류 코드</h1><p class="view-description">운영 오류의 발생 조건과 대응 방법입니다.</p></div></div><section id="error-codes" class="panel fill-panel"><div class="panel-head"><div><p class="eyebrow">ERROR CODE CATALOG</p><h2>오류 코드 안내</h2></div><a href="/docs/error-codes.md" class="text-button" target="_blank" rel="noreferrer">상세 문서 ↗</a></div><div id="codes-list" class="codes-list scroll-region"></div></section></section>
+          <section class="view hidden" id="view-not-found"><div class="empty">요청한 화면을 찾을 수 없습니다. <a href="#overview">운영 현황으로 이동</a></div></section>
         </main>
       </div>
     </div>

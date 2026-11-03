@@ -11,6 +11,7 @@ import { HTTP_STATUS_CODES, HTTP_STATUS_ALERT_RULES } from './http-status.mjs'
 const root = path.dirname(fileURLToPath(import.meta.url))
 const publicDir = path.join(root, 'public')
 const port = Number(process.env.OPS_DASHBOARD_PORT || 9760)
+const host = process.env.OPS_DASHBOARD_HOST || '127.0.0.1'
 const pollMs = Math.max(1_000, Number(process.env.OPS_DASHBOARD_POLL_MS || 5_000))
 const statusLogTail = Math.min(Math.max(Number(process.env.OPS_HTTP_STATUS_LOG_TAIL || 200), 20), 1_000)
 
@@ -130,4 +131,4 @@ const server = http.createServer((req, res) => {
 })
 await monitor.tick()
 setInterval(() => { void monitor.tick() }, pollMs).unref()
-server.listen(port, '127.0.0.1', () => process.stdout.write(`RM ops dashboard listening on http://127.0.0.1:${port}\n`))
+server.listen(port, host, () => process.stdout.write(`RM ops dashboard listening on http://${host}:${port}\n`))

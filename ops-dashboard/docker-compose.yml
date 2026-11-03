@@ -2,7 +2,7 @@ services:
   ops-dashboard:
     build: .
     ports:
-      - "9760:9760"
+      - "127.0.0.1:9760:9760"
     environment:
       OPS_DASHBOARD_PORT: 9760
       OPS_RESOURCE_THRESHOLD: 80
