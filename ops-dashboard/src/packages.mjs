@@ -136,41 +136,87 @@ function githubRepo(repository) {
   return match?.[1] || null
 }
 
-async function latestRelease(item, fetchImpl, githubToken) {
+async function githubReleasesAfter(repo, installedAt, fetchImpl, githubToken) {
+  const releases = []
+  const headers = { accept: 'application/vnd.github+json' }
+  if (githubToken) headers.authorization = `Bearer ${githubToken}`
+  for (let page = 1; page <= 10; page += 1) {
+    try {
+      const rows = await fetchJson(`https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}`, fetchImpl, headers)
+      if (!Array.isArray(rows)) break
+      for (const row of rows) {
+        const publishedAt = row.published_at || row.created_at
+        if (publishedAt && Date.parse(publishedAt) > installedAt) releases.push({
+          title: row.name || row.tag_name,
+          tag: row.tag_name,
+          notes: String(row.body || '').trim().slice(0, 1800),
+          url: row.html_url,
+          publishedAt,
+        })
+      }
+      const oldest = rows.at(-1)
+      if (rows.length < 100 || (oldest?.published_at && Date.parse(oldest.published_at) <= installedAt)) break
+    } catch { break }
+  }
+  return releases
+}
+
+function releaseTagMatches(tag, version) {
+  const normalized = String(tag || '').replace(/^v/i, '')
+  return normalized === version || normalized.endsWith(`-${version}`) || normalized.endsWith(`/${version}`)
+}
+
+function isPrerelease(version) {
+  return /(?:-|\b(?:alpha|beta|rc|a|b)\d|\.dev\d)/i.test(version)
+}
+
+async function releaseHistory(item, fetchImpl, githubToken) {
   try {
     let metadata
+    let versionEntries
+    let projectUrls = {}
+    let repository
     if (item.ecosystem === 'npm') {
-      metadata = await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(item.name)}/latest`, fetchImpl)
+      metadata = await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(item.name)}`, fetchImpl)
+      projectUrls = metadata.versions?.[item.version]?.homepage ? { Homepage: metadata.versions[item.version].homepage } : {}
+      repository = metadata.versions?.[item.version]?.repository || metadata.repository
+      versionEntries = Object.keys(metadata.versions || {}).map((version) => ({ version, publishedAt: metadata.time?.[version] }))
     } else {
       metadata = await fetchJson(`https://pypi.org/pypi/${encodeURIComponent(item.name)}/json`, fetchImpl)
-      metadata = { version: metadata.info?.version, description: metadata.info?.summary, project_urls: metadata.info?.project_urls }
+      projectUrls = metadata.info?.project_urls || {}
+      repository = projectUrls.Source || projectUrls.Repository || projectUrls['Source Code']
+      versionEntries = Object.entries(metadata.releases || {}).map(([version, files]) => ({
+        version,
+        publishedAt: files?.map((file) => file.upload_time_iso_8601 || file.upload_time).filter(Boolean).sort()[0],
+      }))
     }
-    const latestVersion = metadata.version
-    if (!latestVersion || latestVersion === item.version) return null
-    const urls = metadata.project_urls || {}
-    const repo = githubRepo(metadata.repository) || githubRepo(urls.Source) || githubRepo(urls.Repository) || githubRepo(urls['Source Code'])
-    let release = null
-    if (repo) {
-      try {
-        const headers = { accept: 'application/vnd.github+json' }
-        if (githubToken) headers.authorization = `Bearer ${githubToken}`
-        const data = await fetchJson(`https://api.github.com/repos/${repo}/releases/latest`, fetchImpl, headers)
-        release = { title: data.name || data.tag_name, notes: String(data.body || '').trim().slice(0, 1800), url: data.html_url, publishedAt: data.published_at }
-      } catch {}
-    }
-    return {
-      package: item.name,
-      ecosystem: item.ecosystem,
-      service: item.service,
-      scope: item.scope,
-      installedVersion: item.version,
-      latestVersion,
-      description: metadata.description || '',
-      release: release || { title: `v${latestVersion}`, notes: '', url: urls.Changelog || urls['Release Notes'] || urls.Source || urls.Repository || null, publishedAt: null },
-      source: item.ecosystem === 'npm' ? `https://www.npmjs.com/package/${encodeURIComponent(item.name)}` : `https://pypi.org/project/${encodeURIComponent(item.name)}/`,
-    }
+    const installedDate = versionEntries.find((entry) => entry.version === item.version)?.publishedAt
+    const installedAt = installedDate ? Date.parse(installedDate) : NaN
+    if (!Number.isFinite(installedAt)) return []
+    const newer = versionEntries.filter((entry) => entry.publishedAt && Date.parse(entry.publishedAt) > installedAt && !isPrerelease(entry.version))
+    if (!newer.length) return []
+    const repo = githubRepo(repository) || githubRepo(projectUrls.Source) || githubRepo(projectUrls.Repository) || githubRepo(projectUrls['Source Code'])
+    const githubReleases = repo ? await githubReleasesAfter(repo, installedAt, fetchImpl, githubToken) : []
+    const latestVersion = newer.toSorted((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))[0].version
+    return newer.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).map((entry) => {
+      const notes = githubReleases.find((release) => releaseTagMatches(release.tag, entry.version))
+      return {
+        package: item.name,
+        ecosystem: item.ecosystem,
+        service: item.service,
+        scope: item.scope,
+        installedVersion: item.version,
+        latestVersion,
+        version: entry.version,
+        publishedAt: entry.publishedAt,
+        title: notes?.title || `v${entry.version}`,
+        notes: notes?.notes || '',
+        url: notes?.url || (item.ecosystem === 'npm' ? `https://www.npmjs.com/package/${encodeURIComponent(item.name)}?activeTab=versions` : `https://pypi.org/project/${encodeURIComponent(item.name)}/#history`),
+        source: item.ecosystem === 'npm' ? `https://www.npmjs.com/package/${encodeURIComponent(item.name)}` : `https://pypi.org/project/${encodeURIComponent(item.name)}/`,
+      }
+    })
   } catch {
-    return null
+    return []
   }
 }
 
@@ -187,14 +233,14 @@ export function createPackageMonitor({ projectRoot, fetchImpl = fetch, refreshMs
       const errors = []
       const [advisories, releases] = await Promise.all([
         loadAdvisories(inventory, fetchImpl).catch((error) => { errors.push(`OSV: ${error.message}`); return [] }),
-        Promise.all(direct.map((item) => latestRelease(item, fetchImpl, githubToken))),
+        Promise.all(direct.map((item) => releaseHistory(item, fetchImpl, githubToken))),
       ])
       snapshot = {
         status: errors.length === 0 ? 'ready' : advisories.length || releases.some(Boolean) ? 'partial' : 'unavailable',
         checkedAt: new Date().toISOString(),
         packageCount: inventory.length,
         advisories,
-        releases: releases.filter(Boolean).sort((a, b) => (b.release.publishedAt || '').localeCompare(a.release.publishedAt || '')),
+        releases: releases.flat().sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')),
         errors,
       }
     } catch (error) {
