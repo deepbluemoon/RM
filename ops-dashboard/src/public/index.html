@@ -16,7 +16,7 @@
           <a class="nav-item active" href="#overview" data-view-link="overview" aria-current="page"><span class="nav-icon" aria-hidden="true">◈</span> 현황</a>
           <a class="nav-item" href="#activity" data-view-link="activity"><span class="nav-icon" aria-hidden="true">⌁</span> 로그 · 대응</a>
         </nav>
-        <div class="sidebar-bottom"><div class="engine-card"><span id="sidebar-engine-dot" class="engine-dot"></span><div><small>DOCKER ENGINE</small><strong id="sidebar-engine">연결 확인 중</strong></div></div></div>
+        <div class="sidebar-bottom"><div id="engine-card" class="engine-card"><span id="sidebar-engine-dot" class="engine-dot"></span><div><small>DOCKER ENGINE</small><strong id="sidebar-engine">연결 확인 중</strong></div><span id="engine-warning-lamp" class="warning-lamp hidden" aria-label="선택한 경고 대상">!</span></div></div>
       </aside>
       <div class="app-main">
         <header class="topbar">
@@ -29,13 +29,16 @@
           </div>
         </header>
         <main class="content-shell">
-          <div id="error-banner" class="error-banner hidden" role="status" aria-live="polite"></div>
           <section id="overview" class="dashboard-view overview-view" aria-label="운영 현황">
             <div class="summary-grid" aria-label="전체 요약">
               <article class="summary-card accent-teal"><div class="summary-top"><span class="card-label">실행 중</span><span class="summary-icon" aria-hidden="true">▦</span></div><strong id="running-count">확인 중</strong><span class="card-note">전체 <b id="total-count">-</b>개 중</span></article>
-              <article class="summary-card accent-red"><div class="summary-top"><span class="card-label">활성 경고</span><span class="summary-icon" aria-hidden="true">!</span></div><strong id="alert-count">확인 중</strong><span class="card-note">현재 감지된 경고</span></article>
+              <button id="alert-toggle" class="summary-card accent-red" type="button" aria-expanded="false" aria-controls="alerts-popover"><span class="summary-top"><span class="card-label">활성 경고</span><span class="summary-icon" aria-hidden="true">!</span></span><strong id="alert-count">확인 중</strong><span class="card-note">눌러서 경고 확인</span></button>
               <article class="summary-card accent-blue"><div class="summary-top"><span class="card-label">CPU 사용량</span><span class="summary-icon" aria-hidden="true">⌁</span></div><strong id="cpu-total">확인 중</strong><span class="card-note">실행 중인 컨테이너 합계</span></article>
               <article class="summary-card accent-pink"><div class="summary-top"><span class="card-label">메모리 사용률</span><span class="summary-icon" aria-hidden="true">◇</span></div><strong id="memory-total">확인 중</strong><span class="card-note">컨테이너 한도 기준</span></article>
+              <section id="alerts-popover" class="alerts-popover hidden" role="region" aria-label="활성 경고 상세" aria-live="polite">
+                <div class="panel-head"><div><p class="eyebrow">ACTIVE ALERTS</p><h2>활성 경고</h2></div><button id="close-alerts" class="text-button" type="button">닫기</button></div>
+                <div id="alerts-list" class="alerts-list scroll-region"></div>
+              </section>
             </div>
             <div class="overview-grid">
               <section id="containers" class="panel containers-panel">
@@ -44,13 +47,9 @@
               </section>
               <div class="overview-side">
                 <section id="status-codes" class="panel status-panel">
-                  <div class="panel-head"><div><p class="eyebrow">HTTP RESPONSES</p><h2>HTTP 응답</h2></div><a href="/docs/http-status-codes.md" class="text-button" target="_blank" rel="noreferrer">상세 ↗</a></div>
+                  <div class="panel-head"><div><p class="eyebrow">HTTP RESPONSES</p><h2>HTTP 응답 <span id="http-warning-lamp" class="warning-lamp hidden" aria-label="선택한 경고 대상">!</span></h2></div><a href="/docs/http-status-codes.md" class="text-button" target="_blank" rel="noreferrer">상세 ↗</a></div>
                   <div id="status-summary" class="status-chart" aria-live="polite"></div>
                   <p class="panel-caption">최근 수집된 접근 로그 기준</p>
-                </section>
-                <section class="panel alert-panel" aria-label="활성 경고">
-                  <div class="panel-head"><div><p class="eyebrow">ACTIVE ALERTS</p><h2>활성 경고</h2></div><a href="#playbooks" class="text-button">대응 보기 →</a></div>
-                  <div id="alerts-list" class="alerts-list scroll-region"></div>
                 </section>
               </div>
             </div>
@@ -66,14 +65,14 @@
                 <div id="log-output" class="log-output" role="log" aria-label="실시간 로그"><div class="log-empty"><span aria-hidden="true">⌁</span><p>컨테이너를 선택하면 로그가 표시됩니다.</p></div></div>
               </section>
               <section id="playbooks" class="panel actions-panel">
-                <div class="panel-head"><div><p class="eyebrow">RESPONSE</p><h2>오류 대응</h2></div><span class="panel-hint">활성 경고에만 실행</span></div>
+                <div class="panel-head"><div><p class="eyebrow">RESPONSE</p><h2>오류 대응</h2></div><div class="response-tools"><span class="panel-hint">활성 경고에만 실행</span><button id="open-error-codes" class="text-button" type="button">오류코드 안내</button></div></div>
                 <div id="actions-list" class="actions-list scroll-region"></div>
               </section>
-              <details id="error-codes" class="panel codes-panel">
-                <summary>오류코드 안내 <span>자세히 보기</span></summary>
+              <dialog id="error-codes" class="code-dialog" aria-labelledby="error-codes-title">
+                <div class="code-dialog-head"><div><p class="eyebrow">REFERENCE</p><h2 id="error-codes-title">오류코드 안내</h2></div><button id="close-error-codes" class="text-button" type="button">닫기</button></div>
                 <div id="codes-list" class="codes-list"></div>
                 <a href="/docs/error-codes.md" class="text-button" target="_blank" rel="noreferrer">오류코드 문서 ↗</a>
-              </details>
+              </dialog>
             </div>
           </section>
         </main>
