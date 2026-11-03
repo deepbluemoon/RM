@@ -195,7 +195,11 @@ function renderStatusCodes(statusState, dockerAvailable) {
   const target = $('status-summary')
   if (chart.state === 'unavailable') { target.innerHTML = '<div class="empty">HTTP 응답을 수집할 수 없습니다.</div>'; return }
   if (chart.state === 'empty') { target.innerHTML = '<div class="empty">수집된 HTTP 응답이 없습니다.</div>'; return }
-  target.innerHTML = `${chart.state === 'partial' ? '<p class="status-chart-note">일부 로그를 수집하지 못했습니다. 아래 수치는 확인된 응답만 포함합니다.</p>' : ''}<p class="status-chart-note">최근 수집된 로그에서 확인된 응답 ${chart.total}건</p>${chart.bars.map(({ label, count, percent }) => `<div class="status-chart-row status-${label}"><span>${label.toUpperCase()}</span><div class="status-chart-track" aria-hidden="true"><span style="width:${percent}%"></span></div><strong>${count}건</strong></div>`).join('')}`
+  const services = [...(statusState.services || [])].sort((a, b) => b.total - a.total).slice(0, 4)
+  const routes = [...(statusState.routes || [])].sort((a, b) => b.total - a.total).slice(0, 4)
+  const serviceRows = services.map((item) => `<li><span>${escapeHtml(item.service)}</span><small>${item.total}건 · 5xx ${item.classCounts['5xx']}</small></li>`).join('')
+  const routeRows = routes.map((item) => `<li><span><b>${escapeHtml(item.method || '—')}</b> ${escapeHtml(item.route)}</span><small>${escapeHtml(item.service)} · ${item.total}건</small></li>`).join('')
+  target.innerHTML = `${chart.state === 'partial' ? '<p class="status-chart-note">일부 로그를 수집하지 못했습니다. 아래 수치는 확인된 응답만 포함합니다.</p>' : ''}<p class="status-chart-note">최근 수집된 로그에서 확인된 응답 ${chart.total}건</p>${chart.bars.map(({ label, count, percent }) => `<div class="status-chart-row status-${label}"><span>${label.toUpperCase()}</span><div class="status-chart-track" aria-hidden="true"><span style="width:${percent}%"></span></div><strong>${count}건</strong></div>`).join('')}<div class="status-breakdowns"><section><h3>서비스별</h3><ul>${serviceRows || '<li class="status-breakdown-empty">집계할 서비스가 없습니다.</li>'}</ul></section><section><h3>라우트별</h3><ul>${routeRows || '<li class="status-breakdown-empty">route template 로그가 없습니다.</li>'}</ul></section></div>`
 }
 
 function renderContainers(containers, alerts, dockerAvailable) {

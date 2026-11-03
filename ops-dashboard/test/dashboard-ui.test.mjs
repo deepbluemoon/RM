@@ -102,7 +102,12 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
       { id: 'HTTP-5XX-RATE-001:abc', code: 'HTTP-5XX-RATE-001', kind: 'http', severity: 'critical', containerId: 'abc', containerName: 'api', resource: 'HTTP 5xx', message: 'api HTTP 5xx 비율 경고' },
       { id: 'OPS-CPU-80-001:abc', code: 'OPS-CPU-80-001', severity: 'warning', containerId: 'abc', containerName: 'api', resource: 'CPU', message: 'api CPU 사용률 경고' },
     ],
-    statusCodes: { totals: { classCounts: { '1xx': 0, '2xx': 1, '3xx': 0, '4xx': 0, '5xx': 0 } }, collectionErrors: [] },
+    statusCodes: {
+      totals: { classCounts: { '1xx': 0, '2xx': 1, '3xx': 0, '4xx': 0, '5xx': 0 } },
+      services: [{ service: 'backend', total: 1, classCounts: { '5xx': 0 } }],
+      routes: [{ service: 'backend', method: 'GET', route: '/api/health', total: 1 }],
+      collectionErrors: [],
+    },
   }
   const source = (await fs.readFile(new URL('../src/public/app.js', import.meta.url), 'utf8')).replace(/^import [^\n]*\n/gm, '')
   const context = vm.createContext({
@@ -118,6 +123,8 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
   assert.equal(element('activity').classList.contains('hidden'), true)
   assert.equal(element('running-count').textContent, '1')
   assert.match(element('status-summary').innerHTML, /2XX/)
+  assert.match(element('status-summary').innerHTML, /backend/)
+  assert.match(element('status-summary').innerHTML, /\/api\/health/)
   assert.match(element('container-list').innerHTML, /api/)
   assert.match(element('activity-container-select').innerHTML, /worker/)
   assert.equal(element('alert-count').textContent, '3')
