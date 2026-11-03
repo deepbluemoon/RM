@@ -6,9 +6,9 @@
 # 운영(자원·로그 제한, HTTPS 앞단 전제): docker compose -f compose.yaml -f compose.prod.yaml up -d — 배포 환경 확정 전 최소 구성(#83).
 # 운영에서 바뀔 값은 ${변수} 로 둔다.
 #
-# 프로젝트 이름을 rm 으로 두어 컨테이너 이름이 rm-<서비스>-1 이 된다(운영 대시보드 OPS_NAME_PREFIXES 와 맞춤).
+# 프로젝트 이름을 지정해 컨테이너 이름이 rm-contract-risk-<서비스>-1 이 된다.
 
-name: rm
+name: rm-contract-risk
 
 x-backend-env: &backend-env
   # 컨테이너 기본 시간대는 UTC — KNOWLEDGE_CRON·보관 기한 작업을 한국 시간으로 돌린다
@@ -190,5 +190,8 @@ secrets:
     file: ${GCP_CREDENTIALS_FILE:?GCP_CREDENTIALS_FILE(Vertex 인증 파일 경로) 를 .env 에 설정하세요}
 
 volumes:
+  # 프로젝트 이름을 바꾸어도 기존 데이터를 계속 사용한다.
   db-data:
+    name: rm_db-data
   backend-var:
+    name: rm_backend-var

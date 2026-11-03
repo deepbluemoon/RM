@@ -74,6 +74,12 @@ docker compose up -d
 docker compose ps        # backend·model-server·ollama·mariadb 가 healthy, backend-init·backend-embed 가 Exited (0)
 ```
 
+`backend-init`, `backend-embed`는 초기화가 끝나면 `Exited (0)`인 일회성 작업 컨테이너다. 종료 코드와 필요한 로그를 확인한 뒤 목록을 정리하려면 다음을 실행한다. 컨테이너만 제거하며 DB·업로드 볼륨은 유지된다. 실패했거나 원인을 더 조사할 때는 로그 확인 전까지 남겨 둔다.
+
+```bash
+docker compose rm -f backend-init backend-embed
+```
+
 브라우저에서 `http://localhost:8080` (포트는 `.env`의 `FRONTEND_PORT`).
 
 벡터는 MariaDB의 `evidence_embedding` 테이블에 저장된다. 기본 `db-data` named volume(또는 `.env`의 `DB_DATA`)에 함께 영속화되므로, 별도의 벡터 파일 볼륨은 필요하지 않다. 초기 적재는 `backend-embed`가 수행한다.
