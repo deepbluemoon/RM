@@ -4,6 +4,8 @@ import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import { once } from 'node:events'
 import { fileURLToPath } from 'node:url'
+import os from 'node:os'
+import path from 'node:path'
 
 test('대시보드의 정상 경로와 없는 경로를 구분한다', async (t) => {
   const reservation = createServer()
@@ -13,7 +15,7 @@ test('대시보드의 정상 경로와 없는 경로를 구분한다', async (t)
   await new Promise((resolve, reject) => reservation.close((error) => error ? reject(error) : resolve()))
 
   const server = spawn(process.execPath, [fileURLToPath(new URL('../src/server.mjs', import.meta.url))], {
-    env: { ...process.env, OPS_DASHBOARD_PORT: String(port), PATH: '' },
+    env: { ...process.env, OPS_DASHBOARD_PORT: String(port), OPS_ACTION_AUDIT_FILE: path.join(os.tmpdir(), `rm-ops-test-${process.pid}.jsonl`), OPS_DIAGNOSTICS_DIR: path.join(os.tmpdir(), `rm-ops-test-reports-${process.pid}`), PATH: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   t.after(() => server.kill())
@@ -31,7 +33,10 @@ test('대시보드의 정상 경로와 없는 경로를 구분한다', async (t)
   }
   assert.equal((await fetch(`${base}/app.js`)).status, 200)
   assert.equal((await fetch(`${base}/docs/error-codes.md`)).status, 200)
+  assert.equal((await fetch(`${base}/docs/response-scripts.md`)).status, 200)
   assert.equal((await fetch(`${base}/api/health`)).status, 200)
+  assert.deepEqual(await (await fetch(`${base}/api/actions/history`)).json(), { events: [] })
+  assert.deepEqual(await (await fetch(`${base}/api/reports`)).json(), { reports: [] })
 
   for (const pathname of ['/missing-route-for-test', '/missing.js', '/api/missing']) {
     const response = await fetch(`${base}${pathname}`, { redirect: 'manual' })

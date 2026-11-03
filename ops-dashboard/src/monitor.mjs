@@ -43,6 +43,7 @@ export function createMonitor({ readSnapshot, readStatusLogs = async () => ({ lo
             containerId: container.id,
             containerName: container.name,
             containerImage: container.image,
+            composeService: container.composeService || '',
             stateful: /(?:mariadb|mysql)(?::|$|\/)/i.test(`${container.image || ''}:${container.name || ''}`),
             resource: metric.label,
             value: round(value),

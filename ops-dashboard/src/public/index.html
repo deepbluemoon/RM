@@ -70,7 +70,27 @@
               <section id="playbooks" class="panel actions-panel">
                 <div class="panel-head"><div><p class="eyebrow">RESPONSE</p><h2>오류 대응</h2></div><div class="response-tools"><span class="panel-hint">활성 경고에만 실행</span><button id="open-error-codes" class="text-button" type="button">오류코드 안내</button></div></div>
                 <div id="actions-list" class="actions-list scroll-region"></div>
+                <div id="action-result" class="action-result hidden" role="status" aria-live="polite"></div>
+                <section class="operator-records" aria-label="운영 실행 기록">
+                  <div class="record-section-head"><h3>최근 실행 이력</h3><button id="refresh-records" class="text-button" type="button">새로고침</button></div>
+                  <div id="action-history" class="record-list" aria-live="polite"><p class="record-empty">실행 이력을 불러오는 중입니다.</p></div>
+                  <div class="record-section-head report-section-head"><h3>진단 보고서</h3><button id="cleanup-old-reports" class="text-button" type="button">30일 지난 보고서 정리</button></div>
+                  <div id="report-list" class="record-list" aria-live="polite"><p class="record-empty">보고서를 불러오는 중입니다.</p></div>
+                </section>
               </section>
+              <dialog id="action-confirm-dialog" class="action-dialog" aria-labelledby="action-confirm-title">
+                <div class="code-dialog-head"><div><p class="eyebrow">OPERATOR REVIEW</p><h2 id="action-confirm-title">대응 작업 확인</h2></div><button id="close-action-dialog" class="text-button" type="button">닫기</button></div>
+                <p id="action-confirm-description" class="action-dialog-description"></p>
+                <dl class="action-review-details"><div><dt>오류 코드</dt><dd id="action-confirm-code"></dd></div><div><dt>대상</dt><dd id="action-confirm-target"></dd></div></dl>
+                <label id="include-logs-option" class="include-logs-option hidden"><input id="include-recent-logs" type="checkbox" /><span><strong>최근 로그 100줄 포함</strong><small>로그에 개인정보나 비밀값이 있을 수 있습니다. 결과 파일을 공유하기 전에 직접 확인하세요.</small></span></label>
+                <div class="action-dialog-buttons"><button id="cancel-action" class="text-button" type="button">취소</button><button id="confirm-action" class="primary-action-button" type="button">검토 후 실행</button></div>
+              </dialog>
+              <div id="operation-toast" class="operation-toast hidden" role="status" aria-live="polite"></div>
+              <dialog id="record-confirm-dialog" class="action-dialog" aria-labelledby="record-confirm-title">
+                <div class="code-dialog-head"><div><p class="eyebrow">OPERATOR REVIEW</p><h2 id="record-confirm-title">보고서 작업 확인</h2></div><button id="close-record-dialog" class="text-button" type="button">닫기</button></div>
+                <p id="record-confirm-description" class="action-dialog-description"></p>
+                <div class="action-dialog-buttons"><button id="cancel-record-operation" class="text-button" type="button">취소</button><button id="confirm-record-operation" class="primary-action-button" type="button">확인</button></div>
+              </dialog>
               <dialog id="error-codes" class="code-dialog" aria-labelledby="error-codes-title">
                 <div class="code-dialog-head"><div><p class="eyebrow">REFERENCE</p><h2 id="error-codes-title">오류코드 안내</h2></div><button id="close-error-codes" class="text-button" type="button">닫기</button></div>
                 <div id="codes-list" class="codes-list"></div>

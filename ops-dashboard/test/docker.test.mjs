@@ -27,7 +27,7 @@ case "\$1" in
     if [[ "\${DOCKER_FAKE_MODE:-normal}" == unmatched ]]; then
       printf '%s\\n' '{"ID":"other","Names":"rm-other","Image":"example/other","State":"exited"}'
     else
-      printf '%s\\n' '{"ID":"abc123","Names":"rm-api","Image":"moonsangjin/tamji:be-latest","State":"running","Status":"Up","Ports":"","CreatedAt":"today"}'
+      printf '%s\\n' '{"ID":"abc123","Names":"rm-api","Image":"moonsangjin/tamji:be-latest","State":"running","Status":"Up","Ports":"","CreatedAt":"today","Labels":"com.docker.compose.service=api"}'
     fi
     ;;
   stats)
@@ -70,7 +70,7 @@ esac
 test('Docker 컨테이너·통계 응답을 운영 모델로 변환한다', async () => {
   await withDocker(async () => {
     assert.deepEqual(await listContainers(), [{
-      id: 'abc123', name: 'rm-api', image: 'moonsangjin/tamji:be-latest', state: 'running', status: 'Up', ports: '', createdAt: 'today',
+      id: 'abc123', name: 'rm-api', image: 'moonsangjin/tamji:be-latest', state: 'running', status: 'Up', ports: '', createdAt: 'today', composeService: 'api',
     }])
     assert.deepEqual(await listStats(), [{
       id: 'abc123full', name: 'rm-api', cpuPercent: 12.5, memoryPercent: 25, memoryUsedBytes: 10 * 1024 ** 2, memoryLimitBytes: 100 * 1024 ** 2,

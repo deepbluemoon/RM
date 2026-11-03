@@ -12,6 +12,7 @@ model-server/.venv
 
 # runtime data
 backend/var/
+ops-dashboard/.ops-data/
 playwright-report/
 test-results/
 coverage/

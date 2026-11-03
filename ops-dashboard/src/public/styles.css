@@ -174,6 +174,42 @@ button.summary-card.accent-pink:hover, button.summary-card.accent-pink:focus-vis
 .action-code { margin-top: 5px; color: #ff9da4; font: 11px var(--mono); }
 .action-card button { flex: none; min-height: 34px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-raised); color: var(--muted); cursor: not-allowed; font-size: 12px; }
 .action-card.is-enabled button { color: var(--bg); background: var(--red); border-color: var(--red); cursor: pointer; }
+.action-availability { color: var(--muted-strong) !important; }
+.action-manual-link { display: inline-block; margin-top: 7px; color: var(--blue); font-size: 11px; text-decoration: none; }
+.action-manual-link:hover { text-decoration: underline; }
+.action-result { margin-top: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); color: var(--muted-strong); font: 12px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.action-dialog { width: min(540px, calc(100vw - 32px)); padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.action-dialog::backdrop { background: rgba(0,0,0,.72); }
+.action-dialog-description { color: var(--muted-strong); font-size: 13px; line-height: 1.55; }
+.action-review-details { display: grid; gap: 8px; margin: 16px 0; }
+.action-review-details div { display: grid; grid-template-columns: 90px 1fr; gap: 10px; }
+.action-review-details dt { color: var(--muted); font-size: 12px; }
+.action-review-details dd { margin: 0; font: 12px var(--mono); overflow-wrap: anywhere; }
+.include-logs-option { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0; padding: 12px; border: 1px solid rgba(245,158,11,.45); border-radius: 6px; background: rgba(245,158,11,.06); }
+.include-logs-option input { margin: 3px 0 0; accent-color: var(--amber); }
+.include-logs-option strong, .include-logs-option small { display: block; }
+.include-logs-option strong { font-size: 12px; }
+.include-logs-option small { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.action-dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.primary-action-button { min-height: 36px; padding: 7px 12px; border: 1px solid var(--red); border-radius: 6px; background: var(--red); color: #fff; font-size: 12px; cursor: pointer; }
+.primary-action-button:disabled { opacity: .6; cursor: wait; }
+.operation-toast { position: fixed; z-index: 20; right: 20px; bottom: 20px; max-width: min(420px, calc(100vw - 40px)); padding: 12px 16px; border: 1px solid rgba(34,197,94,.55); border-radius: 7px; background: var(--surface-raised); color: var(--ink); box-shadow: 0 12px 40px rgba(0,0,0,.4); font-size: 13px; line-height: 1.45; }
+.operation-toast.is-error { border-color: rgba(239,68,68,.6); }
+.operator-records { display: grid; gap: 7px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.record-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.record-section-head h3 { margin: 0; color: var(--muted-strong); font-size: 12px; font-weight: 600; }
+.report-section-head { margin-top: 8px; }
+.record-list { display: grid; gap: 6px; max-height: 180px; overflow: auto; }
+.record-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); }
+.record-row strong, .record-row small { display: block; overflow-wrap: anywhere; }
+.record-row strong { font-size: 11px; }
+.record-row small { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.record-row a, .record-row button { color: var(--blue); font-size: 11px; text-decoration: none; }
+.record-row button { border: 0; background: transparent; cursor: pointer; }
+.record-row a:hover, .record-row button:hover { text-decoration: underline; }
+.record-status-success { color: var(--green) !important; }
+.record-status-failure { color: #ff9da4 !important; }
+.record-empty { margin: 0; color: var(--muted); font-size: 11px; }
 .code-dialog { width: min(820px, calc(100vw - 32px)); max-height: min(82dvh, 720px); overflow: auto; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
 .code-dialog::backdrop { background: rgba(0,0,0,.68); }
 .code-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

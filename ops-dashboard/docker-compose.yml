@@ -2,14 +2,22 @@ services:
   ops-dashboard:
     build: .
     ports:
-      - "9760:9760"
+      - "127.0.0.1:${OPS_DASHBOARD_PORT:-9760}:9760"
     environment:
       OPS_DASHBOARD_PORT: 9760
+      OPS_DASHBOARD_HOST: 0.0.0.0
       OPS_RESOURCE_THRESHOLD: 80
       OPS_COMPOSE_FILE: ${OPS_COMPOSE_FILE:-/workspace/compose.yml}
-      OPS_SCALE_SERVICE: ${OPS_SCALE_SERVICE:-backend}
+      OPS_SCALE_SERVICE: ${OPS_SCALE_SERVICE:-}
       OPS_SCALE_TARGET: ${OPS_SCALE_TARGET:-2}
+      OPS_SCALE_MAX: ${OPS_SCALE_MAX:-5}
+      OPS_SCALE_WAIT_SECONDS: ${OPS_SCALE_WAIT_SECONDS:-30}
+      OPS_SCALE_ALLOWED_SERVICES: ${OPS_SCALE_ALLOWED_SERVICES:-}
+      OPS_SCALE_BLOCKED_SERVICES: ${OPS_SCALE_BLOCKED_SERVICES:-backend,frontend,model-server,mariadb,mysql,database,db,backend-init,backend-embed}
+      OPS_DIAGNOSTICS_DIR: /var/lib/rm-ops-dashboard/reports
+      OPS_ACTION_AUDIT_FILE: /var/lib/rm-ops-dashboard/action-audit.jsonl
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${OPS_PROJECT_DIR:-.}:/workspace:ro
+      - ./.ops-data:/var/lib/rm-ops-dashboard
     restart: unless-stopped
