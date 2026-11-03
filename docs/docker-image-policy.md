@@ -6,11 +6,11 @@
 
 | 서비스 (compose) | 컨테이너 이름 | 이미지 | 내용 |
 |---|---|---|---|
-| `frontend` | `rm-frontend` | 직접 빌드 | 화면(정적 파일)과 `/api` 프록시 |
-| `backend` | `rm-backend` | 직접 빌드 | Express 웹 서버: 로그인, 업로드, 문서 추출, 개인정보 가리기, 청크(조항 분할), RAG(근거 검색), 분석 흐름 |
-| `model-server` | `rm-model-server` | 직접 빌드 | FastAPI 모델 게이트웨이: M1·M2 분류, M3·M4 LLM 외부 API 호출, 임베딩 호출 중계 |
-| `ollama` | `rm-ollama` | 직접 빌드 | 임베딩 전용 Ollama: bge-m3 를 구워 넣어 하이브리드 RAG 의 벡터를 만든다 |
-| `mariadb` | `rm-mariadb` | 공식 `mariadb:12.0` | 데이터 저장. 직접 빌드하지 않는다 |
+| `frontend` | `rm-contract-risk-frontend` | 직접 빌드 | 화면(정적 파일)과 `/api` 프록시 |
+| `backend` | `rm-contract-risk-backend` | 직접 빌드 | Express 웹 서버: 로그인, 업로드, 문서 추출, 개인정보 가리기, 청크(조항 분할), RAG(근거 검색), 분석 흐름 |
+| `model-server` | `rm-contract-risk-model-server` | 직접 빌드 | FastAPI 모델 게이트웨이: M1·M2 분류, M3·M4 LLM 외부 API 호출, 임베딩 호출 중계 |
+| `ollama` | `rm-contract-risk-ollama` | 직접 빌드 | 임베딩 전용 Ollama: bge-m3 를 구워 넣어 하이브리드 RAG 의 벡터를 만든다 |
+| `mariadb` | `rm-contract-risk-mariadb` | 공식 `mariadb:12.0` | 데이터 저장. 직접 빌드하지 않는다 |
 
 - 실행 정의는 저장소 루트의 `compose.yaml` 하나로 둔다.
 - 컨테이너 이름은 운영 대시보드(`ops-dashboard/README.md`의 `OPS_NAME_PREFIXES`)와 맞춘다. 이름을 바꾸면 대시보드 설정도 함께 바꾼다.

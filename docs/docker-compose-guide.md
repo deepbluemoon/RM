@@ -6,18 +6,19 @@
 
 | 서비스 | 컨테이너 | 내용 | 외부 공개 |
 |---|---|---|---|
-| `frontend` | `rm-frontend-1` | 화면, `/api`를 백엔드로 전달 | `127.0.0.1:8080` |
-| `backend` | `rm-backend-1` | Express 웹 서버 | 없음 |
-| `model-server` | `rm-model-server-1` | M1·M2 분류, M3·M4(Vertex), 임베딩 중계 | 없음 |
-| `ollama` | `rm-ollama-1` | 임베딩 전용 Ollama(bge-m3 baked) — 하이브리드 RAG 벡터 | 없음 |
-| `mariadb` | `rm-mariadb-1` | DB (공식 `mariadb:12.0`) | 없음 |
-| `backend-init` | `rm-backend-init-1` | 1회 초기화: 마이그레이션 → 최초 지식 적재. 끝나면 종료(0) | 없음 |
-| `backend-embed` | `rm-backend-embed-1` | 1회성: 초기 근거 벡터 적재(ollama·model-server 준비 후). 끝나면 종료(0) | 없음 |
+| `frontend` | `rm-contract-risk-frontend-1` | 화면, `/api`를 백엔드로 전달 | `127.0.0.1:8080` |
+| `backend` | `rm-contract-risk-backend-1` | Express 웹 서버 | 없음 |
+| `model-server` | `rm-contract-risk-model-server-1` | M1·M2 분류, M3·M4(Vertex), 임베딩 중계 | 없음 |
+| `ollama` | `rm-contract-risk-ollama-1` | 임베딩 전용 Ollama(bge-m3 baked) — 하이브리드 RAG 벡터 | 없음 |
+| `mariadb` | `rm-contract-risk-mariadb-1` | DB (공식 `mariadb:12.0`) | 없음 |
+| `backend-init` | `rm-contract-risk-backend-init-1` | 1회 초기화: 마이그레이션 → 최초 지식 적재. 끝나면 종료(0) | 없음 |
+| `backend-embed` | `rm-contract-risk-backend-embed-1` | 1회성: 초기 근거 벡터 적재(ollama·model-server 준비 후). 끝나면 종료(0) | 없음 |
 
 | 파일 | 용도 |
 |---|---|
 | `compose.yaml` | 범용. 팀원 PC와 운영 서버 공통. Docker Hub 이미지를 받아 실행(로그·자원 제한, 개발 로그인 끔). 서버마다 다른 값은 `.env`로 |
 | `compose.dev.yaml` | 개발. 범용 위에 겹쳐 직접 빌드·개발용 로그인·디버깅 포트. **운영 서버에서는 쓰지 않는다** |
+| `compose.local.yaml` | 로컬 빌드. Docker Hub 백엔드 이미지가 소스보다 오래됐을 때 이 PC에서 빌드한 백엔드·프런트 이미지로 바꿔 띄운다(개발용 로그인은 켜지 않음, 4절) |
 | `.env.example` | 환경 변수 예시. 복사해 `.env`로 쓴다(`.env`는 git 제외) |
 
 ## 2. 준비
@@ -184,7 +185,7 @@ docker compose up -d
 ## 7. 알아둘 점
 
 - **근거 검색은 BM25 + bge-m3 벡터 하이브리드다(#98).** 임베딩은 `ollama` 컨테이너가 계산하고, 처음 기동할 때 `backend-embed`가 근거 벡터를 채운다. 벡터가 없거나 Ollama를 쓸 수 없으면 자동으로 BM25만 쓰고 분석은 계속된다.
-- **기본은 HTTP 구성이다.** 백엔드는 `COOKIE_SECURE=off`, `TRUST_PROXY=loopback, uniquelocal`로 실행된다(#66). HTTPS 앞단을 두는 운영 구성(`compose.prod.yaml`)은 `COOKIE_SECURE=auto`가 기본이다.
+- **기본은 HTTP 구성이다.** 백엔드는 `COOKIE_SECURE=off`, `TRUST_PROXY=loopback, uniquelocal`로 실행된다(#66). HTTPS 앞단을 두는 운영 서버는 `.env`에 `COOKIE_SECURE=auto`를 넣는다(4절 "운영 서버 체크리스트").
 - **arm64(Apple Silicon)** 이미지는 규칙상 함께 올린다. 이미지가 아직 amd64만 있으면 Mac에서는 에뮬레이션으로 느리게 동작할 수 있다.
 - Vertex 인증 파일이 없거나 쓸 수 없으면 모델 서버 `/health`가 M3·M4를 `error`로 표시하고(1분마다 다시 확인), 이유는 모델 서버 로그에 남는다. 이때는 3절을 확인한다.
 
