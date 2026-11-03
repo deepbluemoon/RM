@@ -18,6 +18,8 @@ test('실행 이력에는 제한된 항목만 저장하고 최근 기록을 읽�
     assert.equal(history[0].durationMs, 12)
     assert.equal('rawOutput' in history[0], false)
     assert.equal((await fs.stat(auditFilePath())).mode & 0o777, 0o600)
+    assert.equal((await readActionHistory(0)).length, 1)
+    assert.equal((await readActionHistory(500)).length, 1)
     await fs.appendFile(auditFilePath(), 'not-json\n')
     assert.equal((await readActionHistory(10)).length, 1)
     await fs.writeFile(auditFilePath(), `${Array.from({ length: 2_000 }, (_, index) => JSON.stringify({ actionId: `old-${index}` })).join('\n')}\n`)
@@ -66,6 +68,8 @@ test('진단 보고서를 열거·읽기·개별 삭제하고 오래된 것만 �
     await deleteReport(newId)
     assert.deepEqual(await listReports(), [])
     await assert.rejects(deleteExpiredReports(1, now), /7일 이상/)
+    await assert.rejects(deleteExpiredReports(3_651, now), /3650일 이하/)
+    await assert.rejects(deleteExpiredReports(7.5, now), /정수여야/)
   } finally {
     if (previous === undefined) delete process.env.OPS_DIAGNOSTICS_DIR
     else process.env.OPS_DIAGNOSTICS_DIR = previous
