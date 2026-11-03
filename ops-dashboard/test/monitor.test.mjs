@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createMonitor } from '../src/monitor.mjs'
 import { filterContainers } from '../src/docker.mjs'
 import { canRunAction } from '../src/actions.mjs'
-import { createHttpStatusAggregator, HTTP_STATUS_CODES, parseHttpStatusLine, summarizeHttpStatusLines } from '../src/http-status.mjs'
+import { createHttpStatusAggregator, HTTP_LOG_ADAPTERS, HTTP_STATUS_CODES, parseHttpLogLine, parseHttpStatusLine, summarizeHttpStatusLines } from '../src/http-status.mjs'
 
 const container = (id, cpuPercent, memoryPercent) => ({ id, name: id, running: true, stats: { cpuPercent, memoryPercent } })
 
@@ -76,6 +76,28 @@ test('표준 HTTP access log와 JSON 로그에서 상태코드 태그를 추출�
   assert.equal(parseHttpStatusLine('not an access log 999'), null)
   const summary = summarizeHttpStatusLines(['HTTP/1.1 200', 'HTTP/1.1 404', 'HTTP/1.1 500'])
   assert.deepEqual(summary.classCounts, { '1xx': 0, '2xx': 1, '3xx': 0, '4xx': 1, '5xx': 1 })
+})
+
+test('로그 어댑터가 지원 형식을 정규화하고 query·잘못된 ID를 제거한다', () => {
+  assert.equal(HTTP_LOG_ADAPTERS.length, 3)
+  const combined = parseHttpLogLine('127.0.0.1 - - [date] "POST /api/contracts/42?token=secret HTTP/1.1" 202 18')
+  assert.equal(combined.status.tag, 'HTTP-202')
+  assert.equal(combined.method, 'POST')
+  assert.equal(combined.path, '/api/contracts/42')
+  const json = parseHttpLogLine(JSON.stringify({
+    response: { status: 503 }, request: { method: 'get', url: '/health?key=hidden', id: 'request-123' },
+    trace: { id: 'trace_456' }, deploymentVersion: '2026.11.03',
+  }))
+  assert.equal(json.status.tag, 'HTTP-503')
+  assert.equal(json.method, 'GET')
+  assert.equal(json.path, '/health')
+  assert.equal(json.requestId, 'request-123')
+  assert.equal(json.traceId, 'trace_456')
+  assert.equal(json.deploymentVersion, '2026.11.03')
+  assert.equal(parseHttpLogLine(JSON.stringify({ status: 200, requestId: 'contains spaces', path: '/ok' })).requestId, '')
+  assert.equal(parseHttpLogLine(JSON.stringify({ status: 200, path: `/api/${'x'.repeat(520)}` })).path, '')
+  assert.equal(parseHttpLogLine('{bad json'), null)
+  assert.equal(parseHttpStatusLine('unrecognized 777'), null)
 })
 
 test('등록된 전체 HTTP 상태코드를 태그 카탈로그로 제공한다', () => {
