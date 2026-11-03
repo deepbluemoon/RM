@@ -160,6 +160,9 @@ function onGate(action: string) {
             <template v-else-if="gate?.gate === 'G5'">조항 <b>{{ run.clauseTotal }}개</b> 중 <b>{{ run.scoredCount ?? 0 }}개</b>를 살펴본 뒤 멈췄어요</template>
             <template v-else-if="run.riskTotal === 0">조항 <b>{{ run.clauseTotal }}개</b>를 살펴봤어요 · 위험해 보이는 조항이 없어요</template>
             <template v-else-if="run.riskTotal != null">조항 <b>{{ run.clauseTotal }}개</b>를 살펴봤어요 · 위험해 보이는 조항 <b>{{ run.riskTotal }}개</b> 중 <b>{{ run.judgedCount ?? 0 }}개</b>를 판단했어요</template>
+            <template v-else-if="run.detectProgress && run.stage === 'detecting'">
+              현재 문서 조항 <b>{{ run.detectProgress.done }} / {{ run.detectProgress.total }}개</b>를 확인 중이에요 · 전체 저장 완료 <b>{{ run.scoredCount ?? 0 }} / {{ run.clauseTotal }}개</b>
+            </template>
             <template v-else>조항 <b>{{ run.clauseTotal }}개</b> 중 <b>{{ run.scoredCount ?? 0 }}개</b>를 살펴봤어요</template>
           </span>
         </ProgressMeter>
