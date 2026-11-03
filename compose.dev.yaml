@@ -10,7 +10,19 @@ services:
       context: .
       dockerfile: model-server/Dockerfile
 
+  ollama:
+    image: tamji-local/ollama:dev
+    build:
+      context: .
+      dockerfile: ollama/Dockerfile
+
   backend-init:
+    image: tamji-local/backend:dev
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+
+  backend-embed:
     image: tamji-local/backend:dev
     build:
       context: .

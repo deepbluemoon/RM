@@ -8,12 +8,14 @@
 |---|---|---|---|
 | `frontend` | `rm-frontend` | 직접 빌드 | 화면(정적 파일)과 `/api` 프록시 |
 | `backend` | `rm-backend` | 직접 빌드 | Express 웹 서버: 로그인, 업로드, 문서 추출, 개인정보 가리기, 청크(조항 분할), RAG(근거 검색), 분석 흐름 |
-| `model-server` | `rm-model-server` | 직접 빌드 | FastAPI 모델 게이트웨이: M1·M2 분류, LLM 외부 API 호출 |
+| `model-server` | `rm-model-server` | 직접 빌드 | FastAPI 모델 게이트웨이: M1·M2 분류, M3·M4 LLM 외부 API 호출, 임베딩 호출 중계 |
+| `ollama` | `rm-ollama` | 직접 빌드 | 임베딩 전용 Ollama: bge-m3 를 구워 넣어 하이브리드 RAG 의 벡터를 만든다 |
 | `mariadb` | `rm-mariadb` | 공식 `mariadb:12.0` | 데이터 저장. 직접 빌드하지 않는다 |
 
 - 실행 정의는 저장소 루트의 `compose.yaml` 하나로 둔다.
 - 컨테이너 이름은 운영 대시보드(`ops-dashboard/README.md`의 `OPS_NAME_PREFIXES`)와 맞춘다. 이름을 바꾸면 대시보드 설정도 함께 바꾼다.
-- LLM(M3 판정·M4 요약)은 외부 API를 쓴다. 컨테이너에서 Ollama를 띄우거나 공유 Ollama에 접속하지 않는다.
+- **LLM(M3 판정·M4 요약)은 외부 API(Vertex 등)를 쓴다.** 컨테이너에서 채팅 LLM 을 Ollama 로 띄우거나 공유 Ollama 에 접속하지 않는다.
+- **임베딩(bge-m3)은 임베딩 전용 Ollama 컨테이너(`ollama`)로 띄운다.** bge-m3 를 이미지에 구워 넣어 런타임 다운로드 없이 동작한다. 이 서비스가 없거나 죽어도 근거 검색은 BM25 로 폴백한다. 공유 Ollama 에는 접속하지 않는다.
 
 ## 2. Docker Hub 저장소와 태그
 
@@ -24,6 +26,7 @@
 | frontend | `fe` | `moonsangjin/tamji:fe-0.1.0` |
 | backend | `be` | `moonsangjin/tamji:be-0.1.0` |
 | model-server | `ms` | `moonsangjin/tamji:ms-0.1.0` |
+| ollama | `ol` | `moonsangjin/tamji:ol-0.1.0` |
 
 - 태그 종류
 
@@ -69,6 +72,14 @@
 - Python 3.11 slim, `uv sync --frozen --no-dev --extra classifiers`.
 - **torch는 CPU 전용 빌드를 쓴다.** Linux amd64에서 기본 torch는 GPU(CUDA) 라이브러리까지 받아 이미지가 수 GB 커진다. 지금도 CPU로 추론하므로 동작에 영향이 없다.
 - 학습·평가 코드(`training/`, `reports/`, `scripts/`, `tests/`)는 넣지 않는다.
+
+### ollama (임베딩 전용)
+
+- `FROM ollama/ollama:<태그>` — 베이스 태그를 digest까지 고정한다(멀티아치 amd64+arm64 매니페스트).
+- **빌드 단계에서 `ollama serve`를 백그라운드로 띄워 `ollama pull bge-m3`로 모델을 받아 이미지에 구워 넣는다(baked).** 런타임에 모델을 받지 않으므로 네트워크 없이 바로 동작한다.
+- 모델은 `/root/.ollama`가 아니라 `OLLAMA_MODELS=/models`에 두고 고정 UID/GID(10001)의 비루트로 실행한다. **런타임에 볼륨으로 `/models`를 덮으면 구운 모델이 가려지므로 덮지 않는다.**
+- 교차아치(arm64) 빌드는 빌드 단계에서 `ollama`를 QEMU로 실행하므로 느리다. 확인하지 않은 플랫폼은 지원한다고 적지 않는다(§3).
+- 공개 모델만 담으므로 비밀값이 없다. 포트(11434)는 compose 내부 네트워크로만 연다.
 
 ## 5. 모델 가중치 (model-server 이미지에 포함)
 
@@ -120,7 +131,8 @@
 ## 9. 아직 정하지 않은 것
 
 - LLM 제공자(Gemini 등)와 호출 방식. 제공자를 설정만으로 바꿀 수 있도록 OpenAI 호환 방식을 검토한다.
-- 임베딩(bge-m3) 대체. Ollama를 쓰지 않으면 RAG가 BM25만으로 동작하므로, 모델 서버에서 직접 실행할지 외부 API로 바꿀지 정한다.
-- push 자동화 시점(지금은 수동 실행), `sha` 태그 보존·삭제 기간, 베이스 이미지 갱신 주기와 취약점 점검 담당.
+- `sha` 태그 보존·삭제 기간, 베이스 이미지 갱신 주기와 취약점 점검 담당.
+
+> 임베딩(bge-m3)은 **임베딩 전용 Ollama 컨테이너(B안)**로 정했다(2026-11-03). 대안이던 모델서버 직접 실행(A)·외부 API(C) 대신, bge-m3 모델과 검색 코드를 그대로 두고 실행 위치만 컨테이너로 옮겨 코드 변경을 최소화한다. 구성은 §1·§4(ollama)를 따른다.
 
 참고: [Docker 빌드 모범 사례](https://docs.docker.com/build/building/best-practices/), [멀티 플랫폼 빌드](https://docs.docker.com/build/building/multi-platform/), [uv의 Docker 사용 안내](https://docs.astral.sh/uv/guides/integration/docker/).

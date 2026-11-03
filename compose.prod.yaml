@@ -28,7 +28,17 @@ services:
         # torch + M1·M2(fp32). 실측 대기 약 0.4GB, 분석 중 더 쓴다 — 배포 환경 확정 시 조정
         limits: { cpus: "2.0", memory: 2g }
 
+  ollama:
+    logging: *logging
+    deploy:
+      resources:
+        # bge-m3 적재 실측 약 1.2GB — 배포 환경 확정 시 조정
+        limits: { cpus: "1.0", memory: 2g }
+
   backend-init:
+    logging: *logging
+
+  backend-embed:
     logging: *logging
 
   backend:

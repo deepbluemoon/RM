@@ -1,6 +1,6 @@
 # Docker Compose 실행 안내
 
-컨테이너 4개(프런트·백엔드·모델 서버·MariaDB)를 `compose.yaml`로 함께 띄우는 방법이다. 이미지 규칙은 [Docker 이미지 규약](docker-image-policy.md), LLM 설정은 [Gemini·Vertex 가이드](gemini-vertex-setup.md)를 따른다. Windows·Mac 모두 같은 파일로 실행한다.
+컨테이너(프런트·백엔드·모델 서버·임베딩 Ollama·MariaDB)를 `compose.yaml`로 함께 띄우는 방법이다. 이미지 규칙은 [Docker 이미지 규약](docker-image-policy.md), LLM 설정은 [Gemini·Vertex 가이드](gemini-vertex-setup.md)를 따른다. Windows·Mac 모두 같은 파일로 실행한다.
 
 ## 1. 구성
 
@@ -8,9 +8,11 @@
 |---|---|---|---|
 | `frontend` | `rm-frontend-1` | 화면, `/api`를 백엔드로 전달 | `127.0.0.1:8080` |
 | `backend` | `rm-backend-1` | Express 웹 서버 | 없음 |
-| `model-server` | `rm-model-server-1` | M1·M2 분류, M3·M4(Vertex) | 없음 |
+| `model-server` | `rm-model-server-1` | M1·M2 분류, M3·M4(Vertex), 임베딩 중계 | 없음 |
+| `ollama` | `rm-ollama-1` | 임베딩 전용 Ollama(bge-m3 baked) — 하이브리드 RAG 벡터 | 없음 |
 | `mariadb` | `rm-mariadb-1` | DB (공식 `mariadb:12.0`) | 없음 |
 | `backend-init` | `rm-backend-init-1` | 1회 초기화: 마이그레이션 → 최초 지식 적재. 끝나면 종료(0) | 없음 |
+| `backend-embed` | `rm-backend-embed-1` | 1회성: 초기 근거 벡터 적재(ollama·model-server 준비 후). 끝나면 종료(0) | 없음 |
 
 | 파일 | 용도 |
 |---|---|
@@ -56,7 +58,7 @@
 ```bash
 docker compose pull
 docker compose up -d
-docker compose ps        # backend·model-server·mariadb 가 healthy, backend-init 가 Exited (0)
+docker compose ps        # backend·model-server·ollama·mariadb 가 healthy, backend-init·backend-embed 가 Exited (0)
 ```
 
 브라우저에서 `http://localhost:8080` (포트는 `.env`의 `FRONTEND_PORT`).
@@ -97,7 +99,7 @@ docker compose -f compose.yaml -f compose.prod.yaml up -d
 
 | 항목 | 운영 설정 |
 |---|---|
-| 자원 제한 | mariadb 1GB·1CPU, model-server 2GB·2CPU, backend 1GB·1CPU, frontend 256MB·0.5CPU (임시값) |
+| 자원 제한 | mariadb 1GB·1CPU, model-server 2GB·2CPU, ollama 2GB·1CPU, backend 1GB·1CPU, frontend 256MB·0.5CPU (임시값) |
 | 로그 | 컨테이너마다 10MB × 5개까지 |
 | 개발 로그인 | 끔(`NODE_ENV=production`, `AUTH_DEV_PROVIDER=false`) |
 | 쿠키 | `COOKIE_SECURE=auto`(production이면 secure). **HTTPS 앞단(리버스 프록시·로드밸런서)이 있어야 로그인된다.** HTTP로 시험할 때만 `.env`에 `COOKIE_SECURE=off` |
