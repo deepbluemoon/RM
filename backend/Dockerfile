@@ -2,7 +2,7 @@
 # 백엔드(Express 웹 서버) 이미지 — 규칙: docs/docker-image-policy.md
 # 빌드 컨텍스트는 저장소 루트다(실행 중 shared/·specs/·model-server/docs 를 읽는다).
 #   docker buildx build -f backend/Dockerfile --platform linux/amd64,linux/arm64 \
-#     -t moonsangjin/tamji:be-<버전> .
+#     -t moonsangjin/tamji:backend-<버전> .
 #
 # 빌드 결과(dist/src·dist/scripts)는 실행 단계에서 /app/backend/src·scripts 로 둔다.
 # config/env.ts 가 "자기 위치에서 두 단계 위"를 backend/ 로 보므로, 소스와 같은 구조여야

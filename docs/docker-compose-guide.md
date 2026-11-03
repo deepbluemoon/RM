@@ -65,7 +65,7 @@
 
 ### 받아서 실행 (기본)
 
-`.env.example`의 `TAMJI_VERSION`은 현재 최신 이미지의 날짜 버전(`20261103`)이다. Docker Hub에는 `fe-YYYYMMDD`, `be-YYYYMMDD`, `ms-YYYYMMDD`, `ol-YYYYMMDD`가 같은 날짜로 발행된다. 새 날짜 버전이 발행되면 `.env`의 `TAMJI_VERSION`만 새 날짜로 바꾼다.
+`.env.example`의 `TAMJI_VERSION`은 현재 최신 릴리스 버전(`0.1.0`, 주.부.수)이다. Docker Hub에는 `frontend-<버전>`, `backend-<버전>`, `model-server-<버전>`, `ollama-<버전>`이 같은 버전으로 발행된다. 새 버전이 발행되면(GitHub Release) `.env`의 `TAMJI_VERSION`만 바꾼다. 주 버전이 올랐으면 Release 본문에서 바꿀 설정을 먼저 확인한다.
 
 ```bash
 docker compose pull

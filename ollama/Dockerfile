@@ -3,7 +3,7 @@
 # 공식 ollama/ollama 에서 CPU 추론에 필요한 것만 추출해 debian-slim 에 얹는다.
 # GPU 러너(cuda_v12·cuda_v13·mlx_cuda_v13·vulkan, 합계 약 4.4GB)를 빼면 이미지가 10.7GB → 2.44GB 로 줄고,
 # bge-m3 임베딩은 CPU 로만 하므로 동작에 영향이 없다(실측 2026-11-03, amd64). 2.44GB 의 대부분(약 1.1GB)은 bge-m3 모델이다.
-#   docker buildx build -f ollama/Dockerfile --platform linux/amd64,linux/arm64 -t moonsangjin/tamji:ol-<버전> .
+#   docker buildx build -f ollama/Dockerfile --platform linux/amd64,linux/arm64 -t moonsangjin/tamji:ollama-<버전> .
 # 교차아치(arm64) 빌드는 빌드 단계에서 ollama 를 QEMU 로 실행하므로 느리다. 확인하지 않은 플랫폼은 지원한다고 적지 않는다(§3).
 # 베이스는 멀티아치(amd64+arm64) 태그를 digest 까지 고정한다(§4). 버전을 올리면 러너 경로·동작을 다시 확인한다.
 

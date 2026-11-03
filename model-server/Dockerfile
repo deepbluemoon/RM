@@ -2,7 +2,7 @@
 # 모델 서버(FastAPI 게이트웨이) 이미지 — 규칙: docs/docker-image-policy.md
 # 빌드 컨텍스트는 저장소 루트다(config.yaml 이 ../shared/assertion-terms.json 을 참조).
 #   docker buildx build -f model-server/Dockerfile --platform linux/amd64,linux/arm64 \
-#     -t moonsangjin/tamji:ms-<버전> .
+#     -t moonsangjin/tamji:model-server-<버전> .
 # 빌드 전에 git lfs pull 로 M1·M2 가중치 실물을 받아야 한다(포인터만 있으면 models 단계에서 실패).
 
 ARG PYTHON_IMAGE=python:3.11-slim-bookworm
