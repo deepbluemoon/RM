@@ -1,9 +1,9 @@
 import { summarizeMetrics, formatPercent } from './metric-display.js'
 import { httpChartData } from './http-chart.js'
 
-const state = { overview: null, catalog: null, selectedId: null, logSource: null, history: [], lastSample: null, highlightedAlertId: null, pendingAction: null, pendingRecordOperation: null }
+const state = { overview: null, catalog: null, selectedId: null, logSource: null, history: [], lastSample: null, highlightedAlertId: null, pendingAction: null, pendingRecordOperation: null, packages: null }
 const $ = (id) => document.getElementById(id)
-const viewNames = { overview: '운영 현황', containers: '컨테이너', logs: '실시간 로그', 'status-codes': 'HTTP 응답', alerts: '활성 경고', playbooks: '오류 대응', 'error-codes': '오류 코드' }
+const viewNames = { overview: '운영 현황', containers: '컨테이너', logs: '실시간 로그', 'status-codes': 'HTTP 응답', alerts: '활성 경고', playbooks: '오류 대응', 'error-codes': '오류 코드', packages: '패키지 업데이트' }
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char])
@@ -14,6 +14,60 @@ function formatDuration(seconds) {
   if (total >= 3600) return Math.floor(total / 3600) + '시간 ' + Math.floor(total % 3600 / 60) + '분'
   if (total >= 60) return Math.floor(total / 60) + '분 ' + total % 60 + '초'
   return total + '초'
+}
+
+function safeExternalLink(url) {
+  try { return new URL(url).protocol === 'https:' ? url : null } catch { return null }
+}
+
+function packageLabels(item) {
+  const services = { backend: '백엔드 API', frontend: '웹 프론트엔드', 'model-server': 'AI 모델 서버' }
+  const scopes = { runtime: '직접 의존성', optional: '선택 의존성', dev: '개발 의존성', transitive: '하위 의존성' }
+  const scope = scopes[item.scope] || item.scope || '종류 미확인'
+  return '<span class="package-chip package-service-chip">' + escapeHtml(services[item.service] || item.service) + '</span><span class="package-chip">' + escapeHtml(item.ecosystem) + '</span><span class="package-chip package-scope-chip">' + scope + '</span>'
+}
+
+function renderPackages(data) {
+  state.packages = data
+  $('package-count').textContent = Number.isFinite(data.packageCount) ? data.packageCount : '-'
+  $('package-vulnerability-count').textContent = data.advisories?.length ?? '-'
+  $('package-release-count').textContent = data.releases?.length ?? '-'
+  $('nav-package-alert-count').textContent = data.advisories?.length ?? '-'
+  $('nav-package-alert-count').classList.toggle('is-critical', Boolean(data.advisories?.length))
+  $('package-checked-at').textContent = data.checkedAt ? new Date(data.checkedAt).toLocaleString('ko-KR') : data.status === 'loading' ? '확인 중' : '미확인'
+  const advisoryList = $('package-advisories')
+  advisoryList.innerHTML = data.advisories?.length ? data.advisories.map((item) => {
+    const link = safeExternalLink(item.url)
+    return '<article class="package-item package-item-critical"><div class="package-item-heading"><span class="package-severity">' + escapeHtml(item.severity || '보안 권고') + '</span><code>' + escapeHtml(item.id) + '</code>' + packageLabels(item) + '</div><h3>' + escapeHtml(item.package) + ' · ' + escapeHtml(item.version) + '</h3><p>' + escapeHtml(item.summary) + '</p>' + (item.fixedVersions?.length ? '<p class="package-fixed">수정 버전: ' + escapeHtml(item.fixedVersions.join(', ')) + '</p>' : '') + '<div class="package-item-foot"><span>' + escapeHtml(item.aliases?.join(', ') || 'OSV 보안 데이터베이스') + '</span>' + (link ? '<a href="' + escapeHtml(link) + '" target="_blank" rel="noopener noreferrer">권고 원문 ↗</a>' : '') + '</div></article>'
+  }).join('') : '<div class="empty">' + (data.status === 'loading' ? '취약점 정보를 조회 중입니다.' : data.status === 'unavailable' ? '취약점 정보를 확인할 수 없습니다. 연결 상태와 원본 lock 파일을 확인하세요.' : '현재 설치 버전과 일치하는 OSV 권고가 없습니다.') + '</div>'
+  const releaseList = $('package-releases')
+  releaseList.innerHTML = data.releases?.length ? data.releases.map((item) => {
+    const link = safeExternalLink(item.release?.url) || safeExternalLink(item.source)
+    const notes = item.release?.notes ? '<p class="package-release-notes">' + escapeHtml(item.release.notes) + (item.release.notes.length >= 1800 ? '…' : '') + '</p>' : '<p class="package-release-notes package-no-notes">공식 릴리즈 노트를 자동으로 찾지 못했습니다. 출처에서 변경 내용을 확인하세요.</p>'
+    return '<article class="package-item"><div class="package-item-heading"><span class="package-update-badge">업데이트 후보</span>' + packageLabels(item) + '</div><h3>' + escapeHtml(item.package) + ' <span class="package-version">' + escapeHtml(item.installedVersion) + ' → ' + escapeHtml(item.latestVersion) + '</span></h3>' + (item.release?.title ? '<h4>' + escapeHtml(item.release.title) + '</h4>' : '') + notes + '<div class="package-item-foot"><span>' + escapeHtml(item.release?.publishedAt ? new Date(item.release.publishedAt).toLocaleDateString('ko-KR') : item.description) + '</span>' + (link ? '<a href="' + escapeHtml(link) + '" target="_blank" rel="noopener noreferrer">릴리즈 정보 ↗</a>' : '') + '</div></article>'
+  }).join('') : '<div class="empty">' + (data.status === 'loading' ? '릴리즈 정보를 조회 중입니다.' : '최신 버전이거나 릴리즈 메타데이터를 가져오지 못했습니다.') + '</div>'
+  if (data.errors?.length) {
+    const warning = document.createElement('p')
+    warning.className = 'package-source-warning'
+    warning.textContent = '일부 데이터 원본 확인 실패: ' + data.errors.join(' · ')
+    advisoryList.prepend(warning)
+  }
+}
+
+async function refreshPackages(force = false) {
+  const button = $('refresh-packages')
+  button.disabled = true
+  button.textContent = '확인 중…'
+  try {
+    const response = await fetch(force ? '/api/packages/refresh' : '/api/packages', { method: force ? 'POST' : 'GET', cache: 'no-store' })
+    if (!response.ok) throw new Error('HTTP ' + response.status)
+    renderPackages(await response.json())
+  } catch (error) {
+    renderPackages({ status: 'unavailable', packageCount: 0, advisories: [], releases: [], errors: [error.message] })
+  } finally {
+    button.disabled = false
+    button.textContent = '지금 확인'
+  }
 }
 
 function showView() {
@@ -411,6 +465,7 @@ async function init() {
   showView()
   window.addEventListener('hashchange', showView)
   $('refresh-now').addEventListener('click', () => { void refresh() })
+  $('refresh-packages').addEventListener('click', () => { void refreshPackages(true) })
   $('brand-refresh').addEventListener('click', () => window.location.reload())
   $('log-container-select').addEventListener('change', (event) => { if (event.target.value) selectContainer(event.target.value) })
   $('close-action-dialog').addEventListener('click', () => $('action-confirm-dialog').close())
@@ -432,8 +487,10 @@ async function init() {
     $('actions-list').innerHTML = '<div class="empty">대응 스크립트 목록을 불러오지 못했습니다.</div>'
   }
   await refresh()
+  await refreshPackages()
   await refreshOperatorRecords().catch((error) => showOperationToast(error.message, true))
   setInterval(() => { void refresh() }, 5000)
+  setInterval(() => { if (window.location.hash === '#packages') void refreshPackages() }, 60_000)
 }
 
 void init()

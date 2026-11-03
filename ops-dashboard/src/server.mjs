@@ -9,6 +9,7 @@ import { ERROR_CODES } from './errors.mjs'
 import { HTTP_STATUS_CODES, HTTP_STATUS_ALERT_RULES } from './http-status.mjs'
 import { readActionHistory, recordActionEvent } from './action-audit.mjs'
 import { deleteExpiredReports, deleteReport, listReports, readReport } from './reports.mjs'
+import { createPackageMonitor } from './packages.mjs'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const publicDir = path.join(root, 'public')
@@ -16,6 +17,12 @@ const port = Number(process.env.OPS_DASHBOARD_PORT || 9760)
 const host = process.env.OPS_DASHBOARD_HOST || '127.0.0.1'
 const pollMs = Math.max(1_000, Number(process.env.OPS_DASHBOARD_POLL_MS || 5_000))
 const statusLogTail = Math.min(Math.max(Number(process.env.OPS_HTTP_STATUS_LOG_TAIL || 200), 20), 1_000)
+const projectRoot = process.env.OPS_PROJECT_ROOT || path.resolve(root, '../..')
+const packages = createPackageMonitor({
+  projectRoot,
+  refreshMs: Math.max(60_000, Number(process.env.OPS_PACKAGE_REFRESH_MS || 6 * 60 * 60 * 1000)),
+  githubToken: process.env.GITHUB_TOKEN || '',
+})
 
 async function readStatusLogs(containers) {
   const logs = {}
@@ -79,6 +86,8 @@ async function handle(req, res) {
   if (req.method === 'GET' && url.pathname === '/api/overview') return sendJson(res, 200, monitor.getState())
   if (req.method === 'GET' && url.pathname === '/api/error-codes') return sendJson(res, 200, { codes: ERROR_CODES, actions: ACTIONS })
   if (req.method === 'GET' && url.pathname === '/api/status-codes') return sendJson(res, 200, { codes: HTTP_STATUS_CODES, rules: HTTP_STATUS_ALERT_RULES })
+  if (req.method === 'GET' && url.pathname === '/api/packages') return sendJson(res, 200, packages.getSnapshot())
+  if (req.method === 'POST' && url.pathname === '/api/packages/refresh') return sendJson(res, 200, await packages.refresh())
   if (req.method === 'GET' && url.pathname === '/api/actions/history') {
     try { return sendJson(res, 200, { events: await readActionHistory(url.searchParams.get('limit') || 30) }) }
     catch { return sendJson(res, 500, { error: '실행 이력을 읽지 못했습니다' }) }
@@ -176,5 +185,6 @@ const server = http.createServer((req, res) => {
   })
 })
 await monitor.tick()
+void packages.refresh()
 setInterval(() => { void monitor.tick() }, pollMs).unref()
 server.listen(port, host, () => process.stdout.write(`RM ops dashboard listening on http://${host}:${port}\n`))
