@@ -52,7 +52,7 @@ test('상태코드 로그 수집이 실패해도 Docker 자원 모니터링은 �
 test('MariaDB 자원 경고는 감시하지만 무조건 수평 확장하지 않는다', () => {
   const result = canRunAction('scale-service', { code: 'OPS-MEM-80-001', stateful: true })
   assert.equal(result.allowed, false)
-  assert.match(result.reason, /데이터 일관성/)
+  assert.match(result.reason, /데이터베이스 컨테이너/)
 })
 
 test('현재 프로젝트 범위는 tamji 앱과 MariaDB만 선택할 수 있다', () => {

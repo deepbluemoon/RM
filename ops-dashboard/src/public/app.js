@@ -1,7 +1,7 @@
 import { summarizeMetrics, formatPercent } from './metric-display.js'
 import { httpChartData } from './http-chart.js'
 
-const state = { overview: null, catalog: null, selectedId: null, logSource: null, alertPopoverOpen: false, highlightedAlertId: null, uiError: null, summaryOpen: null, metricHistory: [] }
+const state = { overview: null, catalog: null, selectedId: null, logSource: null, alertPopoverOpen: false, highlightedAlertId: null, uiError: null, summaryOpen: null, metricHistory: [], pendingAction: null, pendingRecordOperation: null }
 const $ = (id) => document.getElementById(id)
 
 function showView() {
@@ -237,20 +237,161 @@ function renderActions(alerts) {
   $('actions-list').innerHTML = (state.catalog?.actions || []).map((action) => {
     const alert = alerts.find((item) => activeCodes.has(item.code) && action.codes.includes(item.code))
     const code = alert?.code
-    const blocked = action.id === 'scale-service' && alert?.stateful
-    const enabled = Boolean(code) && !blocked
-    const note = blocked ? 'MariaDB는 데이터 일관성을 위해 자동 수평 확장을 차단했습니다.' : enabled ? '활성 경고에 대응할 수 있습니다.' : '대응 가능한 활성 오류가 없습니다.'
-    return `<div class="action-card${enabled ? ' is-enabled' : ''}"><div><strong>${escapeHtml(action.label)}</strong><small>${escapeHtml(note)}</small>${code ? `<div class="action-code">${escapeHtml(code)}</div>` : ''}</div><button type="button" data-action-id="${escapeHtml(action.id)}" data-code="${escapeHtml(code || '')}" ${enabled ? '' : 'disabled'}>${enabled ? '실행' : blocked ? '차단됨' : '대기 중'}</button></div>`
+    const blockedReason = action.id === 'scale-service' && alert ? scaleBlockReason(action, alert) : ''
+    const enabled = Boolean(code) && !blockedReason
+    const note = blockedReason || (enabled ? '활성 경고에 대응할 수 있습니다.' : '대응 가능한 활성 오류가 없습니다.')
+    const targetHint = action.id === 'scale-service' && action.targetService ? `${action.targetService} · 목표 ${action.targetReplicas}개` : ''
+    return `<div class="action-card${enabled ? ' is-enabled' : ''}"><div><strong>${escapeHtml(action.label)}</strong><small>${escapeHtml(action.description || note)}</small>${targetHint ? `<small class="action-availability">${escapeHtml(targetHint)}</small>` : ''}<small class="action-availability">${escapeHtml(note)}</small>${code ? `<div class="action-code">${escapeHtml(code)}</div>` : ''}<a class="action-manual-link" href="${escapeHtml(action.manualPath || '/docs/response-scripts.md')}" target="_blank" rel="noreferrer">실행 매뉴얼 ↗</a></div><button type="button" data-action-id="${escapeHtml(action.id)}" data-code="${escapeHtml(code || '')}" ${enabled ? '' : 'disabled'}>${enabled ? '검토' : blockedReason ? '차단됨' : '대기 중'}</button></div>`
   }).join('')
-  $('actions-list').querySelectorAll('button:not([disabled])').forEach((button) => button.addEventListener('click', () => runAction(button.dataset.actionId, button.dataset.code, alerts.find((alert) => alert.code === button.dataset.code))))
+  $('actions-list').querySelectorAll('button:not([disabled])').forEach((button) => button.addEventListener('click', () => openActionReview(button.dataset.actionId, button.dataset.code, alerts.find((alert) => alert.code === button.dataset.code), button)))
 }
 
-async function runAction(actionId, code, alert) {
-  if (!window.confirm(`${code} 대응 스크립트를 실행할까요?\n대상: ${alert?.containerName || '운영 환경'}`)) return
-  const response = await fetch('/api/actions/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ actionId, code }) })
-  const result = await response.json()
-  window.alert(response.ok ? `실행 완료\n${result.output || ''}` : `실행하지 못했습니다\n${result.error || '알 수 없는 오류'}`)
-  await refresh()
+function scaleBlockReason(action, alert) {
+  if (alert.stateful) return '데이터베이스 컨테이너는 수평 확장 대상이 아닙니다.'
+  if (!action.targetService) return '확장 대상 Compose 서비스를 설정하지 않았습니다.'
+  if ((action.blockedServices || []).includes(action.targetService)) return `현재 안전 정책상 ${action.targetService} 확장을 차단했습니다.`
+  if (!(action.allowedServices || []).includes(action.targetService)) return 'OPS_SCALE_ALLOWED_SERVICES에 검토된 서비스만 명시적으로 추가할 수 있습니다.'
+  if (!alert.composeService || alert.composeService !== action.targetService) return '경고 컨테이너의 Compose 서비스와 설정된 확장 대상이 다릅니다.'
+  if (!Number.isInteger(action.maxReplicas) || action.maxReplicas > action.hardMaxReplicas) return `OPS_SCALE_MAX는 ${action.hardMaxReplicas} 이하여야 합니다.`
+  if (!Number.isInteger(action.targetReplicas) || action.targetReplicas < 1 || action.targetReplicas > action.maxReplicas) return '목표 replica 수가 허용 범위를 벗어났습니다.'
+  return ''
+}
+
+function openActionReview(actionId, code, alert, trigger) {
+  const action = state.catalog.actions.find((item) => item.id === actionId)
+  if (!action || !alert) return
+  state.pendingAction = { action, code, alert, trigger }
+  $('action-confirm-title').textContent = action.label
+  $('action-confirm-description').textContent = action.description || '실행 전 대상과 영향을 확인하세요.'
+  $('action-confirm-code').textContent = code
+  if (action.id === 'scale-service') {
+    const replicas = state.overview?.containers?.filter((container) => container.running && container.composeService === action.targetService).length || 0
+    $('action-confirm-target').textContent = `${action.targetService} 서비스 · 실행 중 ${replicas}개 → 목표 ${action.targetReplicas}개 (최대 ${action.maxReplicas}개)`
+  } else {
+    $('action-confirm-target').textContent = alert.containerName || alert.containerId || 'Docker Engine'
+  }
+  $('include-logs-option').classList.toggle('hidden', !action.includeLogs)
+  $('include-recent-logs').checked = false
+  $('confirm-action').textContent = action.confirmation === 'change' ? '확인 후 변경 실행' : '검토 후 실행'
+  $('action-confirm-dialog').showModal()
+}
+
+function showOperationToast(message, isError = false) {
+  const toast = $('operation-toast')
+  toast.textContent = message
+  toast.classList.toggle('is-error', isError)
+  toast.classList.remove('hidden')
+  window.setTimeout(() => toast.classList.add('hidden'), 6000)
+}
+
+function renderActionHistory(events) {
+  const target = $('action-history')
+  if (!events.length) { target.innerHTML = '<p class="record-empty">기록된 실행이 없습니다.</p>'; return }
+  target.innerHTML = events.map((event) => `<div class="record-row"><div><strong>${escapeHtml(event.actionLabel || event.actionId)}</strong><small>${escapeHtml(new Date(event.at).toLocaleString('ko-KR'))} · ${escapeHtml(event.actor)} · ${escapeHtml(event.code)} · ${escapeHtml(event.target || '대상 없음')}</small><small class="record-status-${event.status === 'success' ? 'success' : 'failure'}">${event.status === 'success' ? '실행 완료' : '실행 실패'}${event.includeLogs ? ' · 로그 포함' : ''}</small></div>${event.reportId ? `<a href="/api/reports/${encodeURIComponent(event.reportId)}">보고서</a>` : ''}</div>`).join('')
+}
+
+function renderReports(reports) {
+  const target = $('report-list')
+  if (!reports.length) { target.innerHTML = '<p class="record-empty">저장된 진단 보고서가 없습니다.</p>'; return }
+  target.innerHTML = reports.map((report) => `<div class="record-row"><div><strong>${escapeHtml(report.id)}</strong><small>${escapeHtml(new Date(report.modifiedAt).toLocaleString('ko-KR'))} · ${formatBytes(report.sizeBytes)}</small></div><span><a href="/api/reports/${encodeURIComponent(report.id)}">다운로드</a> <button type="button" data-delete-report="${escapeHtml(report.id)}">삭제</button></span></div>`).join('')
+  target.querySelectorAll('[data-delete-report]').forEach((button) => button.addEventListener('click', () => openRecordConfirmation('delete', button.dataset.deleteReport)))
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`
+  return `${(bytes / 1024 ** 2).toFixed(1)} MiB`
+}
+
+async function refreshOperatorRecords() {
+  const [historyResponse, reportsResponse] = await Promise.all([fetch('/api/actions/history?limit=30'), fetch('/api/reports')])
+  if (!historyResponse.ok || !reportsResponse.ok) throw new Error('운영 기록을 불러오지 못했습니다')
+  const [history, reports] = await Promise.all([historyResponse.json(), reportsResponse.json()])
+  renderActionHistory(history.events || [])
+  renderReports(reports.reports || [])
+}
+
+function openRecordConfirmation(operation, reportId = '') {
+  state.pendingRecordOperation = { operation, reportId }
+  const cleanup = operation === 'cleanup'
+  $('record-confirm-title').textContent = cleanup ? '오래된 보고서 정리' : '진단 보고서 삭제'
+  $('record-confirm-description').textContent = cleanup
+    ? '수정된 지 30일이 지난 진단 보고서를 삭제합니다. 이 작업은 되돌릴 수 없습니다.'
+    : `${reportId} 보고서를 삭제합니다. 다운로드가 필요하면 먼저 파일을 저장하세요.`
+  $('confirm-record-operation').textContent = cleanup ? '30일 지난 보고서 삭제' : '보고서 삭제'
+  $('record-confirm-dialog').showModal()
+}
+
+async function performRecordOperation() {
+  const pending = state.pendingRecordOperation
+  if (!pending) return
+  $('confirm-record-operation').disabled = true
+  try {
+    const url = pending.operation === 'cleanup'
+      ? '/api/reports?olderThanDays=30'
+      : `/api/reports/${encodeURIComponent(pending.reportId)}`
+    const response = await fetch(url, { method: 'DELETE' })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error || '보고서 작업에 실패했습니다')
+    const count = pending.operation === 'cleanup' ? result.deleted.length : 1
+    $('record-confirm-dialog').close()
+    showOperationToast(`${count}개 진단 보고서를 정리했습니다.`)
+    await refreshOperatorRecords()
+  } catch (error) {
+    $('record-confirm-dialog').close()
+    showOperationToast(error instanceof Error ? error.message : String(error), true)
+  } finally {
+    $('confirm-record-operation').disabled = false
+    state.pendingRecordOperation = null
+  }
+}
+
+async function runAction() {
+  const pending = state.pendingAction
+  if (!pending) return
+  const { action, code, alert } = pending
+  $('confirm-action').disabled = true
+  $('close-action-dialog').disabled = true
+  $('cancel-action').disabled = true
+  $('confirm-action').textContent = '실행 중…'
+  $('action-result').classList.remove('hidden')
+  $('action-result').textContent = `${action.label} 실행 중 · ${alert.containerName || 'Docker Engine'}`
+  try {
+    const response = await fetch('/api/actions/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ actionId: action.id, code, includeLogs: $('include-recent-logs').checked }),
+    })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error || '알 수 없는 오류')
+    const output = result.output || ''
+    const degraded = output.includes('engine=unreachable') || output.includes('docker_cli=missing')
+    const summary = output.replace(/^report=.*\n?/m, '').trim()
+    const auditWarning = result.auditRecorded === false ? '\n경고: 실행 이력을 저장하지 못했습니다.' : ''
+    $('action-result').textContent = `${action.label} ${degraded ? '점검 완료 · 추가 확인 필요' : '완료'}${summary ? `\n${summary}` : ''}${auditWarning}`
+    if (result.reportId) {
+      const link = document.createElement('a')
+      link.href = `/api/reports/${encodeURIComponent(result.reportId)}`
+      link.textContent = '진단 보고서 다운로드'
+      link.className = 'report-download-link'
+      $('action-result').append(document.createElement('br'), link)
+    }
+    showOperationToast(result.auditRecorded === false ? '작업은 실행됐지만 실행 이력을 저장하지 못했습니다.' : degraded ? `${action.label}: 연결 상태가 정상인지 확인하세요.` : `${action.label} 작업이 끝났습니다.`, result.auditRecorded === false || degraded)
+    $('action-confirm-dialog').close()
+    await refreshOperatorRecords().catch(() => {})
+    await refresh().catch(() => {})
+  } catch (error) {
+    $('action-result').textContent = `${action.label} 실패\n${error instanceof Error ? error.message : String(error)}`
+    showOperationToast(`${action.label} 실행에 실패했습니다. 대응 영역의 상세 결과를 확인하세요.`, true)
+    $('action-confirm-dialog').close()
+  } finally {
+    $('confirm-action').disabled = false
+    $('close-action-dialog').disabled = false
+    $('cancel-action').disabled = false
+    $('confirm-action').textContent = action.confirmation === 'change' ? '확인 후 변경 실행' : '검토 후 실행'
+    pending.trigger?.focus()
+    state.pendingAction = null
+  }
 }
 
 function appendLog(line) {
@@ -319,11 +460,20 @@ async function init() {
   $('open-error-codes').addEventListener('click', () => $('error-codes').showModal())
   $('close-error-codes').addEventListener('click', () => $('error-codes').close())
   $('error-codes').addEventListener('click', (event) => { if (event.target === $('error-codes')) $('error-codes').close() })
+  $('close-action-dialog').addEventListener('click', () => $('action-confirm-dialog').close())
+  $('cancel-action').addEventListener('click', () => $('action-confirm-dialog').close())
+  $('confirm-action').addEventListener('click', () => { void runAction() })
+  $('refresh-records').addEventListener('click', () => { void refreshOperatorRecords().catch((error) => showOperationToast(error.message, true)) })
+  $('cleanup-old-reports').addEventListener('click', () => openRecordConfirmation('cleanup'))
+  $('close-record-dialog').addEventListener('click', () => $('record-confirm-dialog').close())
+  $('cancel-record-operation').addEventListener('click', () => $('record-confirm-dialog').close())
+  $('confirm-record-operation').addEventListener('click', () => { void performRecordOperation() })
   $('activity-container-select').addEventListener('change', (event) => { if (event.target.value) selectContainer(event.target.value) })
   $('clear-logs').addEventListener('click', () => { $('log-output').innerHTML = '<div class="log-empty"><span>⌁</span><p>화면에 표시된 로그를 비웠습니다.</p></div>' })
   $('refresh-now').addEventListener('click', () => { void refresh().catch(() => {}) })
   $('brand-refresh').addEventListener('click', () => window.location.reload())
   await refresh()
+  await refreshOperatorRecords().catch((error) => showOperationToast(error.message, true))
   setInterval(() => { void refresh().catch(() => {}) }, 5_000)
 }
 

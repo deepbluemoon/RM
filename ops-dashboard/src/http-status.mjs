@@ -18,7 +18,7 @@ export const HTTP_STATUS_CODE_MAP = new Map(HTTP_STATUS_CODES.map((item) => [ite
 export const HTTP_STATUS_ALERT_RULES = [
   { code: 'HTTP-404-RATE-001', title: 'HTTP 404 비율 급증', statusClass: '4xx', matchCodes: [404], thresholdRate: 20, minSamples: 10, actionIds: [] },
   { code: 'HTTP-429-RATE-001', title: 'HTTP 429 비율 급증', statusClass: '4xx', matchCodes: [429], thresholdRate: 10, minSamples: 10, actionIds: [] },
-  { code: 'HTTP-5XX-RATE-001', title: 'HTTP 5xx 비율 급증', statusClass: '5xx', thresholdRate: 5, minSamples: 10, actionIds: ['collect-diagnostics'] },
+  { code: 'HTTP-5XX-RATE-001', title: 'HTTP 5xx 비율 급증', statusClass: '5xx', thresholdRate: 5, minSamples: 10, actionIds: ['collect-incident'] },
 ]
 
 function toStatusCode(value) {
