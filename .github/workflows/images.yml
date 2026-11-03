@@ -1,8 +1,8 @@
 # 이미지 4개(fe·be·ms·ol) amd64·arm64 빌드·확인(#84) — 규칙: docs/docker-image-policy.md
 # - PR·main: 각 플랫폼의 네이티브 러너에서 빌드하고 compose 로 컨테이너를 띄워 확인한다. push 하지 않는다.
 #   ol(임베딩 전용 ollama)은 빌드 중 bge-m3 를 받아 구우므로(baked) 각 아키텍처 네이티브 러너에서 돈다(QEMU 아님).
-# - Docker Hub push: 수동 실행(workflow_dispatch)에서 push 를 켰을 때만. 태그 <약어>-sha-<커밋 12자리>,
-#   릴리스 버전을 넣으면 <약어>-<버전>·<약어>-latest 도(main 에서만). 이미 있는 sha·릴리스 태그는 덮어쓰지 않는다.
+# - Docker Hub push: 수동 실행(workflow_dispatch)에서 push 를 켰을 때만. main 에서 날짜 태그
+#   <약어>-YYYYMMDD 와 이동 태그 <약어>-latest 를 발행한다. 날짜 태그는 덮어쓰지 않는다.
 # - 필요한 Secrets(관리자 등록): DOCKERHUB_USERNAME, DOCKERHUB_TOKEN(moonsangjin/tamji 쓰기 권한 접근 토큰)
 name: images
 
@@ -31,11 +31,11 @@ on:
   workflow_dispatch:
     inputs:
       push:
-        description: Docker Hub 에 올린다(<약어>-sha-<커밋 12자리>)
+        description: Docker Hub 에 날짜 버전 이미지(fe/be/ms/ol)를 올린다
         type: boolean
         default: false
       release:
-        description: 릴리스 버전(예 0.1.0) — 넣으면 <약어>-<버전>·<약어>-latest 도 올린다(main 에서만). 비우면 sha 태그만
+        description: 필수 발행일 YYYYMMDD (예 20261103), main 에서만 허용
         type: string
         default: ""
 
@@ -71,10 +71,8 @@ jobs:
           RELEASE: ${{ inputs.release }}
         run: |
           if [ -z "$DH_USER" ] || [ -z "$DH_TOKEN" ]; then echo "::error::Secrets DOCKERHUB_USERNAME·DOCKERHUB_TOKEN 이 없습니다"; exit 1; fi
-          if [ -n "$RELEASE" ]; then
-            [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::릴리스 태그는 main 에서만 올린다"; exit 1; }
-            echo "$RELEASE" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::릴리스 버전 형식: 0.1.0"; exit 1; }
-          fi
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::날짜 릴리스는 main 에서만 올린다"; exit 1; }
+          echo "$RELEASE" | grep -Eq '^[0-9]{8}$' || { echo "::error::발행일 형식은 YYYYMMDD (예: 20261103)"; exit 1; }
 
       - uses: actions/checkout@v4
 
@@ -296,7 +294,6 @@ jobs:
         env:
           RELEASE: ${{ inputs.release }}
         run: |
-          sha=${GITHUB_SHA::12}
           exists() { docker buildx imagetools inspect "$IMAGE:$1" >/dev/null 2>&1; }
           {
             echo "## Docker Hub push"
@@ -306,16 +303,11 @@ jobs:
             echo "|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
           for s in fe be ms ol; do
-            tags=()
-            if exists "$s-sha-$sha"; then echo "$s-sha-$sha 는 이미 있어 그대로 둔다"; else tags+=(-t "$IMAGE:$s-sha-$sha"); fi
-            if [ -n "$RELEASE" ]; then
-              exists "$s-$RELEASE" && { echo "::error::$s-$RELEASE 가 이미 있다(릴리스 태그 덮어쓰기 금지)"; exit 1; }
-              tags+=(-t "$IMAGE:$s-$RELEASE" -t "$IMAGE:$s-latest")
-            fi
-            [ ${#tags[@]} -eq 0 ] && continue
+            exists "$s-$RELEASE" && { echo "::error::$s-$RELEASE 가 이미 있다(날짜 태그 덮어쓰기 금지)"; exit 1; }
+            tags=(-t "$IMAGE:$s-$RELEASE" -t "$IMAGE:$s-latest")
             docker buildx imagetools create "${tags[@]}" "$IMAGE@$(cat digests/$s-amd64)" "$IMAGE@$(cat digests/$s-arm64)"
-            digest=$(docker buildx imagetools inspect "$IMAGE:$s-sha-$sha" --format '{{json .Manifest}}' | jq -r .digest)
-            echo "| \`$s-sha-$sha\`${RELEASE:+ · \`$s-$RELEASE\` · \`$s-latest\`} | \`$digest\` |" >> "$GITHUB_STEP_SUMMARY"
+            digest=$(docker buildx imagetools inspect "$IMAGE:$s-$RELEASE" --format '{{json .Manifest}}' | jq -r .digest)
+            echo "| \`$s-$RELEASE\` · \`$s-latest\` | \`$digest\` |" >> "$GITHUB_STEP_SUMMARY"
           done
       # 팀 알림 자리 — 채널(웹훅)이 정해지면 Secrets 에 넣고 이 단계에서 보낸다(#84)
       - name: 알림

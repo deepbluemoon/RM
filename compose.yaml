@@ -69,7 +69,7 @@ services:
     restart: unless-stopped
 
   model-server:
-    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:ms-${TAMJI_VERSION:-0.1.0}
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:ms-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
     environment:
       MODEL_API_KEY: ${MODEL_API_KEY:?MODEL_API_KEY 를 .env 에 설정하세요}
       # M3·M4 LLM — docs/gemini-vertex-setup.md §4·§5
@@ -100,7 +100,7 @@ services:
   # M3·M4 LLM 은 Vertex 직결이라 무관하다. 이 서비스가 없거나 죽어도 검색은 BM25 로 동작한다.
   # 구운 모델은 이미지 안 /models 에 있다 — 볼륨으로 /models 를 덮으면 모델이 가려지므로 덮지 않는다.
   ollama:
-    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:ol-${TAMJI_VERSION:-0.1.0}
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:ol-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
     healthcheck:
@@ -115,7 +115,7 @@ services:
 
   # 1회 초기화: 마이그레이션(멱등) → 최초 지식 기준일 적재(이미 있으면 변경 없음)
   backend-init:
-    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:-0.1.0}
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
     environment: *backend-env
     command: ["sh", "-c", "node scripts/migrate.js && node scripts/seed-knowledge.js --fixture tests/fixtures/knowledge/initial.json"]
     depends_on:
@@ -127,8 +127,10 @@ services:
   # 멱등(빠진 것만 채움) — 실패해도 검색은 BM25 로 동작하므로 backend 는 이 서비스에 의존하지 않는다.
   # 반영 흐름으로 들어오는 새 기준일 벡터는 backend 가 kv_activated 이벤트로 자동 채운다(#99) — 초기 적재만 여기서 한다.
   backend-embed:
-    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:-0.1.0}
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
     environment: *backend-env
+    # 임베딩은 MariaDB evidence_embedding 테이블에 저장되어 DB_DATA(named volume)에 보존된다.
+    # 따라서 작업 컨테이너에 별도의 벡터 파일 볼륨을 마운트하지 않는다.
     # 임베딩은 M3·M4(Vertex)와 무관하다. model-server 는 Vertex 미설정 시 /health 가 degraded(503)라
     # healthy 로 올라오지 않으므로, healthy 가 아니라 started 에 의존하고 앱이 응답할 때까지 기다린 뒤 적재한다.
     command:
@@ -149,7 +151,7 @@ services:
     restart: "no"
 
   backend:
-    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:-0.1.0}
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
     environment: *backend-env
     volumes:
       # 원본 파일 임시 보관(24시간 내 삭제)·지식 스테이징·벡터 캐시
@@ -171,7 +173,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:fe-${TAMJI_VERSION:-0.1.0}
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:fe-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
     environment:
       BACKEND_URL: http://backend:9522
     ports:
