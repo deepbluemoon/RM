@@ -15,6 +15,9 @@
 - 현재 RM의 backend·frontend·model-server·DB·초기화 작업은 메모리 상태, 작업 큐, 고정 포트 또는 데이터 일관성 문제로 기본 차단한다.
 - 스크립트 실행 이력은 로컬 JSONL로 보관하며, 진단 보고서 다운로드·개별 삭제·30일 초과분 정리를 제공한다.
 - 실행 중 컨테이너의 Docker access log에서 HTTP 상태코드 전체를 비식별 파싱하고 `HTTP-200`, `HTTP-404`, `HTTP-5XX-RATE-001` 같은 태그·경고로 집계한다.
+- 패키지 업데이트 화면에서 backend/frontend의 npm lock 파일과 model-server의 uv lock 파일을 읽고 OSV 보안 권고 및 직접·선택 의존성의 최신 릴리즈 정보를 주기적으로 조회한다. 카드에 서비스 역할(백엔드 API·웹 프론트엔드·AI 모델 서버), 생태계(npm·PyPI), 의존성 종류(직접·선택·개발·하위)를 표시한다. 패치·버전 변경은 운영자가 수동으로 진행한다.
+- GitHub Release 노트가 있으면 원문 앞부분을 표시한다. 자동 요약은 아직 제공하지 않으며, 원문과 출처 링크를 바탕으로 운영자가 판단한다.
+- 대시보드는 로컬 주소만 수신하므로 GitHub 웹훅을 직접 받지 않는다. 패키지 정보는 대시보드에서 OSV, npm, PyPI, 가능한 경우 GitHub Releases API를 outbound로 조회한다. GitHub token은 선택 설정이며 `.env`에만 둔다.
 
 ## 호스트에서 실행
 
@@ -91,5 +94,7 @@ OPS_PROJECT_DIR=/srv/rm OPS_COMPOSE_FILE=/workspace/compose.yml \
 - `GET /api/status-codes`: 표준 HTTP 상태코드 전체와 운영 경고 규칙
 - `POST /api/actions/run`: 활성 오류코드에 허용된 대응 스크립트 실행
 - `GET /api/health`: 프로세스 상태
+- `GET /api/packages`: 마지막 패키지 조회 결과
+- `POST /api/packages/refresh`: 패키지 정보를 즉시 다시 조회
 
 HTTP 상태코드 수집·운영 기준과 주의사항은 [docs/http-status-codes.md](docs/http-status-codes.md)에 기록한다. 인증·TLS·감사 로그·다중 Docker 호스트·메트릭 영속화는 현재 단계가 아니다. 운영 공개 전에는 기존 인증 체계 또는 별도 운영망/리버스 프록시를 붙이는 후속 이슈가 필요하다.
