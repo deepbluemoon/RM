@@ -31,6 +31,7 @@ function renderPackages(data) {
   state.packages = data
   $('package-count').textContent = Number.isFinite(data.packageCount) ? data.packageCount : '-'
   $('package-vulnerability-count').textContent = data.advisories?.length ?? '-'
+  $('package-security-count').textContent = data.advisories?.length ?? '-'
   $('package-release-count').textContent = data.releases?.length ?? '-'
   $('nav-package-alert-count').textContent = data.advisories?.length ?? '-'
   $('nav-package-alert-count').classList.toggle('is-critical', Boolean(data.advisories?.length))
@@ -41,11 +42,37 @@ function renderPackages(data) {
     return '<article class="package-item package-item-critical"><div class="package-item-heading"><span class="package-severity">' + escapeHtml(item.severity || '보안 권고') + '</span><code>' + escapeHtml(item.id) + '</code>' + packageLabels(item) + '</div><h3>' + escapeHtml(item.package) + ' · ' + escapeHtml(item.version) + '</h3><p>' + escapeHtml(item.summary) + '</p>' + (item.fixedVersions?.length ? '<p class="package-fixed">수정 버전: ' + escapeHtml(item.fixedVersions.join(', ')) + '</p>' : '') + '<div class="package-item-foot"><span>' + escapeHtml(item.aliases?.join(', ') || 'OSV 보안 데이터베이스') + '</span>' + (link ? '<a href="' + escapeHtml(link) + '" target="_blank" rel="noopener noreferrer">권고 원문 ↗</a>' : '') + '</div></article>'
   }).join('') : '<div class="empty">' + (data.status === 'loading' ? '취약점 정보를 조회 중입니다.' : data.status === 'unavailable' ? '취약점 정보를 확인할 수 없습니다. 연결 상태와 원본 lock 파일을 확인하세요.' : '현재 설치 버전과 일치하는 OSV 권고가 없습니다.') + '</div>'
   const releaseList = $('package-releases')
-  releaseList.innerHTML = data.releases?.length ? data.releases.map((item) => {
-    const link = safeExternalLink(item.release?.url) || safeExternalLink(item.source)
-    const notes = item.release?.notes ? '<p class="package-release-notes">' + escapeHtml(item.release.notes) + (item.release.notes.length >= 1800 ? '…' : '') + '</p>' : '<p class="package-release-notes package-no-notes">공식 릴리즈 노트를 자동으로 찾지 못했습니다. 출처에서 변경 내용을 확인하세요.</p>'
-    return '<article class="package-item"><div class="package-item-heading"><span class="package-update-badge">업데이트 후보</span>' + packageLabels(item) + '</div><h3>' + escapeHtml(item.package) + ' <span class="package-version">' + escapeHtml(item.installedVersion) + ' → ' + escapeHtml(item.latestVersion) + '</span></h3>' + (item.release?.title ? '<h4>' + escapeHtml(item.release.title) + '</h4>' : '') + notes + '<div class="package-item-foot"><span>' + escapeHtml(item.release?.publishedAt ? new Date(item.release.publishedAt).toLocaleDateString('ko-KR') : item.description) + '</span>' + (link ? '<a href="' + escapeHtml(link) + '" target="_blank" rel="noopener noreferrer">릴리즈 정보 ↗</a>' : '') + '</div></article>'
-  }).join('') : '<div class="empty">' + (data.status === 'loading' ? '릴리즈 정보를 조회 중입니다.' : '최신 버전이거나 릴리즈 메타데이터를 가져오지 못했습니다.') + '</div>'
+  const query = $('package-search').value.trim().toLowerCase()
+  const service = $('package-service-filter').value
+  const scope = $('package-scope-filter').value
+  const groups = new Map()
+  const releases = (data.releases || []).flatMap((item) => item.version ? [item] : item.latestVersion ? [{
+    ...item,
+    version: item.latestVersion,
+    publishedAt: item.release?.publishedAt || null,
+    title: item.release?.title || `v${item.latestVersion}`,
+    notes: item.release?.notes || '',
+    url: item.release?.url || item.source,
+  }] : [])
+  for (const item of releases) {
+    if (service !== 'all' && item.service !== service) continue
+    if (scope !== 'all' && item.scope !== scope) continue
+    if (query && !`${item.package} ${item.version}`.toLowerCase().includes(query)) continue
+    const key = `${item.service}:${item.ecosystem}:${item.package}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(item)
+  }
+  const groupRows = [...groups.values()].sort((a, b) => a[0].package.localeCompare(b[0].package))
+  releaseList.innerHTML = groupRows.length ? groupRows.map((items) => {
+    const first = items[0]
+    const versions = items.map((item) => item.version)
+    const releaseRows = items.map((item) => {
+      const link = safeExternalLink(item.url) || safeExternalLink(item.source)
+      const notes = item.notes ? '<p class="package-release-notes">' + escapeHtml(item.notes) + (item.notes.length >= 1800 ? '…' : '') + '</p>' : '<p class="package-release-notes package-no-notes">이 버전의 릴리즈 노트가 없습니다. 버전 이력에서 변경 사항을 확인하세요.</p>'
+      return '<article class="package-release-row"><div class="package-release-row-head"><strong>' + escapeHtml(item.version) + '</strong><time>' + escapeHtml(item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('ko-KR') : '날짜 미제공') + '</time>' + (link ? '<a href="' + escapeHtml(link) + '" target="_blank" rel="noopener noreferrer">원문 ↗</a>' : '') + '</div><p class="package-release-title">' + escapeHtml(item.title) + '</p>' + notes + '</article>'
+    }).join('')
+    return '<details class="package-group"><summary><span class="package-group-name">' + escapeHtml(first.package) + '</span>' + packageLabels(first) + '<span class="package-group-range">' + escapeHtml(first.installedVersion) + ' 이후 ' + items.length + '개 · 최신 ' + escapeHtml(versions[0]) + '</span></summary><div class="package-group-releases">' + releaseRows + '</div></details>'
+  }).join('') : '<div class="empty">' + (data.status === 'loading' ? '릴리즈 이력을 조회 중입니다.' : query || service !== 'all' || scope !== 'all' ? '필터 조건에 맞는 릴리즈가 없습니다.' : '설치 버전 이후 새 릴리즈가 없습니다.') + '</div>'
   if (data.errors?.length) {
     const warning = document.createElement('p')
     warning.className = 'package-source-warning'
@@ -466,6 +493,22 @@ async function init() {
   window.addEventListener('hashchange', showView)
   $('refresh-now').addEventListener('click', () => { void refresh() })
   $('refresh-packages').addEventListener('click', () => { void refreshPackages(true) })
+  $('toggle-package-security').addEventListener('click', () => {
+    const content = $('package-advisories')
+    const isExpanded = $('toggle-package-security').getAttribute('aria-expanded') === 'true'
+    content.classList.toggle('hidden', isExpanded)
+    $('toggle-package-security').setAttribute('aria-expanded', String(!isExpanded))
+    $('toggle-package-security').textContent = isExpanded ? '목록 펼치기' : '목록 접기'
+  })
+  $('package-search').addEventListener('input', () => { if (state.packages) renderPackages(state.packages) })
+  $('package-service-filter').addEventListener('change', () => { if (state.packages) renderPackages(state.packages) })
+  $('package-scope-filter').addEventListener('change', () => { if (state.packages) renderPackages(state.packages) })
+  $('package-expand-all').addEventListener('click', () => {
+    const groups = [...document.querySelectorAll('.package-group')]
+    const shouldOpen = groups.some((group) => !group.open)
+    groups.forEach((group) => { group.open = shouldOpen })
+    $('package-expand-all').textContent = shouldOpen ? '모두 접기' : '모두 펼치기'
+  })
   $('brand-refresh').addEventListener('click', () => window.location.reload())
   $('log-container-select').addEventListener('change', (event) => { if (event.target.value) selectContainer(event.target.value) })
   $('close-action-dialog').addEventListener('click', () => $('action-confirm-dialog').close())
