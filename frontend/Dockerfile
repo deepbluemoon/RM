@@ -2,7 +2,7 @@
 # 프런트엔드 이미지 — 규칙: docs/docker-image-policy.md
 # 빌드 컨텍스트는 저장소 루트다(다른 이미지와 같은 방식).
 #   docker buildx build -f frontend/Dockerfile --platform linux/amd64,linux/arm64 \
-#     -t moonsangjin/tamji:fe-<버전> .
+#     -t moonsangjin/tamji:frontend-<버전> .
 # 실행 시 BACKEND_URL 로 /api 를 넘길 백엔드 주소를 바꿀 수 있다(기본 http://backend:9522).
 
 ARG NODE_IMAGE=node:20-bookworm-slim

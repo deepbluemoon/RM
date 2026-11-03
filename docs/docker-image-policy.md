@@ -19,28 +19,33 @@
 
 ## 2. Docker Hub 저장소와 태그
 
-- 저장소는 팀 저장소 `moonsangjin/tamji` 하나를 쓰고, **태그 앞의 서비스 약어**로 이미지를 구분한다.
+### 버전 올리는 기준 — 유의적 버전(SemVer) `주.부.수` (#121)
 
-| 서비스 | 약어 | 예 |
-|---|---|---|
-| frontend | `fe` | `moonsangjin/tamji:fe-20261103` |
-| backend | `be` | `moonsangjin/tamji:be-20261103` |
-| model-server | `ms` | `moonsangjin/tamji:ms-20261103` |
-| ollama | `ol` | `moonsangjin/tamji:ol-20261103` |
-
-- 태그 종류
-
-| 태그 | 형식 | 용도 | 덮어쓰기 |
+| 올릴 버전 | 언제 | 우리 서비스에서의 예 | 예 |
 |---|---|---|---|
-| 날짜 릴리스 | `<약어>-YYYYMMDD` (예: `be-20261103`) | 배포·compose에서 사용 | **금지** |
-| 개발 빌드 | Docker Hub에 발행하지 않음 | CI 검증용 로컬 이미지 | 해당 없음 |
-| 최신 | `<약어>-latest` | `main` 기준 최신 릴리스를 가리킴 | 릴리스 때만 이동 |
+| **주** (Major) | 받는 쪽이 손대야 하는 호환 깨짐 | `.env` 변수 이름 변경·삭제·필수 추가, compose 서비스 구성 변경, 되돌릴 수 없는 DB 마이그레이션, 모델 API 계약 변경 | `1.4.2` → `2.0.0` (부·수 0으로) |
+| **부** (Minor) | 호환되는 기능 추가 | 새 화면·기능, 선택 변수 추가, 기존 데이터와 호환되는 DB 마이그레이션 | `1.4.2` → `1.5.0` (수 0으로) |
+| **수** (Patch) | 호환되는 버그 수정 | 버그·문구 수정, 의존성 패치 | `1.4.2` → `1.4.3` |
 
-- 날짜는 UTC가 아닌 한국 시간(`Asia/Seoul`)의 이미지 발행일을 `YYYYMMDD`로 기록한다.
-- 릴리스 워크플로는 네 이미지를 같은 `main` 커밋에서 빌드·검증한 뒤 날짜를 붙인다. 기존에 별도 커밋에서 빌드된 이미지를 날짜 태그로 전환할 때는 이미지별 기존 태그와 digest를 기록해 출처를 보존한다.
-- 날짜 태그는 불변으로 취급한다. 이미 존재하면 덮어쓰지 말고 새 날짜를 사용한다. `latest`는 날짜 릴리스와 함께 이동하는 편의 태그이며 Compose에는 쓰지 않는다.
-- `.env`의 `TAMJI_VERSION`은 네 날짜 태그의 공통 날짜다. 각 날짜 태그는 해당 릴리스에 포함한 최신 이미지이며 멀티아키텍처 manifest를 포함한다. 이미지별 소스 커밋과 digest를 릴리스 기록에 남긴다.
-- push한 뒤에는 태그와 함께 **이미지 digest와 소스 커밋**을 PR이나 릴리스 기록에 남긴다. 롤백은 검증했던 digest로 한다.
+- 운영 전에는 `0.y.z`(초기 개발 단계)로 `0.1.0`부터 시작하고, 실제 운영을 시작할 때 `1.0.0`을 붙인다.
+- 네 이미지는 항상 **같은 버전으로 함께** 발행한다. 하나만 바뀌어도 함께 올린다. `.env`의 `TAMJI_VERSION` 하나가 함께 검증된 한 세트를 가리킨다.
+
+### 저장소와 태그 이름
+
+- 저장소는 팀 저장소 `moonsangjin/tamji` 하나를 쓰고, **태그 앞의 서비스 이름**으로 이미지를 구분한다. 태그는 `<서비스>-<주.부.수>` 하나뿐이다.
+
+| 서비스 | 예 |
+|---|---|
+| frontend | `moonsangjin/tamji:frontend-0.1.0` |
+| backend | `moonsangjin/tamji:backend-0.1.0` |
+| model-server | `moonsangjin/tamji:model-server-0.1.0` |
+| ollama | `moonsangjin/tamji:ollama-0.1.0` |
+
+- **버전 태그는 덮어쓰지 않는다.** 이미 있으면 발행을 중단한다. 같은 날 다시 낼 때도 수 버전을 올린다.
+- **이동 태그는 만들지 않는다.** `backend-0.1` 같은 부분 버전 태그와 `backend-latest`가 없다. 최신 버전은 `.env.example`의 `TAMJI_VERSION`과 GitHub Release로 확인한다.
+- 개발 빌드는 Docker Hub에 올리지 않는다(CI 검증용 로컬 이미지, 개발용은 `compose.dev.yaml`로 각자 빌드).
+- **커밋 추적**: 이미지에 OCI 라벨(`org.opencontainers.image.revision`·`version`·`created`·`source`)을 넣는다. `docker buildx imagetools inspect <이미지> --format '{{json .Image}}'`로 확인한다.
+- **릴리스 기록**: 발행하면 git 태그 `v<주.부.수>`와 GitHub Release를 만든다. 본문에 소스 커밋, 이미지 digest, 마지막 DB 마이그레이션, 포함 PR을 남긴다. 롤백은 이전 버전으로 `TAMJI_VERSION`을 바꿔서 하되, 그 사이 DB 마이그레이션이 있으면 호환을 먼저 확인한다(마이그레이션은 앞으로만 적용된다).
 
 ## 3. 플랫폼
 
@@ -114,8 +119,9 @@
 - push 결과(태그, digest, 소스 커밋, 확인한 플랫폼)는 해당 PR에 남긴다.
 - GitHub Actions(`.github/workflows/images.yml`, #84)가 네 이미지를 amd64·arm64 네이티브 러너에서 빌드하고 `compose.yaml`로 네 컨테이너를 띄워 확인한다.
   - PR·`main`: 빌드·확인만 하고 push하지 않는다.
-- push: Actions 화면에서 수동 실행(Run workflow)하고 `push`를 켠 뒤, `release`에 발행일(예: `20261103`)을 입력한다. `main`에서만 `<약어>-<YYYYMMDD>`와 `<약어>-latest`를 발행한다. 날짜 태그가 하나라도 이미 있으면 릴리스를 중단한다.
-  - 결과(태그·digest·소스 커밋)는 실행 요약(Summary)에 남는다. 릴리스 PR에 옮겨 적는다.
+- push: Actions 화면에서 수동 실행(Run workflow)하고 `push`를 켠 뒤, `release`에 버전(예: `0.1.0`)을 입력한다. `main`에서만 `<서비스>-<주.부.수>`를 발행한다. git 태그 `v<버전>`이나 버전 태그가 하나라도 이미 있으면 릴리스를 중단한다.
+  - 발행이 끝나면 git 태그 `v<버전>`과 GitHub Release(소스 커밋·digest·마지막 DB 마이그레이션·포함 PR)를 자동으로 만든다. 실행 요약(Summary)에도 같은 표가 남는다.
+  - 발행 뒤 `.env.example`의 `TAMJI_VERSION`을 새 버전으로 올리는 PR을 낸다.
 - 관리자 작업: 저장소 Settings → Secrets and variables → Actions에 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`(`moonsangjin/tamji` 쓰기 권한 접근 토큰)을 등록한다. 없으면 push 실행이 처음에 멈춘다.
 - 모델 가중치(LFS)는 Actions 캐시에 두어 실행마다 LFS 대역폭을 쓰지 않게 한다. 새 이미지 알림 채널은 정해지면 워크플로의 "알림" 단계에 연결한다.
 
@@ -130,19 +136,20 @@
 5. 화면에서 로그인 → 업로드 → 분석 → 결과까지 확인했다.
 6. 이미지에 비밀값, 계약서 원문, 불필요한 데이터가 없다.
 
-## 9. 날짜 릴리스 준비 체크
+## 9. 릴리스 준비 체크
 
+- [ ] 이전 릴리스 이후 변경을 보고 §2 기준표로 올릴 버전(주·부·수)을 정한다.
 - [ ] 로컬 `.env`에 DB·세션·모델 API 비밀값을 설정하고, Vertex 인증 파일을 준비한다.
 - [ ] `main` 커밋 SHA를 기록하고 Git LFS 가중치를 받은 뒤 네 이미지 모두 같은 소스 커밋으로 빌드한다.
 - [ ] 네 이미지 각각 `linux/amd64`와 `linux/arm64` manifest를 확인한다.
-- [ ] 이미지별 날짜 태그(`fe-YYYYMMDD`, `be-YYYYMMDD`, `ms-YYYYMMDD`, `ol-YYYYMMDD`)와 digest를 기록한다.
-- [ ] `.env`의 `TAMJI_VERSION=YYYYMMDD`를 설정하고 `docker compose pull`이 네 이미지를 모두 받는지 확인한다.
+- [ ] GitHub Release에 이미지별 태그(`frontend-<버전>`, `backend-<버전>`, `model-server-<버전>`, `ollama-<버전>`)와 digest가 기록됐는지 확인한다.
+- [ ] `.env`의 `TAMJI_VERSION=<버전>`을 설정하고 `docker compose pull`이 네 이미지를 모두 받는지 확인한다.
 - [ ] MariaDB·모델 서버·Ollama·백엔드·프런트엔드 healthcheck와 초기화 작업의 종료 코드를 확인한다.
 
 ## 10. 아직 정하지 않은 것
 
 - LLM 제공자(Gemini 등)와 호출 방식. 제공자를 설정만으로 바꿀 수 있도록 OpenAI 호환 방식을 검토한다.
-- 기존 `sha` 태그의 보존·삭제 정책, 베이스 이미지 갱신 주기와 취약점 점검 담당.
+- 베이스 이미지 갱신 주기와 취약점 점검 담당.
 
 > 임베딩(bge-m3)은 **임베딩 전용 Ollama 컨테이너(B안)**로 정했다(2026-11-03). 대안이던 모델서버 직접 실행(A)·외부 API(C) 대신, bge-m3 모델과 검색 코드를 그대로 두고 실행 위치만 컨테이너로 옮겨 코드 변경을 최소화한다. 구성은 §1·§4(ollama)를 따른다.
 
