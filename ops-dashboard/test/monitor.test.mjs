@@ -145,3 +145,40 @@ test('HTTP 응답을 Compose 서비스와 명시된 route template별로 집계�
   ])
   assert.equal(JSON.stringify(state.routes).includes('private-user-value'), false)
 })
+
+test('배포 버전과 유효한 trace·request ID를 요청 이벤트에 연결한다', () => {
+  const aggregator = createHttpStatusAggregator({ deploymentVersion: 'release-2026.11' })
+  const containers = [{ id: 'backend-1', name: 'rm-backend-1', composeService: 'backend', running: true }]
+  const state = aggregator.observe(containers, {
+    'backend-1': [
+      JSON.stringify({ status: 500, method: 'POST', route: '/api/analyze', requestId: 'req-123', traceId: 'trace_456' }),
+      JSON.stringify({ status: 200, method: 'GET', route: '/health', requestId: 'x'.repeat(129), deploymentVersion: 'build-7' }),
+      JSON.stringify({ status: 200, path: '/raw/path?token=secret' }),
+    ],
+  })
+  assert.equal(state.correlations.length, 3)
+  assert.deepEqual(state.correlations[0], {
+    service: 'backend', containerName: 'rm-backend-1', status: 200, method: '', route: '',
+    requestId: '', traceId: '', deploymentVersion: 'release-2026.11',
+  })
+  assert.deepEqual(state.correlations[1], {
+    service: 'backend', containerName: 'rm-backend-1', status: 200, method: 'GET', route: '/health',
+    requestId: '', traceId: '', deploymentVersion: 'build-7',
+  })
+  assert.deepEqual(state.correlations[2], {
+    service: 'backend', containerName: 'rm-backend-1', status: 500, method: 'POST', route: '/api/analyze',
+    requestId: 'req-123', traceId: 'trace_456', deploymentVersion: 'release-2026.11',
+  })
+  assert.equal(JSON.stringify(state.correlations).includes('token=secret'), false)
+})
+
+test('상위 모니터가 설정된 배포 버전을 상관관계로 전달한다', async () => {
+  const monitor = createMonitor({
+    deploymentVersion: 'release-8',
+    readSnapshot: async () => [{ id: 'api', name: 'api', composeService: 'backend', running: true }],
+    readStatusLogs: async () => ({ logs: { api: [JSON.stringify({ status: 200, requestId: 'req-8' })] }, errors: [] }),
+  })
+  const state = await monitor.tick()
+  assert.equal(state.statusCodes.correlations[0].deploymentVersion, 'release-8')
+  assert.equal(state.statusCodes.correlations[0].requestId, 'req-8')
+})
