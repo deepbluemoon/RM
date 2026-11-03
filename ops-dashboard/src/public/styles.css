@@ -102,7 +102,27 @@ a.summary-card:hover { border-color: #455365; background: #151a22; }
 .package-stat strong { overflow: hidden; color: var(--text); font: 500 22px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .package-stat-danger strong { color: var(--red); }
 .package-panel { margin-bottom: 12px; }
+.package-head-actions { display: flex; align-items: center; gap: 12px; }
 .package-list { display: grid; gap: 9px; }
+.package-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.package-filters label { display: grid; gap: 4px; color: var(--muted); font-size: 10px; }
+.package-filters input, .package-filters select { min-height: 32px; min-width: 150px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 4px; color: var(--text); background: #11161d; font: 11px var(--sans); }
+.package-filters input:focus, .package-filters select:focus { outline: 2px solid #4a8e9d; outline-offset: 1px; }
+.package-filters button { margin-left: auto; }
+.package-group { overflow: hidden; border: 1px solid var(--line-soft); border-radius: 5px; background: var(--panel-deep); }
+.package-group summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px; cursor: pointer; list-style-position: inside; }
+.package-group summary:hover { background: #171e27; }
+.package-group-name { color: var(--text); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.package-group-range { margin-left: auto; color: var(--muted); font: 10px var(--mono); }
+.package-group[open] summary { border-bottom: 1px solid var(--line-soft); }
+.package-group-releases { display: grid; gap: 0; padding: 0 12px; }
+.package-release-row { padding: 12px 2px; border-bottom: 1px solid var(--line-soft); }
+.package-release-row:last-child { border-bottom: 0; }
+.package-release-row-head { display: flex; align-items: center; gap: 12px; }
+.package-release-row-head strong { color: var(--cyan); font: 12px var(--mono); }
+.package-release-row-head time { color: var(--dim); font-size: 10px; }
+.package-release-row-head a { margin-left: auto; color: #92b6ed; font-size: 10px; text-decoration: none; }
+.package-release-title { margin: 6px 0 !important; color: var(--text) !important; font-size: 11px !important; }
 .package-item { min-width: 0; padding: 13px 14px; border: 1px solid var(--line-soft); border-radius: 5px; background: var(--panel-deep); }
 .package-item-critical { border-left: 3px solid var(--red); }
 .package-item-heading, .package-item-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
