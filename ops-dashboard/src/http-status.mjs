@@ -152,9 +152,11 @@ export function createHttpStatusAggregator({
   now = () => Date.now(),
   alertDurationMs = 30_000,
   rules = HTTP_STATUS_ALERT_RULES,
+  deploymentVersion = '',
 } = {}) {
+  const configuredDeployment = safeField(deploymentVersion)
   const startedAt = new Map()
-  let latest = { observedAt: now(), containers: [], totals: summarizeHttpStatusLines([]), alerts: [], collectionErrors: [] }
+  let latest = { observedAt: now(), containers: [], services: [], routes: [], correlations: [], totals: summarizeHttpStatusLines([]), alerts: [], collectionErrors: [] }
 
   function observe(containers, logsByContainer = {}, observedAt = now(), collectionErrors = []) {
     const activeContainers = containers.filter((container) => container.running)
@@ -183,6 +185,19 @@ export function createHttpStatusAggregator({
     }
     const services = [...serviceMap].map(([service, events]) => ({ service, ...summaryFromEvents(events) }))
     const routes = [...routeMap.values()].map(({ events, ...group }) => ({ ...group, ...summaryFromEvents(events) }))
+    const correlations = activeContainers.flatMap((container) => eventsByContainer.get(container.id)
+      .map((event) => ({
+        service: container.composeService || container.name || container.id,
+        containerName: container.name,
+        status: event.status.code,
+        method: event.method,
+        route: event.route,
+        requestId: event.requestId,
+        traceId: event.traceId,
+        deploymentVersion: event.deploymentVersion || configuredDeployment,
+      }))
+      .filter((event) => event.requestId || event.traceId || event.deploymentVersion))
+      .slice(-25).reverse()
     const alerts = []
     const activeKeys = new Set()
     for (const container of containerSummaries) {
@@ -222,7 +237,7 @@ export function createHttpStatusAggregator({
       }
     }
     for (const key of startedAt.keys()) if (!activeKeys.has(key)) startedAt.delete(key)
-    latest = { observedAt, containers: containerSummaries, services, routes, totals, alerts, collectionErrors }
+    latest = { observedAt, containers: containerSummaries, services, routes, correlations, totals, alerts, collectionErrors }
     return latest
   }
 

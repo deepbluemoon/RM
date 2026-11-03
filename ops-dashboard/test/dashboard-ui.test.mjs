@@ -106,6 +106,7 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
       totals: { classCounts: { '1xx': 0, '2xx': 1, '3xx': 0, '4xx': 0, '5xx': 0 } },
       services: [{ service: 'backend', total: 1, classCounts: { '5xx': 0 } }],
       routes: [{ service: 'backend', method: 'GET', route: '/api/health', total: 1 }],
+      correlations: [{ service: 'backend', status: 503, method: 'GET', route: '/api/health', traceId: 'trace-123', deploymentVersion: 'release-7' }],
       collectionErrors: [],
     },
   }
@@ -125,6 +126,8 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
   assert.match(element('status-summary').innerHTML, /2XX/)
   assert.match(element('status-summary').innerHTML, /backend/)
   assert.match(element('status-summary').innerHTML, /\/api\/health/)
+  assert.match(element('status-summary').innerHTML, /release-7/)
+  assert.match(element('status-summary').innerHTML, /trace-123/)
   assert.match(element('container-list').innerHTML, /api/)
   assert.match(element('activity-container-select').innerHTML, /worker/)
   assert.equal(element('alert-count').textContent, '3')

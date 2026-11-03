@@ -59,6 +59,14 @@ HTTP/1.1 429
 
 정규화 메타데이터는 파서 결과이며 현재 수집기에서 요청별로 저장하지 않는다. 경로에 포함된 서비스별 민감 식별자는 자동 판별할 수 없으므로, 다음 서비스·라우트 집계에서는 명시적인 route template만 그룹 키로 사용하고 원시 URL을 표시하지 않는다.
 
+## 배포·요청 상관관계
+
+- `OPS_DEPLOYMENT_VERSION`으로 해당 운영 대시보드 실행 환경의 배포 버전을 지정할 수 있다. 구조화 로그에 `deploymentVersion`, `release`, `version`이 있으면 그 값을 우선한다.
+- JSON 로그의 `requestId`/`request_id`, `traceId`/`trace_id`/`trace.id`가 정규화 결과에 포함되며, 상태코드 화면은 최근 Docker log tail에서 관련 요청 이벤트를 최대 25개까지 표시한다.
+- 원시 로그 본문과 query string은 이 상관관계 목록·감사 파일에 저장하지 않는다. 파싱된 ID는 128자 이하의 제한 문자만 허용하며, 브라우저에서 텍스트로 escape해 표시한다.
+- trace backend 연동이나 ID 링크 이동은 제공하지 않는다. request/trace ID를 연결할 로깅 시스템이 같은 ID를 기록하고 있어야 운영자가 해당 시스템에서 검색할 수 있다.
+- `OPS_DEPLOYMENT_VERSION`은 대시보드 프로세스에 설정하는 fallback이다. 서비스별 버전 차이가 있으면 각 JSON 로그의 배포 버전 필드를 사용한다.
+
 ## 운영 경고 기준
 
 서비스는 Compose service label을 우선 사용하고 없으면 컨테이너 이름으로 구분한다. 라우트 집계는 JSON 로그의 `route`, `routePattern`, `pathTemplate` 필드만 사용한다. 원시 요청 URL과 query string은 집계 결과·화면에 포함하지 않으며, route template이 없는 로그는 서비스·컨테이너 집계에는 포함하되 라우트 목록에서는 제외한다.

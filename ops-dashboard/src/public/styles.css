@@ -148,6 +148,12 @@ button.summary-card.accent-pink:hover, button.summary-card.accent-pink:focus-vis
 .status-breakdowns li b { color: var(--muted); font: 10px var(--mono); }
 .status-breakdowns li small { flex: 0 0 auto; color: var(--muted); font-size: 9px; }
 .status-breakdowns .status-breakdown-empty { color: var(--muted); }
+.request-correlations { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.request-correlations h3 { margin: 0 0 5px; color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; }
+.request-correlations ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.request-correlations li { display: grid; gap: 2px; min-width: 0; color: var(--ink); font-size: 10px; }
+.request-correlations li span, .request-correlations li small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.request-correlations li small { color: var(--muted); font: 9px var(--mono); }
 .alerts-popover { position: absolute; z-index: 10; top: 0; left: 0; display: flex; width: min(440px, 72%); max-height: min(55vh, 440px); flex-direction: column; padding: 14px; border: 1px solid rgba(239,68,68,.55); border-radius: 6px; background: var(--surface); box-shadow: 0 12px 32px rgba(0,0,0,.45); }
 .alerts-popover.hidden { display: none; }
 .alerts-popover .panel-head { margin-bottom: 8px; }
