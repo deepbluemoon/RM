@@ -16,10 +16,9 @@
 
 | 파일 | 용도 |
 |---|---|
-| `compose.yaml` | 기본. Docker Hub 이미지를 받아 실행 |
-| `compose.dev.yaml` | 개발. 기본 위에 겹쳐 직접 빌드·개발용 로그인·디버깅 포트 |
+| `compose.yaml` | 범용. 팀원 PC와 운영 서버 공통. Docker Hub 이미지를 받아 실행(로그·자원 제한, 개발 로그인 끔). 서버마다 다른 값은 `.env`로 |
+| `compose.dev.yaml` | 개발. 범용 위에 겹쳐 직접 빌드·개발용 로그인·디버깅 포트. **운영 서버에서는 쓰지 않는다** |
 | `.env.example` | 환경 변수 예시. 복사해 `.env`로 쓴다(`.env`는 git 제외) |
-| `compose.prod.yaml` | 운영. 기본 위에 겹쳐 자원·로그 제한, 개발 로그인 끔, HTTPS 앞단 전제(4절 "운영으로 실행") |
 
 ## 2. 준비
 
@@ -89,25 +88,38 @@ docker compose down        # 컨테이너만 지운다. DB·업로드 데이터(
 docker compose down -v     # 주의: 볼륨까지 지워 DB 데이터가 사라진다
 ```
 
-### 운영으로 실행
+### 운영 서버에서 실행
+
+운영 서버도 PC와 같은 `compose.yaml`로 띄운다(#118). 서버에서 이미지를 빌드하지 않고 Docker Hub 이미지를 받는다.
 
 ```bash
-docker compose -f compose.yaml -f compose.prod.yaml up -d
+docker compose pull
+docker compose up -d
 ```
 
-배포 환경이 정해지기 전의 **최소 구성**이다. 서버 사양·도메인·TLS가 정해지면 `compose.prod.yaml`의 "배포 환경 확정 시 조정" 값과 `.env`를 맞춘다.
+`compose.yaml`에 이미 들어 있는 것(모든 환경 공통):
 
-| 항목 | 운영 설정 |
+| 항목 | 기본값 |
 |---|---|
-| 자원 제한 | mariadb 1GB·1CPU, model-server 2GB·2CPU, ollama 2GB·1CPU, backend 1GB·1CPU, frontend 256MB·0.5CPU (임시값) |
 | 로그 | 컨테이너마다 10MB × 5개까지 |
-| 개발 로그인 | 끔(`NODE_ENV=production`, `AUTH_DEV_PROVIDER=false`) |
-| 쿠키 | `COOKIE_SECURE=auto`(production이면 secure). **HTTPS 앞단(리버스 프록시·로드밸런서)이 있어야 로그인된다.** HTTP로 시험할 때만 `.env`에 `COOKIE_SECURE=off` |
-| 공개 범위 | `.env`의 `FRONTEND_BIND`·`FRONTEND_PORT`(프록시가 같은 서버면 `127.0.0.1` 유지) |
+| 개발 로그인 | 끔(`NODE_ENV=production`, `AUTH_DEV_PROVIDER=false`). 코드에서도 production이면 켜지지 않는다 |
+| 자원 제한 | mariadb 1GB·1CPU, model-server 2GB·2CPU, ollama 2GB·1CPU, backend 1GB·1CPU, frontend 256MB·0.5CPU (임시값, 최대 사용량 상한) |
+| 로그 수준 | `info` |
+| PC에 여는 포트 | 프런트뿐 |
+
+**운영 서버 체크리스트** — 서버의 `.env`에 맞춘다.
+
+| 항목 | 설정 |
+|---|---|
+| 쿠키 | **`COOKIE_SECURE=auto`** — HTTPS 앞단(리버스 프록시·로드밸런서)이 있을 때. 기본(`off`)은 PC용 HTTP 설정이다 |
+| 공개 범위 | `FRONTEND_BIND`·`FRONTEND_PORT`(프록시가 같은 서버면 `127.0.0.1` 유지) |
+| 주소 | `APP_BASE_URL`(서비스 도메인) |
+| 이미지 버전 | `TAMJI_VERSION`(검증한 태그) |
 | Vertex 인증 | 개인 ADC 대신 서비스 계정 키 파일을 `GCP_CREDENTIALS_FILE`로 |
+| 자원 제한 | 서버 사양에 맞춰 `LIMIT_<서비스>_CPUS`·`LIMIT_<서비스>_MEMORY`(예: `LIMIT_MODEL_SERVER_MEMORY=4g`) |
 | 근거 정기 수집 | 고정 공인 IP 서버에서 `KNOWLEDGE_CRON`·API 키 설정(6절) |
 
-`compose.dev.yaml`과 함께 쓰지 않는다. 포트처럼 목록인 값은 덮어쓰기 파일에서 다시 적으면 교체가 아니라 추가되므로 `.env`로 바꾼다.
+`compose.dev.yaml`은 운영 서버에서 쓰지 않는다(비밀번호 없는 개발용 로그인·DB 포트가 켜진다).
 
 ## 5. 데이터와 백업
 
@@ -136,7 +148,7 @@ docker compose -f compose.yaml -f compose.prod.yaml up -d
 ## 7. 알아둘 점
 
 - **근거 검색은 BM25만 쓴다.** 임베딩(bge-m3)은 Ollama를 썼는데 컨테이너 구성에는 Ollama가 없다. 대체 방식은 별도 작업에서 정한다(`RAG_HYBRID=off`).
-- **기본은 HTTP 구성이다.** 백엔드는 `COOKIE_SECURE=off`, `TRUST_PROXY=loopback, uniquelocal`로 실행된다(#66). HTTPS 앞단을 두는 운영 구성(`compose.prod.yaml`)은 `COOKIE_SECURE=auto`가 기본이다.
+- **기본은 HTTP 구성이다.** 백엔드는 `COOKIE_SECURE=off`, `TRUST_PROXY=loopback, uniquelocal`로 실행된다(#66). HTTPS 앞단을 두는 운영 서버는 `.env`에 `COOKIE_SECURE=auto`를 넣는다(4절 "운영 서버 체크리스트").
 - **arm64(Apple Silicon)** 이미지는 규칙상 함께 올린다. 이미지가 아직 amd64만 있으면 Mac에서는 에뮬레이션으로 느리게 동작할 수 있다.
 - Vertex 인증 파일이 없거나 쓸 수 없으면 모델 서버 `/health`가 M3·M4를 `error`로 표시하고(1분마다 다시 확인), 이유는 모델 서버 로그에 남는다. 이때는 3절을 확인한다.
 
