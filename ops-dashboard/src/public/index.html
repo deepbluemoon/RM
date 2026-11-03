@@ -10,7 +10,7 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar" aria-label="운영 대시보드 메뉴">
-        <div class="brand-lockup"><span class="brand-mark">RM</span><span><b>Ops Control</b><small>운영 대시보드</small></span></div>
+        <button id="brand-refresh" class="brand-lockup" type="button" aria-label="대시보드 새로고침" title="대시보드 새로고침"><span class="brand-mark">RM</span><span><b>Ops Control</b></span></button>
         <p class="sidebar-section-label">WORKSPACE</p>
         <nav class="side-nav" aria-label="화면 선택">
           <a class="nav-item active" href="#overview" data-view-link="overview" aria-current="page"><span class="nav-icon" aria-hidden="true">◈</span> 현황</a>
@@ -23,7 +23,6 @@
           <div><p class="top-label">RM OPERATIONS</p><h1 id="page-title">운영 현황</h1></div>
           <div class="top-actions">
             <span class="scope-pill"><span class="scope-dot"></span><span id="scope-label">PROJECT SCOPE</span></span>
-            <span class="connection-state"><span class="live-dot"></span><span id="connection-label">Docker 연결 확인 중</span></span>
             <time id="last-updated">--:--:--</time>
             <button id="refresh-now" class="refresh-button" type="button" title="지금 새로고침">↻ <span>새로고침</span></button>
           </div>
@@ -61,11 +60,13 @@
           <section id="activity" class="dashboard-view activity-view hidden" aria-label="로그와 대응">
             <div class="activity-grid">
               <section class="panel activity-containers">
-                <div class="panel-head"><div><p class="eyebrow">CONTAINERS</p><h2>컨테이너</h2></div><span class="panel-hint">로그 선택</span></div>
-                <div id="activity-container-list" class="container-list scroll-region" aria-label="로그를 볼 컨테이너 목록"></div>
+                <div class="panel-head"><div><p class="eyebrow">LOG SOURCE</p><h2>로그 대상</h2></div></div>
+                <select id="activity-container-select" class="container-select" aria-label="로그 대상 컨테이너">
+                  <option value="">Docker 연결을 확인하는 중</option>
+                </select>
               </section>
               <section id="logs" class="panel logs-panel" aria-label="컨테이너 로그">
-                <div class="panel-head"><div><p class="eyebrow">LIVE LOGS</p><h2 id="logs-title">컨테이너 로그</h2></div><button id="clear-logs" class="text-button" type="button">지우기</button></div>
+                <div class="panel-head"><div><p class="eyebrow">LIVE LOGS</p><h2 id="logs-title">컨테이너 로그</h2></div><button id="clear-logs" class="text-button" type="button">화면 비우기</button></div>
                 <div id="log-output" class="log-output" role="log" aria-label="실시간 로그"><div class="log-empty"><span aria-hidden="true">⌁</span><p>컨테이너를 선택하면 로그가 표시됩니다.</p></div></div>
               </section>
               <section id="playbooks" class="panel actions-panel">
@@ -75,7 +76,7 @@
               <dialog id="error-codes" class="code-dialog" aria-labelledby="error-codes-title">
                 <div class="code-dialog-head"><div><p class="eyebrow">REFERENCE</p><h2 id="error-codes-title">오류코드 안내</h2></div><button id="close-error-codes" class="text-button" type="button">닫기</button></div>
                 <div id="codes-list" class="codes-list"></div>
-                <a href="/docs/error-codes.md" class="text-button" target="_blank" rel="noreferrer">오류코드 문서 ↗</a>
+                <a href="/docs/error-codes.md" class="text-button" target="_blank" rel="noreferrer">전체 오류코드 문서 ↗</a>
               </dialog>
             </div>
           </section>

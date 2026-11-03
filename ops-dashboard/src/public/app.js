@@ -40,8 +40,6 @@ function renderOverview() {
   $('cpu-total').textContent = formatPercent(metrics.cpu, '-')
   $('memory-total').textContent = formatPercent(metrics.memory, '-')
   $('last-updated').textContent = new Date(overview.observedAt).toLocaleTimeString('ko-KR')
-  $('connection-label').textContent = overview.dockerAvailable ? 'Docker 연결됨' : 'Docker 연결 오류'
-  $('connection-label').previousElementSibling.style.background = overview.dockerAvailable ? '#29cccc' : '#ff6b78'
   $('sidebar-engine').textContent = overview.dockerAvailable ? 'Docker connected' : 'Docker unavailable'
   $('sidebar-engine-dot').className = `engine-dot ${overview.dockerAvailable ? 'is-online' : 'is-offline'}`
   $('scope-label').textContent = overview.scope ? `${String(overview.scope).toUpperCase()} SCOPE` : 'PROJECT SCOPE'
@@ -90,6 +88,7 @@ function renderSummaryDetail(containers, metrics, dockerAvailable) {
   })
   detail.classList.toggle('hidden', !state.summaryOpen)
   if (!state.summaryOpen) return
+  detail.dataset.summary = state.summaryOpen
 
   if (state.summaryOpen === 'running') {
     const running = containers.filter((container) => container.running)
@@ -185,9 +184,22 @@ function renderStatusCodes(statusState, dockerAvailable) {
 }
 
 function renderContainers(containers, alerts, dockerAvailable) {
-  const lists = [$('container-list'), $('activity-container-list')]
-  if (!dockerAvailable) { lists.forEach((list) => { list.innerHTML = '<div class="empty">Docker 연결을 확인해 주세요.</div>' }); return }
-  if (!containers.length) { lists.forEach((list) => { list.innerHTML = '<div class="empty">표시할 컨테이너가 없습니다.</div>' }); return }
+  const list = $('container-list')
+  const selector = $('activity-container-select')
+  if (!dockerAvailable) {
+    list.innerHTML = '<div class="empty">Docker 연결을 확인해 주세요.</div>'
+    selector.innerHTML = '<option value="">Docker 연결을 확인해 주세요</option>'
+    selector.disabled = true
+    return
+  }
+  if (!containers.length) {
+    list.innerHTML = '<div class="empty">표시할 컨테이너가 없습니다.</div>'
+    selector.innerHTML = '<option value="">표시할 컨테이너가 없습니다</option>'
+    selector.disabled = true
+    return
+  }
+  selector.disabled = false
+  selector.innerHTML = containers.map((container) => `<option value="${escapeHtml(container.id)}" ${container.id === state.selectedId ? 'selected' : ''}>${escapeHtml(container.name)}</option>`).join('')
   const rows = containers.map((container) => {
     const stats = container.stats
     const ownAlerts = alerts.filter((alert) => alert.containerId === container.id)
@@ -201,10 +213,8 @@ function renderContainers(containers, alerts, dockerAvailable) {
       ${ownAlerts.length ? `<span class="row-alert">경고 ${ownAlerts.length}</span><span class="warning-lamp row-warning-lamp hidden" aria-label="선택한 경고 대상">!</span>` : ''}
     </button>`
   }).join('')
-  lists.forEach((list) => {
-    list.innerHTML = rows
-    list.querySelectorAll('[data-container-id]').forEach((row) => row.addEventListener('click', () => selectContainer(row.dataset.containerId)))
-  })
+  list.innerHTML = rows
+  list.querySelectorAll('[data-container-id]').forEach((row) => row.addEventListener('click', () => selectContainer(row.dataset.containerId)))
 }
 
 function renderActions(alerts) {
@@ -294,15 +304,18 @@ async function init() {
   $('open-error-codes').addEventListener('click', () => $('error-codes').showModal())
   $('close-error-codes').addEventListener('click', () => $('error-codes').close())
   $('error-codes').addEventListener('click', (event) => { if (event.target === $('error-codes')) $('error-codes').close() })
-  $('clear-logs').addEventListener('click', () => { $('log-output').innerHTML = '<div class="log-empty"><span>⌁</span><p>로그를 선택하세요.</p></div>' })
+  $('activity-container-select').addEventListener('change', (event) => { if (event.target.value) selectContainer(event.target.value) })
+  $('clear-logs').addEventListener('click', () => { $('log-output').innerHTML = '<div class="log-empty"><span>⌁</span><p>화면에 표시된 로그를 비웠습니다.</p></div>' })
   $('refresh-now').addEventListener('click', () => { void refresh().catch(() => {}) })
+  $('brand-refresh').addEventListener('click', () => window.location.reload())
   await refresh()
   setInterval(() => { void refresh().catch(() => {}) }, 5_000)
 }
 
 void init().catch((error) => {
   state.uiError = error instanceof Error ? error.message : String(error)
-  $('connection-label').textContent = '대시보드 연결 오류'
+  $('sidebar-engine').textContent = 'Dashboard unavailable'
+  $('sidebar-engine-dot').className = 'engine-dot is-offline'
   $('alert-count').textContent = '확인 필요'
   $('alert-toggle').setAttribute('aria-label', '대시보드 오류 상세 보기')
   renderAlerts([])

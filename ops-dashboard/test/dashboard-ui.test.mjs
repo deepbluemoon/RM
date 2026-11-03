@@ -35,7 +35,7 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
     removeAttribute(key) { delete this.attributes[key] }
     addEventListener(type, callback) { this.listeners[type] = callback }
     querySelectorAll(selector) {
-      if (['container-list', 'activity-container-list'].includes(this.id)) {
+      if (this.id === 'container-list') {
         this.rows = [...this.innerHTML.matchAll(/data-container-id="([^"]+)"/g)].map((match) => {
           const row = new Element('row')
           row.dataset.containerId = match[1]
@@ -92,7 +92,7 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
   }
   const source = (await fs.readFile(new URL('../src/public/app.js', import.meta.url), 'utf8')).replace(/^import [^\n]*\n/gm, '')
   const context = vm.createContext({
-    document: { getElementById: element, querySelectorAll: (selector) => selector === '.container-row' ? [...(element('container-list').rows || []), ...(element('activity-container-list').rows || [])] : links },
+    document: { getElementById: element, querySelectorAll: (selector) => selector === '.container-row' ? (element('container-list').rows || []) : links },
     window, EventSource, summarizeMetrics, formatPercent, httpChartData,
     fetch: async (url) => ({ ok: true, json: async () => url === '/api/error-codes' ? { codes: [], actions: [] } : overview }),
     setInterval: () => 0,
@@ -105,7 +105,7 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
   assert.equal(element('running-count').textContent, '1')
   assert.match(element('status-summary').innerHTML, /2XX/)
   assert.match(element('container-list').innerHTML, /api/)
-  assert.match(element('activity-container-list').innerHTML, /worker/)
+  assert.match(element('activity-container-select').innerHTML, /worker/)
   assert.equal(element('alert-count').textContent, '3')
   assert.equal(element('alerts-popover').classList.contains('hidden'), true)
   element('alert-toggle').listeners.click()
@@ -132,7 +132,7 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
   assert.equal(element('overview').classList.contains('hidden'), true)
   assert.equal(element('activity').classList.contains('hidden'), false)
   assert.equal(element('logs-title').textContent, '로그 · api')
-  element('activity-container-list').rows.at(-1).listeners.click()
+  element('activity-container-select').listeners.change({ target: { value: 'def' } })
   assert.equal(sources[0].closed, true)
   assert.equal(sources[1].url, '/api/logs/stream?containerId=def&tail=200')
   window.location.hash = '#overview'
