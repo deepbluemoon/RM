@@ -14,7 +14,7 @@
 
 ## 호스트에서 실행
 
-Docker CLI와 Docker Engine에 접근할 수 있는 계정에서 실행한다.
+Docker CLI와 Docker Engine에 접근할 수 있는 계정에서 실행한다. 대시보드는 인증이 설정되지 않은 로컬 운영 도구이므로 `127.0.0.1`에서만 수신한다.
 
 ```bash
 npm run check --prefix ops-dashboard

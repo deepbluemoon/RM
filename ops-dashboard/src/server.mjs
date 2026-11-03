@@ -130,4 +130,4 @@ const server = http.createServer((req, res) => {
 })
 await monitor.tick()
 setInterval(() => { void monitor.tick() }, pollMs).unref()
-server.listen(port, '0.0.0.0', () => process.stdout.write(`RM ops dashboard listening on http://127.0.0.1:${port}\n`))
+server.listen(port, '127.0.0.1', () => process.stdout.write(`RM ops dashboard listening on http://127.0.0.1:${port}\n`))
