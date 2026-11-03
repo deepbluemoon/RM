@@ -5,9 +5,9 @@
 # 개발(직접 빌드·개발 로그인·디버깅 포트): docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 # 운영 서버도 이 파일 그대로 쓴다(#118). 서버마다 다른 값(HTTPS·공개 범위·자원 제한)은 .env 로 바꾼다 — 실행 안내 4절 "운영 서버 체크리스트".
 #
-# 프로젝트 이름을 rm 으로 두어 컨테이너 이름이 rm-<서비스>-1 이 된다(운영 대시보드 OPS_NAME_PREFIXES 와 맞춤).
+# 프로젝트 이름을 지정해 컨테이너 이름이 rm-contract-risk-<서비스>-1 이 된다.
 
-name: rm
+name: rm-contract-risk
 
 x-logging: &logging
   # 컨테이너 로그가 디스크를 채우지 않게 크기를 제한한다(파일당 10MB × 5개)
@@ -224,5 +224,8 @@ secrets:
     file: ${GCP_CREDENTIALS_FILE:?GCP_CREDENTIALS_FILE(Vertex 인증 파일 경로) 를 .env 에 설정하세요}
 
 volumes:
+  # 프로젝트 이름을 바꾸어도 기존 데이터를 계속 사용한다.
   db-data:
+    name: rm_db-data
   backend-var:
+    name: rm_backend-var
