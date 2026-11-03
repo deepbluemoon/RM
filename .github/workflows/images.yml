@@ -150,13 +150,15 @@ jobs:
           docker compose up -d
       - name: 확인 — 백엔드 healthy·초기화 완료
         run: |
+          # 컨테이너는 서비스 이름으로 찾는다(프로젝트 이름이 바뀌어도 그대로 동작 — #126)
+          cid() { docker compose ps -aq "$1"; }
           for _ in $(seq 1 60); do
-            [ "$(docker inspect -f '{{.State.Health.Status}}' rm-backend-1 2>/dev/null)" = healthy ] && break
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$(cid backend)" 2>/dev/null)" = healthy ] && break
             sleep 5
           done
           docker compose ps -a
-          [ "$(docker inspect -f '{{.State.ExitCode}}' rm-backend-init-1)" = 0 ]
-          [ "$(docker inspect -f '{{.State.Health.Status}}' rm-backend-1)" = healthy ]
+          [ "$(docker inspect -f '{{.State.ExitCode}}' "$(cid backend-init)")" = 0 ]
+          [ "$(docker inspect -f '{{.State.Health.Status}}' "$(cid backend)")" = healthy ]
       - name: 확인 — 프런트 → 백엔드
         run: |
           curl -fsS http://127.0.0.1:8080/healthz
@@ -190,22 +192,24 @@ jobs:
           EOF
       - name: 확인 — 임베딩 ollama·초기 벡터 적재(하이브리드 RAG)
         run: |
+          # 컨테이너는 서비스 이름으로 찾는다(프로젝트 이름이 바뀌어도 그대로 동작 — #126)
+          cid() { docker compose ps -aq "$1"; }
           # bge-m3 를 구운 ollama 가 healthy
           for _ in $(seq 1 60); do
-            [ "$(docker inspect -f '{{.State.Health.Status}}' rm-ollama-1 2>/dev/null)" = healthy ] && break
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$(cid ollama)" 2>/dev/null)" = healthy ] && break
             sleep 5
           done
-          [ "$(docker inspect -f '{{.State.Health.Status}}' rm-ollama-1)" = healthy ]
+          [ "$(docker inspect -f '{{.State.Health.Status}}' "$(cid ollama)")" = healthy ]
           # 1회성 backend-embed 가 끝날 때까지 기다렸다가 종료코드 0 확인(M3·M4 Vertex 없이도 임베딩은 동작)
           for _ in $(seq 1 60); do
-            [ "$(docker inspect -f '{{.State.Status}}' rm-backend-embed-1 2>/dev/null)" = exited ] && break
+            [ "$(docker inspect -f '{{.State.Status}}' "$(cid backend-embed)" 2>/dev/null)" = exited ] && break
             sleep 5
           done
           docker compose ps -a
-          docker logs rm-backend-embed-1
-          [ "$(docker inspect -f '{{.State.ExitCode}}' rm-backend-embed-1)" = 0 ]
+          docker logs "$(cid backend-embed)"
+          [ "$(docker inspect -f '{{.State.ExitCode}}' "$(cid backend-embed)")" = 0 ]
           # 초기 근거 벡터가 빠짐 없이 적재됐는지 — embed-evidence 출력의 "남은 것 0"
-          docker logs rm-backend-embed-1 2>&1 | grep -q '남은 것 0'
+          docker logs "$(cid backend-embed)" 2>&1 | grep -q '남은 것 0'
 
       - name: 실패 시 로그
         if: failure()
