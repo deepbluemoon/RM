@@ -1159,6 +1159,13 @@ components:
             stage: { type: string, enum: [detecting, searching, explaining, completed, saved, aborted] }
             clauseTotal: { type: integer }
             scoredCount: { type: integer }
+            detectProgress:
+              type: object
+              description: 탐지 중 현재 문서의 M1·M2 모델 작업 진행률. 저장된 전체 조항 점수(scoredCount)와 별도다.
+              properties:
+                done: { type: integer }
+                total: { type: integer }
+                status: { type: string, enum: [queued, running, done, failed] }
             riskTotal:
               type: integer
               description: 판정(M3) 대상 위험 후보 수. 판정 단계(explaining) 이후에만 싣는다(2026-09-30 진행 중 결과 표시)

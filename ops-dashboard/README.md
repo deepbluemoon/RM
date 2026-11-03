@@ -14,7 +14,7 @@
 
 ## 호스트에서 실행
 
-Docker CLI와 Docker Engine에 접근할 수 있는 계정에서 실행한다.
+Docker CLI와 Docker Engine에 접근할 수 있는 계정에서 실행한다. 대시보드는 인증이 설정되지 않은 로컬 운영 도구이므로 `127.0.0.1`에서만 수신한다.
 
 ```bash
 npm run check --prefix ops-dashboard
@@ -44,12 +44,12 @@ open http://127.0.0.1:9760
 | `OPS_HTTP_STATUS_LOG_TAIL` | `200` | 상태코드 파싱에 사용할 컨테이너별 최근 로그 줄 수 |
 | `OPS_HTTP_STATUS_ALERT_DURATION_MS` | `30000` | HTTP 상태코드 경고가 활성화되기까지의 지속 시간(ms) |
 
-현재 프로젝트의 컨테이너만 감시하려면 예를 들어 다음처럼 설정한다. MariaDB가 공식 `mariadb` 이미지라면 앱 이미지와 함께 접두사를 넣는다. 이 설정으로 다른 프로젝트의 컨테이너는 대시보드에서 제외된다. 저장소의 `compose.yaml`은 프로젝트 이름이 `rm`이라 컨테이너가 `rm-<서비스>-1`(`rm-frontend-1`·`rm-backend-1`·`rm-model-server-1`·`rm-mariadb-1`, 1회 초기화 `rm-backend-init-1`)로 뜬다.
+현재 프로젝트의 컨테이너만 감시하려면 예를 들어 다음처럼 설정한다. MariaDB가 공식 `mariadb` 이미지라면 앱 이미지와 함께 접두사를 넣는다. 이 설정으로 다른 프로젝트의 컨테이너는 대시보드에서 제외된다. 저장소의 `compose.yaml`은 프로젝트 이름이 `rm-contract-risk`라 컨테이너가 `rm-contract-risk-<서비스>-1`(`rm-contract-risk-frontend-1`·`rm-contract-risk-backend-1`·`rm-contract-risk-model-server-1`·`rm-contract-risk-ollama-1`·`rm-contract-risk-mariadb-1`, 1회 초기화 `rm-contract-risk-backend-init-1`·`rm-contract-risk-backend-embed-1`)로 뜬다.
 
 ```dotenv
 OPS_CONTAINER_SCOPE=image-or-name
 OPS_IMAGE_PREFIXES=moonsangjin/tamji,mariadb
-OPS_NAME_PREFIXES=rm-backend,rm-frontend,rm-model-server,rm-mariadb
+OPS_NAME_PREFIXES=rm-contract-risk-backend,rm-contract-risk-frontend,rm-contract-risk-model-server,rm-contract-risk-ollama,rm-contract-risk-mariadb
 OPS_COMPOSE_FILE=/srv/tamji/compose.yml
 OPS_SCALE_SERVICE=backend
 OPS_SCALE_TARGET=2

@@ -1,7 +1,8 @@
-# 이미지 3개(fe·be·ms) amd64·arm64 빌드·확인(#84) — 규칙: docs/docker-image-policy.md
-# - PR·main: 각 플랫폼의 네이티브 러너에서 빌드하고 compose 로 네 컨테이너를 띄워 확인한다. push 하지 않는다.
-# - Docker Hub push: 수동 실행(workflow_dispatch)에서 push 를 켰을 때만. 태그 <약어>-sha-<커밋 12자리>,
-#   릴리스 버전을 넣으면 <약어>-<버전>·<약어>-latest 도(main 에서만). 이미 있는 sha·릴리스 태그는 덮어쓰지 않는다.
+# 이미지 4개(fe·be·ms·ol) amd64·arm64 빌드·확인(#84) — 규칙: docs/docker-image-policy.md
+# - PR·main: 각 플랫폼의 네이티브 러너에서 빌드하고 compose 로 컨테이너를 띄워 확인한다. push 하지 않는다.
+#   ol(임베딩 전용 ollama)은 빌드 중 bge-m3 를 받아 구우므로(baked) 각 아키텍처 네이티브 러너에서 돈다(QEMU 아님).
+# - Docker Hub push: 수동 실행(workflow_dispatch)에서 push 를 켰을 때만. main 에서 날짜 태그
+#   <약어>-YYYYMMDD 와 이동 태그 <약어>-latest 를 발행한다. 날짜 태그는 덮어쓰지 않는다.
 # - 필요한 Secrets(관리자 등록): DOCKERHUB_USERNAME, DOCKERHUB_TOKEN(moonsangjin/tamji 쓰기 권한 접근 토큰)
 name: images
 
@@ -11,6 +12,7 @@ on:
       - frontend/**
       - backend/**
       - model-server/**
+      - ollama/**
       - shared/**
       - specs/002-contract-risk-detection/contracts/**
       - compose.yaml
@@ -21,6 +23,7 @@ on:
       - frontend/**
       - backend/**
       - model-server/**
+      - ollama/**
       - shared/**
       - specs/002-contract-risk-detection/contracts/**
       - compose.yaml
@@ -28,11 +31,11 @@ on:
   workflow_dispatch:
     inputs:
       push:
-        description: Docker Hub 에 올린다(<약어>-sha-<커밋 12자리>)
+        description: Docker Hub 에 날짜 버전 이미지(fe/be/ms/ol)를 올린다
         type: boolean
         default: false
       release:
-        description: 릴리스 버전(예 0.1.0) — 넣으면 <약어>-<버전>·<약어>-latest 도 올린다(main 에서만). 비우면 sha 태그만
+        description: 필수 발행일 YYYYMMDD (예 20261103), main 에서만 허용
         type: string
         default: ""
 
@@ -68,10 +71,8 @@ jobs:
           RELEASE: ${{ inputs.release }}
         run: |
           if [ -z "$DH_USER" ] || [ -z "$DH_TOKEN" ]; then echo "::error::Secrets DOCKERHUB_USERNAME·DOCKERHUB_TOKEN 이 없습니다"; exit 1; fi
-          if [ -n "$RELEASE" ]; then
-            [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::릴리스 태그는 main 에서만 올린다"; exit 1; }
-            echo "$RELEASE" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::릴리스 버전 형식: 0.1.0"; exit 1; }
-          fi
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::날짜 릴리스는 main 에서만 올린다"; exit 1; }
+          echo "$RELEASE" | grep -Eq '^[0-9]{8}$' || { echo "::error::발행일 형식은 YYYYMMDD (예: 20261103)"; exit 1; }
 
       - uses: actions/checkout@v4
 
@@ -121,6 +122,16 @@ jobs:
           load: true
           cache-from: type=gha,scope=ms-${{ matrix.arch }}
           cache-to: type=gha,scope=ms-${{ matrix.arch }},mode=max
+      - name: build ol
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ollama/Dockerfile
+          platforms: ${{ matrix.platform }}
+          tags: tamji-ci:ol-ci
+          load: true
+          cache-from: type=gha,scope=ol-${{ matrix.arch }}
+          cache-to: type=gha,scope=ol-${{ matrix.arch }},mode=max
 
       # compose.yaml 로 네 컨테이너를 띄운다. 비밀값은 실행마다 새로 만든 시험값, Vertex 인증은 빈 파일(M3·M4 는 error 가 정상)
       - name: compose 기동
@@ -177,6 +188,25 @@ jobs:
           assert s == 200 and r["results"][0]["clause_id"] == "c1", (s, r)
           print("M1 추론", r["model_version"], r["results"][0]["score"])
           EOF
+      - name: 확인 — 임베딩 ollama·초기 벡터 적재(하이브리드 RAG)
+        run: |
+          # bge-m3 를 구운 ollama 가 healthy
+          for _ in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' rm-ollama-1 2>/dev/null)" = healthy ] && break
+            sleep 5
+          done
+          [ "$(docker inspect -f '{{.State.Health.Status}}' rm-ollama-1)" = healthy ]
+          # 1회성 backend-embed 가 끝날 때까지 기다렸다가 종료코드 0 확인(M3·M4 Vertex 없이도 임베딩은 동작)
+          for _ in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Status}}' rm-backend-embed-1 2>/dev/null)" = exited ] && break
+            sleep 5
+          done
+          docker compose ps -a
+          docker logs rm-backend-embed-1
+          [ "$(docker inspect -f '{{.State.ExitCode}}' rm-backend-embed-1)" = 0 ]
+          # 초기 근거 벡터가 빠짐 없이 적재됐는지 — embed-evidence 출력의 "남은 것 0"
+          docker logs rm-backend-embed-1 2>&1 | grep -q '남은 것 0'
+
       - name: 실패 시 로그
         if: failure()
         run: docker compose logs --no-color --tail 200
@@ -220,6 +250,16 @@ jobs:
           platforms: ${{ matrix.platform }}
           cache-from: type=gha,scope=ms-${{ matrix.arch }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: push ol
+        id: push-ol
+        if: env.PUSH == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ollama/Dockerfile
+          platforms: ${{ matrix.platform }}
+          cache-from: type=gha,scope=ol-${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
       - name: digest 기록
         if: env.PUSH == 'true'
         run: |
@@ -227,6 +267,7 @@ jobs:
           echo "${{ steps.push-fe.outputs.digest }}" > digests/fe-${{ matrix.arch }}
           echo "${{ steps.push-be.outputs.digest }}" > digests/be-${{ matrix.arch }}
           echo "${{ steps.push-ms.outputs.digest }}" > digests/ms-${{ matrix.arch }}
+          echo "${{ steps.push-ol.outputs.digest }}" > digests/ol-${{ matrix.arch }}
       - uses: actions/upload-artifact@v4
         if: env.PUSH == 'true'
         with:
@@ -253,7 +294,6 @@ jobs:
         env:
           RELEASE: ${{ inputs.release }}
         run: |
-          sha=${GITHUB_SHA::12}
           exists() { docker buildx imagetools inspect "$IMAGE:$1" >/dev/null 2>&1; }
           {
             echo "## Docker Hub push"
@@ -262,17 +302,12 @@ jobs:
             echo "| 태그 | digest(멀티 아키텍처) |"
             echo "|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
-          for s in fe be ms; do
-            tags=()
-            if exists "$s-sha-$sha"; then echo "$s-sha-$sha 는 이미 있어 그대로 둔다"; else tags+=(-t "$IMAGE:$s-sha-$sha"); fi
-            if [ -n "$RELEASE" ]; then
-              exists "$s-$RELEASE" && { echo "::error::$s-$RELEASE 가 이미 있다(릴리스 태그 덮어쓰기 금지)"; exit 1; }
-              tags+=(-t "$IMAGE:$s-$RELEASE" -t "$IMAGE:$s-latest")
-            fi
-            [ ${#tags[@]} -eq 0 ] && continue
+          for s in fe be ms ol; do
+            exists "$s-$RELEASE" && { echo "::error::$s-$RELEASE 가 이미 있다(날짜 태그 덮어쓰기 금지)"; exit 1; }
+            tags=(-t "$IMAGE:$s-$RELEASE" -t "$IMAGE:$s-latest")
             docker buildx imagetools create "${tags[@]}" "$IMAGE@$(cat digests/$s-amd64)" "$IMAGE@$(cat digests/$s-arm64)"
-            digest=$(docker buildx imagetools inspect "$IMAGE:$s-sha-$sha" --format '{{json .Manifest}}' | jq -r .digest)
-            echo "| \`$s-sha-$sha\`${RELEASE:+ · \`$s-$RELEASE\` · \`$s-latest\`} | \`$digest\` |" >> "$GITHUB_STEP_SUMMARY"
+            digest=$(docker buildx imagetools inspect "$IMAGE:$s-$RELEASE" --format '{{json .Manifest}}' | jq -r .digest)
+            echo "| \`$s-$RELEASE\` · \`$s-latest\` | \`$digest\` |" >> "$GITHUB_STEP_SUMMARY"
           done
       # 팀 알림 자리 — 채널(웹훅)이 정해지면 Secrets 에 넣고 이 단계에서 보낸다(#84)
       - name: 알림

@@ -1,6 +1,6 @@
 # Docker Compose 실행 안내
 
-컨테이너 4개(프런트·백엔드·모델 서버·MariaDB)를 `compose.yaml`로 함께 띄우는 방법이다. 이미지 규칙은 [Docker 이미지 규약](docker-image-policy.md), LLM 설정은 [Gemini·Vertex 가이드](gemini-vertex-setup.md)를 따른다. Windows·Mac 모두 같은 파일로 실행한다.
+컨테이너(프런트·백엔드·모델 서버·임베딩 Ollama·MariaDB)를 `compose.yaml`로 함께 띄우는 방법이다. 이미지 규칙은 [Docker 이미지 규약](docker-image-policy.md), LLM 설정은 [Gemini·Vertex 가이드](gemini-vertex-setup.md)를 따른다. Windows·Mac 모두 같은 파일로 실행한다.
 
 ## 1. 구성
 
@@ -8,16 +8,17 @@
 |---|---|---|---|
 | `frontend` | `rm-frontend-1` | 화면, `/api`를 백엔드로 전달 | `127.0.0.1:8080` |
 | `backend` | `rm-backend-1` | Express 웹 서버 | 없음 |
-| `model-server` | `rm-model-server-1` | M1·M2 분류, M3·M4(Vertex) | 없음 |
+| `model-server` | `rm-model-server-1` | M1·M2 분류, M3·M4(Vertex), 임베딩 중계 | 없음 |
+| `ollama` | `rm-ollama-1` | 임베딩 전용 Ollama(bge-m3 baked) — 하이브리드 RAG 벡터 | 없음 |
 | `mariadb` | `rm-mariadb-1` | DB (공식 `mariadb:12.0`) | 없음 |
 | `backend-init` | `rm-backend-init-1` | 1회 초기화: 마이그레이션 → 최초 지식 적재. 끝나면 종료(0) | 없음 |
+| `backend-embed` | `rm-backend-embed-1` | 1회성: 초기 근거 벡터 적재(ollama·model-server 준비 후). 끝나면 종료(0) | 없음 |
 
 | 파일 | 용도 |
 |---|---|
-| `compose.yaml` | 기본. Docker Hub 이미지를 받아 실행 |
-| `compose.dev.yaml` | 개발. 기본 위에 겹쳐 직접 빌드·개발용 로그인·디버깅 포트 |
+| `compose.yaml` | 범용. 팀원 PC와 운영 서버 공통. Docker Hub 이미지를 받아 실행(로그·자원 제한, 개발 로그인 끔). 서버마다 다른 값은 `.env`로 |
+| `compose.dev.yaml` | 개발. 범용 위에 겹쳐 직접 빌드·개발용 로그인·디버깅 포트. **운영 서버에서는 쓰지 않는다** |
 | `.env.example` | 환경 변수 예시. 복사해 `.env`로 쓴다(`.env`는 git 제외) |
-| `compose.prod.yaml` | 운영. 기본 위에 겹쳐 자원·로그 제한, 개발 로그인 끔, HTTPS 앞단 전제(4절 "운영으로 실행") |
 
 ## 2. 준비
 
@@ -30,13 +31,24 @@
 
    | 꼭 채울 값 | 내용 |
    |---|---|
-   | `DB_PASSWORD`, `DB_ROOT_PASSWORD` | DB 비밀번호 |
+   | `DB_PASSWORD`, `DB_ROOT_PASSWORD` | 사용자가 생성해 `.env`에 넣는 DB 비밀번호. MariaDB가 자동으로 알려주는 값이 아니다. |
    | `SESSION_SECRET`, `RAW_FILE_KEY` | 각각 64자리 hex (`openssl rand -hex 32`) |
    | `MODEL_API_KEY` | 임의 값(백엔드·모델 서버 공용) |
    | `VERTEX_PROJECT` | GCP 프로젝트 ID |
    | `GCP_CREDENTIALS_FILE` | Vertex 인증 파일 경로(아래 3절) |
 
    값이 빠지면 `docker compose`가 어떤 값이 필요한지 알려 주고 멈춘다.
+
+   비밀번호는 터미널에서 생성해 `.env`에 직접 입력한다. 예를 들어 Mac의 zsh에서 각각 실행한다.
+
+   ```bash
+   openssl rand -hex 32
+   openssl rand -hex 32
+   ```
+
+   첫 번째 값을 `.env`의 `DB_PASSWORD`, 두 번째 값을 `DB_ROOT_PASSWORD`에 붙여 넣고 저장한다. 기존 `.env`가 있으면 덮어쓰지 말고 필요한 항목만 수정한다.
+
+   `SESSION_SECRET`, `RAW_FILE_KEY`, `MODEL_API_KEY`도 같은 방식으로 생성한다. `.env`에는 실서비스 비밀값을 넣고 GitHub·채팅·이슈에는 올리지 않는다.
 
 ## 3. Vertex 인증 연결
 
@@ -53,13 +65,23 @@
 
 ### 받아서 실행 (기본)
 
+`.env.example`의 `TAMJI_VERSION`은 현재 최신 이미지의 날짜 버전(`20261103`)이다. Docker Hub에는 `fe-YYYYMMDD`, `be-YYYYMMDD`, `ms-YYYYMMDD`, `ol-YYYYMMDD`가 같은 날짜로 발행된다. 새 날짜 버전이 발행되면 `.env`의 `TAMJI_VERSION`만 새 날짜로 바꾼다.
+
 ```bash
 docker compose pull
 docker compose up -d
-docker compose ps        # backend·model-server·mariadb 가 healthy, backend-init 가 Exited (0)
+docker compose ps        # backend·model-server·ollama·mariadb 가 healthy, backend-init·backend-embed 가 Exited (0)
+```
+
+`backend-init`, `backend-embed`는 초기화가 끝나면 `Exited (0)`인 일회성 작업 컨테이너다. 종료 코드와 필요한 로그를 확인한 뒤 목록을 정리하려면 다음을 실행한다. 컨테이너만 제거하며 DB·업로드 볼륨은 유지된다. 실패했거나 원인을 더 조사할 때는 로그 확인 전까지 남겨 둔다.
+
+```bash
+docker compose rm -f backend-init backend-embed
 ```
 
 브라우저에서 `http://localhost:8080` (포트는 `.env`의 `FRONTEND_PORT`).
+
+벡터는 MariaDB의 `evidence_embedding` 테이블에 저장된다. 기본 `db-data` named volume(또는 `.env`의 `DB_DATA`)에 함께 영속화되므로, 별도의 벡터 파일 볼륨은 필요하지 않다. 초기 적재는 `backend-embed`가 수행한다.
 
 ### 직접 빌드해서 실행 (개발)
 
@@ -71,9 +93,24 @@ docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 - 개발용 로그인이 켜진다. **로그인 화면에는 버튼이 없으므로** 주소로 들어간다: `http://localhost:8080/api/auth/dev/start?devSubject=<아무 이름>` → 사용자 권한으로 로그인된다.
 - 디버깅 포트: 백엔드 `127.0.0.1:19522`, DB `127.0.0.1:13306`
 
-### 계정 만들기
+### backend 이미지에 초기 임베딩 스크립트가 없을 때
 
-새로 띄운 DB에는 계정이 없다. 로그인 화면의 아이디·비밀번호로 들어가려면 아래처럼 계정을 만들거나, 화면의 **회원가입**으로 만든다(회원가입 계정은 사용자 권한).
+`backend-embed` 로그에 `Cannot find module '/app/backend/scripts/embed-evidence.js'`가 나오면 Docker Hub backend 이미지가 현재 Dockerfile보다 오래된 것이다. 현재 소스로 backend 이미지를 한 번 빌드한 뒤 로컬 오버레이를 적용한다. 이 방법은 개발용 로그인 설정을 켜지 않는다.
+
+```bash
+docker build -f backend/Dockerfile -t tamji-local/backend:local .
+docker build -f frontend/Dockerfile -t tamji-local/frontend:local .
+docker compose -f compose.yaml -f compose.local.yaml up -d
+docker compose ps --all
+```
+
+`compose.local.yaml`은 `backend`, `backend-init`, `backend-embed`, `frontend`를 로컬 이미지로 바꾼다. DB 볼륨은 유지되며, 임베딩 작업은 빠진 벡터만 채운다. Docker Hub 날짜 태그를 갱신한 뒤에는 기본 `docker compose up -d`로 돌아간다.
+
+### DB 비밀번호와 계정 만들기
+
+MariaDB 계정 비밀번호는 `.env`의 `DB_PASSWORD`이며, root 비밀번호는 `DB_ROOT_PASSWORD`다. 컨테이너 안에서 새 비밀번호를 조회하는 구조가 아니므로, 기동 전에 직접 생성해 `.env`에 보관한다. 컨테이너를 처음 만든 뒤 값을 바꾸면 이미 초기화된 DB 볼륨의 비밀번호는 자동 변경되지 않는다. 기존 볼륨의 비밀번호 변경은 MariaDB 내부에서 별도로 수행해야 한다.
+
+새로 띄운 DB에는 애플리케이션 계정이 없다. 로그인 화면의 아이디·비밀번호로 들어가려면 아래처럼 운영자 계정을 만들거나, 화면의 **회원가입**으로 사용자 계정을 만든다.
 
 ```bash
 docker compose exec -e CRD_NEW_PASSWORD='<비밀번호>' backend \
@@ -87,25 +124,38 @@ docker compose down        # 컨테이너만 지운다. DB·업로드 데이터(
 docker compose down -v     # 주의: 볼륨까지 지워 DB 데이터가 사라진다
 ```
 
-### 운영으로 실행
+### 운영 서버에서 실행
+
+운영 서버도 PC와 같은 `compose.yaml`로 띄운다(#118). 서버에서 이미지를 빌드하지 않고 Docker Hub 이미지를 받는다.
 
 ```bash
-docker compose -f compose.yaml -f compose.prod.yaml up -d
+docker compose pull
+docker compose up -d
 ```
 
-배포 환경이 정해지기 전의 **최소 구성**이다. 서버 사양·도메인·TLS가 정해지면 `compose.prod.yaml`의 "배포 환경 확정 시 조정" 값과 `.env`를 맞춘다.
+`compose.yaml`에 이미 들어 있는 것(모든 환경 공통):
 
-| 항목 | 운영 설정 |
+| 항목 | 기본값 |
 |---|---|
-| 자원 제한 | mariadb 1GB·1CPU, model-server 2GB·2CPU, backend 1GB·1CPU, frontend 256MB·0.5CPU (임시값) |
 | 로그 | 컨테이너마다 10MB × 5개까지 |
-| 개발 로그인 | 끔(`NODE_ENV=production`, `AUTH_DEV_PROVIDER=false`) |
-| 쿠키 | `COOKIE_SECURE=auto`(production이면 secure). **HTTPS 앞단(리버스 프록시·로드밸런서)이 있어야 로그인된다.** HTTP로 시험할 때만 `.env`에 `COOKIE_SECURE=off` |
-| 공개 범위 | `.env`의 `FRONTEND_BIND`·`FRONTEND_PORT`(프록시가 같은 서버면 `127.0.0.1` 유지) |
+| 개발 로그인 | 끔(`NODE_ENV=production`, `AUTH_DEV_PROVIDER=false`). 코드에서도 production이면 켜지지 않는다 |
+| 자원 제한 | mariadb 1GB·1CPU, model-server 2GB·2CPU, ollama 2GB·1CPU, backend 1GB·1CPU, frontend 256MB·0.5CPU (임시값, 최대 사용량 상한) |
+| 로그 수준 | `info` |
+| PC에 여는 포트 | 프런트뿐 |
+
+**운영 서버 체크리스트** — 서버의 `.env`에 맞춘다.
+
+| 항목 | 설정 |
+|---|---|
+| 쿠키 | **`COOKIE_SECURE=auto`** — HTTPS 앞단(리버스 프록시·로드밸런서)이 있을 때. 기본(`off`)은 PC용 HTTP 설정이다 |
+| 공개 범위 | `FRONTEND_BIND`·`FRONTEND_PORT`(프록시가 같은 서버면 `127.0.0.1` 유지) |
+| 주소 | `APP_BASE_URL`(서비스 도메인) |
+| 이미지 버전 | `TAMJI_VERSION`(검증한 태그) |
 | Vertex 인증 | 개인 ADC 대신 서비스 계정 키 파일을 `GCP_CREDENTIALS_FILE`로 |
+| 자원 제한 | 서버 사양에 맞춰 `LIMIT_<서비스>_CPUS`·`LIMIT_<서비스>_MEMORY`(예: `LIMIT_MODEL_SERVER_MEMORY=4g`) |
 | 근거 정기 수집 | 고정 공인 IP 서버에서 `KNOWLEDGE_CRON`·API 키 설정(6절) |
 
-`compose.dev.yaml`과 함께 쓰지 않는다. 포트처럼 목록인 값은 덮어쓰기 파일에서 다시 적으면 교체가 아니라 추가되므로 `.env`로 바꾼다.
+`compose.dev.yaml`은 운영 서버에서 쓰지 않는다(비밀번호 없는 개발용 로그인·DB 포트가 켜진다).
 
 ## 5. 데이터와 백업
 
@@ -133,7 +183,7 @@ docker compose -f compose.yaml -f compose.prod.yaml up -d
 
 ## 7. 알아둘 점
 
-- **근거 검색은 BM25만 쓴다.** 임베딩(bge-m3)은 Ollama를 썼는데 컨테이너 구성에는 Ollama가 없다. 대체 방식은 별도 작업에서 정한다(`RAG_HYBRID=off`).
+- **근거 검색은 BM25 + bge-m3 벡터 하이브리드다(#98).** 임베딩은 `ollama` 컨테이너가 계산하고, 처음 기동할 때 `backend-embed`가 근거 벡터를 채운다. 벡터가 없거나 Ollama를 쓸 수 없으면 자동으로 BM25만 쓰고 분석은 계속된다.
 - **기본은 HTTP 구성이다.** 백엔드는 `COOKIE_SECURE=off`, `TRUST_PROXY=loopback, uniquelocal`로 실행된다(#66). HTTPS 앞단을 두는 운영 구성(`compose.prod.yaml`)은 `COOKIE_SECURE=auto`가 기본이다.
 - **arm64(Apple Silicon)** 이미지는 규칙상 함께 올린다. 이미지가 아직 amd64만 있으면 Mac에서는 에뮬레이션으로 느리게 동작할 수 있다.
 - Vertex 인증 파일이 없거나 쓸 수 없으면 모델 서버 `/health`가 M3·M4를 `error`로 표시하고(1분마다 다시 확인), 이유는 모델 서버 로그에 남는다. 이때는 3절을 확인한다.

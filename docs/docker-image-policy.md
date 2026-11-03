@@ -8,12 +8,14 @@
 |---|---|---|---|
 | `frontend` | `rm-frontend` | 직접 빌드 | 화면(정적 파일)과 `/api` 프록시 |
 | `backend` | `rm-backend` | 직접 빌드 | Express 웹 서버: 로그인, 업로드, 문서 추출, 개인정보 가리기, 청크(조항 분할), RAG(근거 검색), 분석 흐름 |
-| `model-server` | `rm-model-server` | 직접 빌드 | FastAPI 모델 게이트웨이: M1·M2 분류, LLM 외부 API 호출 |
+| `model-server` | `rm-model-server` | 직접 빌드 | FastAPI 모델 게이트웨이: M1·M2 분류, M3·M4 LLM 외부 API 호출, 임베딩 호출 중계 |
+| `ollama` | `rm-ollama` | 직접 빌드 | 임베딩 전용 Ollama: bge-m3 를 구워 넣어 하이브리드 RAG 의 벡터를 만든다 |
 | `mariadb` | `rm-mariadb` | 공식 `mariadb:12.0` | 데이터 저장. 직접 빌드하지 않는다 |
 
 - 실행 정의는 저장소 루트의 `compose.yaml` 하나로 둔다.
 - 컨테이너 이름은 운영 대시보드(`ops-dashboard/README.md`의 `OPS_NAME_PREFIXES`)와 맞춘다. 이름을 바꾸면 대시보드 설정도 함께 바꾼다.
-- LLM(M3 판정·M4 요약)은 외부 API를 쓴다. 컨테이너에서 Ollama를 띄우거나 공유 Ollama에 접속하지 않는다.
+- **LLM(M3 판정·M4 요약)은 외부 API(Vertex 등)를 쓴다.** 컨테이너에서 채팅 LLM 을 Ollama 로 띄우거나 공유 Ollama 에 접속하지 않는다.
+- **임베딩(bge-m3)은 임베딩 전용 Ollama 컨테이너(`ollama`)로 띄운다.** bge-m3 를 이미지에 구워 넣어 런타임 다운로드 없이 동작한다. 이 서비스가 없거나 죽어도 근거 검색은 BM25 로 폴백한다. 공유 Ollama 에는 접속하지 않는다.
 
 ## 2. Docker Hub 저장소와 태그
 
@@ -21,20 +23,23 @@
 
 | 서비스 | 약어 | 예 |
 |---|---|---|
-| frontend | `fe` | `moonsangjin/tamji:fe-0.1.0` |
-| backend | `be` | `moonsangjin/tamji:be-0.1.0` |
-| model-server | `ms` | `moonsangjin/tamji:ms-0.1.0` |
+| frontend | `fe` | `moonsangjin/tamji:fe-20261103` |
+| backend | `be` | `moonsangjin/tamji:be-20261103` |
+| model-server | `ms` | `moonsangjin/tamji:ms-20261103` |
+| ollama | `ol` | `moonsangjin/tamji:ol-20261103` |
 
 - 태그 종류
 
 | 태그 | 형식 | 용도 | 덮어쓰기 |
 |---|---|---|---|
-| 릴리스 | `<약어>-<버전>` (예: `be-0.1.0`) | 배포·compose에서 사용 | **금지** |
-| 개발 빌드 | `<약어>-sha-<커밋 앞 12자리>` | 검증·추적 | 금지 |
+| 날짜 릴리스 | `<약어>-YYYYMMDD` (예: `be-20261103`) | 배포·compose에서 사용 | **금지** |
+| 개발 빌드 | Docker Hub에 발행하지 않음 | CI 검증용 로컬 이미지 | 해당 없음 |
 | 최신 | `<약어>-latest` | `main` 기준 최신 릴리스를 가리킴 | 릴리스 때만 이동 |
 
-- 버전은 `0.1.0`처럼 쓰고, 세 서비스가 같은 릴리스로 함께 검증됐을 때 같은 버전 번호를 붙인다.
-- `compose.yaml`은 `latest`가 아니라 릴리스 태그를 가리킨다.
+- 날짜는 UTC가 아닌 한국 시간(`Asia/Seoul`)의 이미지 발행일을 `YYYYMMDD`로 기록한다.
+- 릴리스 워크플로는 네 이미지를 같은 `main` 커밋에서 빌드·검증한 뒤 날짜를 붙인다. 기존에 별도 커밋에서 빌드된 이미지를 날짜 태그로 전환할 때는 이미지별 기존 태그와 digest를 기록해 출처를 보존한다.
+- 날짜 태그는 불변으로 취급한다. 이미 존재하면 덮어쓰지 말고 새 날짜를 사용한다. `latest`는 날짜 릴리스와 함께 이동하는 편의 태그이며 Compose에는 쓰지 않는다.
+- `.env`의 `TAMJI_VERSION`은 네 날짜 태그의 공통 날짜다. 각 날짜 태그는 해당 릴리스에 포함한 최신 이미지이며 멀티아키텍처 manifest를 포함한다. 이미지별 소스 커밋과 digest를 릴리스 기록에 남긴다.
 - push한 뒤에는 태그와 함께 **이미지 digest와 소스 커밋**을 PR이나 릴리스 기록에 남긴다. 롤백은 검증했던 digest로 한다.
 
 ## 3. 플랫폼
@@ -70,6 +75,14 @@
 - **torch는 CPU 전용 빌드를 쓴다.** Linux amd64에서 기본 torch는 GPU(CUDA) 라이브러리까지 받아 이미지가 수 GB 커진다. 지금도 CPU로 추론하므로 동작에 영향이 없다.
 - 학습·평가 코드(`training/`, `reports/`, `scripts/`, `tests/`)는 넣지 않는다.
 
+### ollama (임베딩 전용)
+
+- `FROM ollama/ollama:<태그>` — 베이스 태그를 digest까지 고정한다(멀티아치 amd64+arm64 매니페스트).
+- **빌드 단계에서 `ollama serve`를 백그라운드로 띄워 `ollama pull bge-m3`로 모델을 받아 이미지에 구워 넣는다(baked).** 런타임에 모델을 받지 않으므로 네트워크 없이 바로 동작한다.
+- 모델은 `/root/.ollama`가 아니라 `OLLAMA_MODELS=/models`에 두고 고정 UID/GID(10001)의 비루트로 실행한다. **런타임에 볼륨으로 `/models`를 덮으면 구운 모델이 가려지므로 덮지 않는다.**
+- 교차아치(arm64) 빌드는 빌드 단계에서 `ollama`를 QEMU로 실행하므로 느리다. 확인하지 않은 플랫폼은 지원한다고 적지 않는다(§3).
+- 공개 모델만 담으므로 비밀값이 없다. 포트(11434)는 compose 내부 네트워크로만 연다.
+
 ## 5. 모델 가중치 (model-server 이미지에 포함)
 
 - M1·M2 가중치는 **모델 서버 이미지에 포함**한다. `docker compose pull`만으로 실모델이 동작하게 하기 위해서다.
@@ -97,11 +110,11 @@
 
 ## 7. push 절차
 
-- **첫 릴리스는 담당자가 직접 push한다.** `docker buildx build --platform linux/amd64,linux/arm64 --push`로 두 플랫폼을 한 번에 올린다. push 권한은 `moonsangjin` 계정 소유자가 부여한다.
+- **이미지 릴리스는 담당자가 직접 push할 수 있다.** `docker buildx build --platform linux/amd64,linux/arm64 --push`로 두 플랫폼을 한 번에 올린다. push 권한은 `moonsangjin` 계정 소유자가 부여한다.
 - push 결과(태그, digest, 소스 커밋, 확인한 플랫폼)는 해당 PR에 남긴다.
-- GitHub Actions(`.github/workflows/images.yml`, #84)가 세 이미지를 amd64·arm64 네이티브 러너에서 빌드하고 `compose.yaml`로 네 컨테이너를 띄워 확인한다.
+- GitHub Actions(`.github/workflows/images.yml`, #84)가 네 이미지를 amd64·arm64 네이티브 러너에서 빌드하고 `compose.yaml`로 네 컨테이너를 띄워 확인한다.
   - PR·`main`: 빌드·확인만 하고 push하지 않는다.
-  - push: Actions 화면에서 수동 실행(Run workflow)하고 `push`를 켠다. `<약어>-sha-<커밋 12자리>`로 올라가고, `release`에 버전(예: `0.1.0`)을 넣으면 `<약어>-<버전>`·`<약어>-latest`도 올린다(`main`에서만). 이미 있는 태그는 덮어쓰지 않는다.
+- push: Actions 화면에서 수동 실행(Run workflow)하고 `push`를 켠 뒤, `release`에 발행일(예: `20261103`)을 입력한다. `main`에서만 `<약어>-<YYYYMMDD>`와 `<약어>-latest`를 발행한다. 날짜 태그가 하나라도 이미 있으면 릴리스를 중단한다.
   - 결과(태그·digest·소스 커밋)는 실행 요약(Summary)에 남는다. 릴리스 PR에 옮겨 적는다.
 - 관리자 작업: 저장소 Settings → Secrets and variables → Actions에 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`(`moonsangjin/tamji` 쓰기 권한 접근 토큰)을 등록한다. 없으면 push 실행이 처음에 멈춘다.
 - 모델 가중치(LFS)는 Actions 캐시에 두어 실행마다 LFS 대역폭을 쓰지 않게 한다. 새 이미지 알림 채널은 정해지면 워크플로의 "알림" 단계에 연결한다.
@@ -117,10 +130,20 @@
 5. 화면에서 로그인 → 업로드 → 분석 → 결과까지 확인했다.
 6. 이미지에 비밀값, 계약서 원문, 불필요한 데이터가 없다.
 
-## 9. 아직 정하지 않은 것
+## 9. 날짜 릴리스 준비 체크
+
+- [ ] 로컬 `.env`에 DB·세션·모델 API 비밀값을 설정하고, Vertex 인증 파일을 준비한다.
+- [ ] `main` 커밋 SHA를 기록하고 Git LFS 가중치를 받은 뒤 네 이미지 모두 같은 소스 커밋으로 빌드한다.
+- [ ] 네 이미지 각각 `linux/amd64`와 `linux/arm64` manifest를 확인한다.
+- [ ] 이미지별 날짜 태그(`fe-YYYYMMDD`, `be-YYYYMMDD`, `ms-YYYYMMDD`, `ol-YYYYMMDD`)와 digest를 기록한다.
+- [ ] `.env`의 `TAMJI_VERSION=YYYYMMDD`를 설정하고 `docker compose pull`이 네 이미지를 모두 받는지 확인한다.
+- [ ] MariaDB·모델 서버·Ollama·백엔드·프런트엔드 healthcheck와 초기화 작업의 종료 코드를 확인한다.
+
+## 10. 아직 정하지 않은 것
 
 - LLM 제공자(Gemini 등)와 호출 방식. 제공자를 설정만으로 바꿀 수 있도록 OpenAI 호환 방식을 검토한다.
-- 임베딩(bge-m3) 대체. Ollama를 쓰지 않으면 RAG가 BM25만으로 동작하므로, 모델 서버에서 직접 실행할지 외부 API로 바꿀지 정한다.
-- push 자동화 시점(지금은 수동 실행), `sha` 태그 보존·삭제 기간, 베이스 이미지 갱신 주기와 취약점 점검 담당.
+- 기존 `sha` 태그의 보존·삭제 정책, 베이스 이미지 갱신 주기와 취약점 점검 담당.
+
+> 임베딩(bge-m3)은 **임베딩 전용 Ollama 컨테이너(B안)**로 정했다(2026-11-03). 대안이던 모델서버 직접 실행(A)·외부 API(C) 대신, bge-m3 모델과 검색 코드를 그대로 두고 실행 위치만 컨테이너로 옮겨 코드 변경을 최소화한다. 구성은 §1·§4(ollama)를 따른다.
 
 참고: [Docker 빌드 모범 사례](https://docs.docker.com/build/building/best-practices/), [멀티 플랫폼 빌드](https://docs.docker.com/build/building/multi-platform/), [uv의 Docker 사용 안내](https://docs.astral.sh/uv/guides/integration/docker/).

@@ -2,6 +2,7 @@
 #   docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 # 저장소 소스로 이미지를 직접 빌드하고(로컬 태그 tamji-local/*), 개발용 로그인 API 와 디버깅용 포트를 연다.
 # Docker Hub 에 아직 이미지가 없을 때도 이 파일로 실행할 수 있다.
+# 운영 서버에서는 쓰지 않는다 — 비밀번호 없는 개발용 로그인과 DB 직접 접속 포트가 켜진다(#118).
 
 services:
   model-server:
@@ -10,7 +11,19 @@ services:
       context: .
       dockerfile: model-server/Dockerfile
 
+  ollama:
+    image: tamji-local/ollama:dev
+    build:
+      context: .
+      dockerfile: ollama/Dockerfile
+
   backend-init:
+    image: tamji-local/backend:dev
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+
+  backend-embed:
     image: tamji-local/backend:dev
     build:
       context: .

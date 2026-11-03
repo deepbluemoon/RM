@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { ah, assertOwner } from '../../middleware/guards.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { withTx } from '../../db/tx.js';
-import { getPool, selectOne } from '../../db/pool.js';
+import { exec, getPool, selectOne } from '../../db/pool.js';
 import { CONTRACT_TYPES } from '../../domain/codes.js';
 import { enqueue, cancel as cancelJob } from '../../jobs/runner.js';
 import { runDetection } from '../detection/detection.service.js';
@@ -75,6 +75,15 @@ analysisRouter.post(
       await conn.query('UPDATE document SET raw_delete_due_at = CURRENT_TIMESTAMP WHERE request_id = ? AND raw_file_ref IS NOT NULL', [id]);
     });
     cancelJob(id);
+    // 진행 중인 getJob 응답이 취소 직전에 평가 대기 행을 남기는 경합을 정리한다.
+    await exec(
+      getPool(),
+      `UPDATE clause_assessment a
+         JOIN analysis_run r ON r.run_id = a.run_id
+          SET a.status = 'unanalyzable', a.unanalyzable_reason = 'server_down'
+        WHERE r.request_id = ? AND r.stage = 'aborted' AND a.status = 'pending'`,
+      [id],
+    );
     res.json({ requestId: id });
   }),
 );

@@ -1,19 +1,28 @@
-# 계약위험탐지 서비스(tamji) 기본 실행 구성 — 규칙: docs/docker-image-policy.md, 실행 안내: docs/docker-compose-guide.md
+# 계약위험탐지 서비스(tamji) 실행 구성(범용 — 팀원 PC·운영 서버 공통) — 규칙: docs/docker-image-policy.md, 실행 안내: docs/docker-compose-guide.md
 #   cp .env.example .env   # 값 채우기(비밀값은 .env 에만, 저장소에 올리지 않음)
 #   docker compose pull && docker compose up -d
 #   → http://localhost:8080
-# 개발(직접 빌드·개발 로그인): docker compose -f compose.yaml -f compose.dev.yaml up -d --build
-# 운영(자원·로그 제한, HTTPS 앞단 전제): docker compose -f compose.yaml -f compose.prod.yaml up -d — 배포 환경 확정 전 최소 구성(#83).
-# 운영에서 바뀔 값은 ${변수} 로 둔다.
+# 개발(직접 빌드·개발 로그인·디버깅 포트): docker compose -f compose.yaml -f compose.dev.yaml up -d --build
+# 운영 서버도 이 파일 그대로 쓴다(#118). 서버마다 다른 값(HTTPS·공개 범위·자원 제한)은 .env 로 바꾼다 — 실행 안내 4절 "운영 서버 체크리스트".
 #
-# 프로젝트 이름을 rm 으로 두어 컨테이너 이름이 rm-<서비스>-1 이 된다(운영 대시보드 OPS_NAME_PREFIXES 와 맞춤).
+# 프로젝트 이름을 지정해 컨테이너 이름이 rm-contract-risk-<서비스>-1 이 된다.
 
-name: rm
+name: rm-contract-risk
+
+x-logging: &logging
+  # 컨테이너 로그가 디스크를 채우지 않게 크기를 제한한다(파일당 10MB × 5개)
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 x-backend-env: &backend-env
   # 컨테이너 기본 시간대는 UTC — KNOWLEDGE_CRON·보관 기한 작업을 한국 시간으로 돌린다
   TZ: Asia/Seoul
   NODE_ENV: production
+  # 개발용 로그인은 compose.dev.yaml 에서만 켠다(코드에서도 NODE_ENV=production 이면 꺼진다)
+  AUTH_DEV_PROVIDER: "false"
+  LOG_LEVEL: ${LOG_LEVEL:-info}
   HOST: 0.0.0.0
   PORT: 9522
   APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
@@ -27,11 +36,13 @@ x-backend-env: &backend-env
   RAW_FILE_KEY: ${RAW_FILE_KEY:?RAW_FILE_KEY(64자 hex) 를 .env 에 설정하세요}
   MODEL_API_BASE_URL: http://model-server:9542
   MODEL_API_KEY: ${MODEL_API_KEY:?MODEL_API_KEY 를 .env 에 설정하세요}
-  # HTTP 로 띄우므로 secure 쿠키를 끄고, 프런트 nginx(내부망) 뒤라 사설 대역 프록시를 신뢰한다(#66). HTTPS 운영 구성에서는 COOKIE_SECURE=auto
+  # 기본은 HTTP(PC)라 secure 쿠키를 끈다. HTTPS 앞단이 있는 운영 서버는 .env 에 COOKIE_SECURE=auto(#66)
+  # 프런트 nginx(내부망) 뒤라 사설 대역 프록시를 신뢰한다
   COOKIE_SECURE: ${COOKIE_SECURE:-off}
   TRUST_PROXY: ${TRUST_PROXY:-loopback, uniquelocal}
-  # 임베딩(bge-m3) 대체 전까지 근거 검색은 BM25 만 쓴다(Ollama 없음)
-  RAG_HYBRID: ${RAG_HYBRID:-off}
+  # 근거 검색 하이브리드(BM25 + bge-m3 임베딩, RRF). 임베딩 전용 ollama 서비스로 동작한다.
+  # 벡터가 없거나 ollama·게이트웨이 장애 시 자동으로 BM25 만으로 폴백한다(search.ts).
+  RAG_HYBRID: ${RAG_HYBRID:-on}
   # 근거 정기 수집(선택) — 외부 공공 API 는 웹훅이 없어 cron 으로 확인한다. 비우면 운영자가 S0 에서 수동 수집. 반영은 S0 승인 후
   KNOWLEDGE_CRON: ${KNOWLEDGE_CRON:-}
   LAW_API_OC: ${LAW_API_OC:-}
@@ -65,10 +76,14 @@ services:
       start_period: 30s
     # 안전 종료(InnoDB 기록 정리) 실측 1초 미만 — 데이터가 커져도 강제 종료되지 않게 넉넉히
     stop_grace_period: 30s
+    logging: *logging
+    deploy:
+      resources:
+        limits: { cpus: "${LIMIT_MARIADB_CPUS:-1.0}", memory: "${LIMIT_MARIADB_MEMORY:-1g}" }
     restart: unless-stopped
 
   model-server:
-    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:ms-${TAMJI_VERSION:-0.1.0}
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:ms-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
     environment:
       MODEL_API_KEY: ${MODEL_API_KEY:?MODEL_API_KEY 를 .env 에 설정하세요}
       # M3·M4 LLM — docs/gemini-vertex-setup.md §4·§5
@@ -79,6 +94,9 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp-credentials
       OLLAMA_WARMUP_ON_START: "false"
+      # 임베딩(bge-m3)은 전용 ollama 서비스로 호출한다. M1·M2·M3·M4 와 무관하므로 ollama 에 hard-depend 하지
+      # 않는다(ollama 가 죽어도 분석은 계속되고 검색은 BM25 로 폴백). 초기 적재 순서만 backend-embed 가 보장한다.
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
     secrets:
       - gcp-credentials
     healthcheck:
@@ -90,20 +108,76 @@ services:
       start_period: 60s
     # 처리 중인 작업을 마치고 종료 — 200조항 작업 중 실측 5.4초
     stop_grace_period: 30s
+    logging: *logging
+    deploy:
+      resources:
+        # torch + M1·M2(fp32). 분석 중 실측 약 1GB
+        limits: { cpus: "${LIMIT_MODEL_SERVER_CPUS:-2.0}", memory: "${LIMIT_MODEL_SERVER_MEMORY:-2g}" }
+    restart: unless-stopped
+
+  # 임베딩 전용 Ollama — bge-m3 를 구워 넣은 전용 이미지(런타임 다운로드 없음). 하이브리드 RAG 의 코사인(의미) 검색에만 쓴다.
+  # M3·M4 LLM 은 Vertex 직결이라 무관하다. 이 서비스가 없거나 죽어도 검색은 BM25 로 동작한다.
+  # 구운 모델은 이미지 안 /models 에 있다 — 볼륨으로 /models 를 덮으면 모델이 가려지므로 덮지 않는다.
+  ollama:
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:ol-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    healthcheck:
+      # 구워 넣은 bge-m3 가 보이면 준비 완료(= serve 기동 + 모델 존재)
+      test: ["CMD-SHELL", "ollama list | grep -q bge-m3"]
+      interval: 10s
+      timeout: 6s
+      retries: 30
+      start_period: 20s
+    stop_grace_period: 15s
+    logging: *logging
+    deploy:
+      resources:
+        # bge-m3 적재 시 실측 약 1.3GB
+        limits: { cpus: "${LIMIT_OLLAMA_CPUS:-1.0}", memory: "${LIMIT_OLLAMA_MEMORY:-2g}" }
     restart: unless-stopped
 
   # 1회 초기화: 마이그레이션(멱등) → 최초 지식 기준일 적재(이미 있으면 변경 없음)
   backend-init:
-    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:-0.1.0}
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
     environment: *backend-env
     command: ["sh", "-c", "node scripts/migrate.js && node scripts/seed-knowledge.js --fixture tests/fixtures/knowledge/initial.json"]
     depends_on:
       mariadb:
         condition: service_healthy
+    logging: *logging
+    restart: "no"
+
+  # 1회성: 초기 근거(backend-init 가 적재한 기준일)의 임베딩 벡터를 채운다. ollama·model-server 가 준비된 뒤 실행.
+  # 멱등(빠진 것만 채움) — 실패해도 검색은 BM25 로 동작하므로 backend 는 이 서비스에 의존하지 않는다.
+  # 반영 흐름으로 들어오는 새 기준일 벡터는 backend 가 kv_activated 이벤트로 자동 채운다(#99) — 초기 적재만 여기서 한다.
+  backend-embed:
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
+    environment: *backend-env
+    # 임베딩은 MariaDB evidence_embedding 테이블에 저장되어 DB_DATA(named volume)에 보존된다.
+    # 따라서 작업 컨테이너에 별도의 벡터 파일 볼륨을 마운트하지 않는다.
+    # 임베딩은 M3·M4(Vertex)와 무관하다. model-server 는 Vertex 미설정 시 /health 가 degraded(503)라
+    # healthy 로 올라오지 않으므로, healthy 가 아니라 started 에 의존하고 앱이 응답할 때까지 기다린 뒤 적재한다.
+    command:
+      - sh
+      - -c
+      - |
+        until node -e "fetch('http://model-server:9542/health').then(()=>process.exit(0),()=>process.exit(1))" 2>/dev/null; do
+          echo 'model-server 기다리는 중...'; sleep 3;
+        done
+        node scripts/embed-evidence.js
+    depends_on:
+      backend-init:
+        condition: service_completed_successfully
+      ollama:
+        condition: service_healthy
+      model-server:
+        condition: service_started
+    logging: *logging
     restart: "no"
 
   backend:
-    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:-0.1.0}
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:be-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
     environment: *backend-env
     volumes:
       # 원본 파일 임시 보관(24시간 내 삭제)·지식 스테이징·벡터 캐시
@@ -122,10 +196,14 @@ services:
       start_period: 30s
     # 종료 신호를 받으면 연결을 닫고 늦어도 10초 뒤 스스로 끝낸다(server.ts) — 그보다 길게 두어 강제 종료(137)를 피한다. 실측 0.5초
     stop_grace_period: 15s
+    logging: *logging
+    deploy:
+      resources:
+        limits: { cpus: "${LIMIT_BACKEND_CPUS:-1.0}", memory: "${LIMIT_BACKEND_MEMORY:-1g}" }
     restart: unless-stopped
 
   frontend:
-    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:fe-${TAMJI_VERSION:-0.1.0}
+    image: ${TAMJI_IMAGE:-moonsangjin/tamji}:fe-${TAMJI_VERSION:?TAMJI_VERSION 를 .env 에 설정하세요}
     environment:
       BACKEND_URL: http://backend:9522
     ports:
@@ -134,6 +212,10 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    logging: *logging
+    deploy:
+      resources:
+        limits: { cpus: "${LIMIT_FRONTEND_CPUS:-0.5}", memory: "${LIMIT_FRONTEND_MEMORY:-256m}" }
     restart: unless-stopped
 
 secrets:
@@ -142,5 +224,8 @@ secrets:
     file: ${GCP_CREDENTIALS_FILE:?GCP_CREDENTIALS_FILE(Vertex 인증 파일 경로) 를 .env 에 설정하세요}
 
 volumes:
+  # 프로젝트 이름을 바꾸어도 기존 데이터를 계속 사용한다.
   db-data:
+    name: rm_db-data
   backend-var:
+    name: rm_backend-var
