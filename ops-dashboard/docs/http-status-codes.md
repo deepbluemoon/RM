@@ -1,6 +1,6 @@
 # HTTP 상태코드 운영 카탈로그
 
-이 문서는 `OPS-*` 운영 이벤트 코드와 분리된 HTTP 응답 상태코드 운영 기준이다. 대시보드는 실행 중인 프로젝트 컨테이너의 Docker access log tail을 읽고, 응답 상태코드만 비식별 파싱해 컨테이너별·전체별로 집계한다.
+이 문서는 `OPS-*` 운영 이벤트 코드와 분리된 HTTP 응답 상태코드 운영 기준이다. 대시보드는 실행 중인 프로젝트 컨테이너의 Docker access log tail을 읽고, 컨테이너·Compose 서비스·전체별 상태코드와 JSON 로그의 명시적 route template별 집계를 제공한다.
 
 표준 코드명은 [IANA HTTP Status Code Registry](https://www.iana.org/assignments/http-status-codes)를 기준으로 관리한다. 등록되지 않은 숫자나 지원하지 않는 로그 포맷은 상태코드로 추정하지 않는다.
 
@@ -47,9 +47,29 @@ responseStatus=503
 HTTP/1.1 429
 ```
 
-현재 파서는 `HTTP/x.y status`, `status/statusCode/responseStatus=...`, 일반적인 combined access log의 상태 위치를 인식한다. 애플리케이션별 사용자 정의 로그 포맷은 추후 파서 어댑터로 확장한다.
+파서는 어댑터 순서대로 JSON, combined access log, 상태코드 단독 형식을 검사한다. 정규화 이벤트는 상태코드와 선택적 method/path/request ID/trace ID/deployment version을 제공한다. `path`는 query string과 fragment를 제거하고, 식별 필드는 허용 문자와 128자 길이 제한을 적용한다. 잘못된 JSON, 미등록 상태코드, 지원하지 않는 줄은 무시한다. 애플리케이션별 포맷은 `HTTP_LOG_ADAPTERS`에 어댑터를 추가하고 형식별 회귀 사례로 지원한다.
+
+현재 제공 어댑터:
+
+| 형식 | 인식 예 | 정규화 필드 |
+|---|---|---|
+| JSON | `{"status": 404, "request": {"method": "GET", "url": "/health?key=..."}}` | 상태코드, method, query를 제거한 path, 알려진 request/trace/deployment ID 키 |
+| Combined access log | `"GET /health HTTP/1.1" 200 41` | 상태코드, method, query를 제거한 path |
+| 상태코드 단독 | `responseStatus=503`, `HTTP/1.1 429` | 상태코드 |
+
+정규화 메타데이터는 파서 결과이며 현재 수집기에서 요청별로 저장하지 않는다. 경로에 포함된 서비스별 민감 식별자는 자동 판별할 수 없으므로, 다음 서비스·라우트 집계에서는 명시적인 route template만 그룹 키로 사용하고 원시 URL을 표시하지 않는다.
+
+## 배포·요청 상관관계
+
+- `OPS_DEPLOYMENT_VERSION`으로 해당 운영 대시보드 실행 환경의 배포 버전을 지정할 수 있다. 구조화 로그에 `deploymentVersion`, `release`, `version`이 있으면 그 값을 우선한다.
+- JSON 로그의 `requestId`/`request_id`, `traceId`/`trace_id`/`trace.id`가 정규화 결과에 포함되며, 상태코드 화면은 최근 Docker log tail에서 관련 요청 이벤트를 최대 25개까지 표시한다.
+- 원시 로그 본문과 query string은 이 상관관계 목록·감사 파일에 저장하지 않는다. 파싱된 ID는 128자 이하의 제한 문자만 허용하며, 브라우저에서 텍스트로 escape해 표시한다.
+- trace backend 연동이나 ID 링크 이동은 제공하지 않는다. request/trace ID를 연결할 로깅 시스템이 같은 ID를 기록하고 있어야 운영자가 해당 시스템에서 검색할 수 있다.
+- `OPS_DEPLOYMENT_VERSION`은 대시보드 프로세스에 설정하는 fallback이다. 서비스별 버전 차이가 있으면 각 JSON 로그의 배포 버전 필드를 사용한다.
 
 ## 운영 경고 기준
+
+서비스는 Compose service label을 우선 사용하고 없으면 컨테이너 이름으로 구분한다. 라우트 집계는 JSON 로그의 `route`, `routePattern`, `pathTemplate` 필드만 사용한다. 원시 요청 URL과 query string은 집계 결과·화면에 포함하지 않으며, route template이 없는 로그는 서비스·컨테이너 집계에는 포함하되 라우트 목록에서는 제외한다.
 
 단일 4xx는 정상적인 사용자 입력·권한 거부일 수 있으므로 자동 대응하지 않는다. 다음 조건을 모두 만족할 때만 상태코드 경고를 활성화한다.
 
@@ -57,9 +77,9 @@ HTTP/1.1 429
 |---|---|---|
 | `HTTP-404-RATE-001` | 최소 10건 중 404 비율 20% 이상이 30초 이상 지속 | 라우팅·프론트/백엔드 계약·배포 누락 확인 |
 | `HTTP-429-RATE-001` | 최소 10건 중 429 비율 10% 이상이 30초 이상 지속 | rate limit, 호출자 폭주, 재시도 정책 확인 |
-| `HTTP-5XX-RATE-001` | 최소 10건 중 5xx 비율 5% 이상이 30초 이상 지속 | Docker 진단 버튼 활성화. 자동 롤백·자동 확장 금지 |
+| `HTTP-5XX-RATE-001` | 최소 10건 중 5xx 비율 5% 이상이 30초 이상 지속 | 운영자가 선택하는 컨테이너 장애 정보 수집 옵션 활성화. 자동 롤백·자동 확장 금지 |
 
-현재 단계에서 `HTTP-5XX-RATE-001`만 `collect-diagnostics.sh` 버튼을 활성화한다. 404·429는 원인 확인 전 자동 스크립트를 실행하지 않는다.
+현재 단계에서 `HTTP-5XX-RATE-001`은 `collect-container-incident.sh` 옵션을 활성화한다. 오류코드는 옵션 노출에만 사용하며 스크립트를 자동 실행하지 않는다. 404·429에는 대응 스크립트를 연결하지 않는다.
 
 ## 주의사항
 

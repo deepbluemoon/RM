@@ -40,6 +40,8 @@ async function makeUi() {
     append(child) { this.children.push(child); child.remove = () => this.children.shift() }
     get firstElementChild() { return this.children[0] }
     addEventListener() {}
+    showModal() { this.open = true }
+    close() { this.open = false }
     focus() {}
     scrollIntoView() {}
   }
@@ -66,11 +68,31 @@ async function makeUi() {
   const window = { location: { get hash() { return hash }, set hash(value) { hash = value && !value.startsWith('#') ? '#' + value : value } } }
   const source = (await fs.readFile(new URL('../src/public/app.js', import.meta.url), 'utf8'))
     .replace(/^import [^\n]*\n/gm, '')
-    .replace(/^void init\(\)\s*$/m, 'globalThis.ui = { state, showView, appendLog, renderOverview, focusAlert, selectContainer }')
+    .replace(/^void init\(\)\s*$/m, 'globalThis.ui = { state, showView, appendLog, renderOverview, focusAlert, selectContainer, renderStatusCodes, openActionReview, renderActionHistory, renderReports, openRecordConfirmation }')
   const context = vm.createContext({ document, window, EventSource, summarizeMetrics, formatPercent, httpChartData })
   vm.runInContext(source, context)
   return { ui: context.ui, element, links, window, sources }
 }
+
+test('통합 화면은 HTTP 상세, 대응 확인과 운영 기록을 제공한다', async () => {
+  const { ui, element } = await makeUi()
+  ui.renderStatusCodes({ totals: { classCounts: { '1xx': 0, '2xx': 1, '3xx': 0, '4xx': 0, '5xx': 0 } }, services: [{ service: 'backend', total: 1, classCounts: { '5xx': 0 } }], routes: [{ service: 'backend', method: 'GET', route: '/api/health', total: 1 }], correlations: [{ service: 'backend', status: 503, traceId: 'trace-123', deploymentVersion: 'release-7' }] }, true)
+  assert.match(element('status-summary').innerHTML, /backend/)
+  assert.match(element('status-summary').innerHTML, /\/api\/health/)
+  assert.match(element('status-summary').innerHTML, /trace-123/)
+  ui.state.catalog = { actions: [{ id: 'diagnose', label: '진단', includeLogs: true }] }
+  ui.openActionReview('diagnose', 'OPS-1', { containerName: 'api' }, null)
+  assert.equal(element('action-confirm-target').textContent, 'api')
+  assert.equal(element('action-confirm-dialog').open, true)
+  assert.equal(element('include-logs-option').classList.contains('hidden'), false)
+  ui.renderActionHistory([{ at: 0, actionId: 'diagnose', actor: 'operator', code: 'OPS-1', target: 'api', status: 'success' }])
+  assert.match(element('action-history').innerHTML, /api/)
+  ui.renderReports([{ id: 'report.txt', modifiedAt: 0, sizeBytes: 10 }])
+  assert.match(element('report-list').innerHTML, /report.txt/)
+  ui.openRecordConfirmation('delete', 'report.txt')
+  assert.equal(element('record-confirm-dialog').open, true)
+  assert.match(element('record-confirm-description').textContent, /report.txt/)
+})
 
 test('메뉴는 해시와 뒤로 가기에 맞춰 화면을 구분한다', async () => {
   const { ui, element, links, window } = await makeUi()

@@ -19,9 +19,9 @@ export function formatDuration(seconds) {
   return `${secs}초`
 }
 
-export function createMonitor({ readSnapshot, readStatusLogs = async () => ({ logs: {}, errors: [] }), threshold = 80, now = () => Date.now(), httpStatusAlertDurationMs = 30_000 } = {}) {
+export function createMonitor({ readSnapshot, readStatusLogs = async () => ({ logs: {}, errors: [] }), threshold = 80, now = () => Date.now(), httpStatusAlertDurationMs = 30_000, deploymentVersion = '' } = {}) {
   const thresholdStartedAt = new Map()
-  const httpStatusMonitor = createHttpStatusAggregator({ now, alertDurationMs: httpStatusAlertDurationMs })
+  const httpStatusMonitor = createHttpStatusAggregator({ now, alertDurationMs: httpStatusAlertDurationMs, deploymentVersion })
   let latest = { observedAt: now(), containers: [], alerts: [], dockerAvailable: true, statusCodes: httpStatusMonitor.getState() }
 
   function makeAlerts(containers, observedAt) {
@@ -43,6 +43,7 @@ export function createMonitor({ readSnapshot, readStatusLogs = async () => ({ lo
             containerId: container.id,
             containerName: container.name,
             containerImage: container.image,
+            composeService: container.composeService || '',
             stateful: /(?:mariadb|mysql)(?::|$|\/)/i.test(`${container.image || ''}:${container.name || ''}`),
             resource: metric.label,
             value: round(value),

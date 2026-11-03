@@ -32,15 +32,19 @@ function parseJsonLines(output) {
 
 export async function listContainers() {
   const output = await runDocker(['ps', '-a', '--format', '{{json .}}'])
-  return parseJsonLines(output).map((item) => ({
-    id: item.ID,
-    name: item.Names,
-    image: item.Image,
-    state: item.State,
-    status: item.Status,
-    ports: item.Ports || '',
-    createdAt: item.CreatedAt || '',
-  }))
+  return parseJsonLines(output).map((item) => {
+    const composeService = String(item.Labels || '').split(',').map((label) => label.trim()).find((label) => label.startsWith('com.docker.compose.service='))?.split('=').slice(1).join('=')
+    return {
+      id: item.ID,
+      name: item.Names,
+      image: item.Image,
+      state: item.State,
+      status: item.Status,
+      ports: item.Ports || '',
+      createdAt: item.CreatedAt || '',
+      ...(composeService ? { composeService } : {}),
+    }
+  })
 }
 
 function parsePercent(value) {
