@@ -1,0 +1,13 @@
+# Docker Hub 이미지가 현재 소스와 다를 때 로컬 빌드 산출물로 서비스한다.
+# 먼저 아래 이미지를 빌드한다:
+#   docker build -f backend/Dockerfile -t tamji-local/backend:local .
+#   docker build -f frontend/Dockerfile -t tamji-local/frontend:local .
+services:
+  backend-init:
+    image: tamji-local/backend:local
+  backend-embed:
+    image: tamji-local/backend:local
+  backend:
+    image: tamji-local/backend:local
+  frontend:
+    image: tamji-local/frontend:local

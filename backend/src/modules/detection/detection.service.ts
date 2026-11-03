@@ -71,11 +71,14 @@ async function detectScores(runId: number, clauses: ClauseRow[], signal: AbortSi
   for (const [, docClauses] of byDoc) {
     const contractType = docClauses[0]!.contract_type!;
     const jobId = await modelApi.createDetectJob(docClauses.map(toClauseIn), contractType);
-    await exec(getPool(), 'UPDATE analysis_run SET job_ref = COALESCE(job_ref, ?) WHERE run_id = ?', [jobId.slice(0, 64), runId]);
+    // 상태 API가 현재 문서의 M1·M2 배치 진행률을 표시할 수 있게 최신 job을 기록한다.
+    await exec(getPool(), 'UPDATE analysis_run SET job_ref = ? WHERE run_id = ?', [jobId.slice(0, 64), runId]);
     const byId = new Map(docClauses.map((c) => [String(c.clause_id), c]));
     for (;;) {
       throwIfAborted(signal);
       const job = await modelApi.getJob(jobId);
+      // 취소가 진행 중인 getJob 응답과 겹치면 점수 저장을 시작하지 않는다.
+      throwIfAborted(signal);
       for (const r of job.results) {
         const c = byId.get(r.clause_id);
         if (!c || out.has(c.clause_id)) continue;
