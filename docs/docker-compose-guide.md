@@ -32,13 +32,24 @@
 
    | 꼭 채울 값 | 내용 |
    |---|---|
-   | `DB_PASSWORD`, `DB_ROOT_PASSWORD` | DB 비밀번호 |
+   | `DB_PASSWORD`, `DB_ROOT_PASSWORD` | 사용자가 생성해 `.env`에 넣는 DB 비밀번호. MariaDB가 자동으로 알려주는 값이 아니다. |
    | `SESSION_SECRET`, `RAW_FILE_KEY` | 각각 64자리 hex (`openssl rand -hex 32`) |
    | `MODEL_API_KEY` | 임의 값(백엔드·모델 서버 공용) |
    | `VERTEX_PROJECT` | GCP 프로젝트 ID |
    | `GCP_CREDENTIALS_FILE` | Vertex 인증 파일 경로(아래 3절) |
 
    값이 빠지면 `docker compose`가 어떤 값이 필요한지 알려 주고 멈춘다.
+
+   비밀번호는 터미널에서 생성해 `.env`에 직접 입력한다. 예를 들어 Mac의 zsh에서 각각 실행한다.
+
+   ```bash
+   openssl rand -hex 32
+   openssl rand -hex 32
+   ```
+
+   첫 번째 값을 `.env`의 `DB_PASSWORD`, 두 번째 값을 `DB_ROOT_PASSWORD`에 붙여 넣고 저장한다. 기존 `.env`가 있으면 덮어쓰지 말고 필요한 항목만 수정한다.
+
+   `SESSION_SECRET`, `RAW_FILE_KEY`, `MODEL_API_KEY`도 같은 방식으로 생성한다. `.env`에는 실서비스 비밀값을 넣고 GitHub·채팅·이슈에는 올리지 않는다.
 
 ## 3. Vertex 인증 연결
 
@@ -55,6 +66,8 @@
 
 ### 받아서 실행 (기본)
 
+`.env.example`의 `TAMJI_VERSION`은 현재 최신 이미지의 날짜 버전(`20261103`)이다. Docker Hub에는 `fe-YYYYMMDD`, `be-YYYYMMDD`, `ms-YYYYMMDD`, `ol-YYYYMMDD`가 같은 날짜로 발행된다. 새 날짜 버전이 발행되면 `.env`의 `TAMJI_VERSION`만 새 날짜로 바꾼다.
+
 ```bash
 docker compose pull
 docker compose up -d
@@ -62,6 +75,8 @@ docker compose ps        # backend·model-server·ollama·mariadb 가 healthy, b
 ```
 
 브라우저에서 `http://localhost:8080` (포트는 `.env`의 `FRONTEND_PORT`).
+
+벡터는 MariaDB의 `evidence_embedding` 테이블에 저장된다. 기본 `db-data` named volume(또는 `.env`의 `DB_DATA`)에 함께 영속화되므로, 별도의 벡터 파일 볼륨은 필요하지 않다. 초기 적재는 `backend-embed`가 수행한다.
 
 ### 직접 빌드해서 실행 (개발)
 
@@ -73,9 +88,24 @@ docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 - 개발용 로그인이 켜진다. **로그인 화면에는 버튼이 없으므로** 주소로 들어간다: `http://localhost:8080/api/auth/dev/start?devSubject=<아무 이름>` → 사용자 권한으로 로그인된다.
 - 디버깅 포트: 백엔드 `127.0.0.1:19522`, DB `127.0.0.1:13306`
 
-### 계정 만들기
+### backend 이미지에 초기 임베딩 스크립트가 없을 때
 
-새로 띄운 DB에는 계정이 없다. 로그인 화면의 아이디·비밀번호로 들어가려면 아래처럼 계정을 만들거나, 화면의 **회원가입**으로 만든다(회원가입 계정은 사용자 권한).
+`backend-embed` 로그에 `Cannot find module '/app/backend/scripts/embed-evidence.js'`가 나오면 Docker Hub backend 이미지가 현재 Dockerfile보다 오래된 것이다. 현재 소스로 backend 이미지를 한 번 빌드한 뒤 로컬 오버레이를 적용한다. 이 방법은 개발용 로그인 설정을 켜지 않는다.
+
+```bash
+docker build -f backend/Dockerfile -t tamji-local/backend:local .
+docker build -f frontend/Dockerfile -t tamji-local/frontend:local .
+docker compose -f compose.yaml -f compose.local.yaml up -d
+docker compose ps --all
+```
+
+`compose.local.yaml`은 `backend`, `backend-init`, `backend-embed`, `frontend`를 로컬 이미지로 바꾼다. DB 볼륨은 유지되며, 임베딩 작업은 빠진 벡터만 채운다. Docker Hub 날짜 태그를 갱신한 뒤에는 기본 `docker compose up -d`로 돌아간다.
+
+### DB 비밀번호와 계정 만들기
+
+MariaDB 계정 비밀번호는 `.env`의 `DB_PASSWORD`이며, root 비밀번호는 `DB_ROOT_PASSWORD`다. 컨테이너 안에서 새 비밀번호를 조회하는 구조가 아니므로, 기동 전에 직접 생성해 `.env`에 보관한다. 컨테이너를 처음 만든 뒤 값을 바꾸면 이미 초기화된 DB 볼륨의 비밀번호는 자동 변경되지 않는다. 기존 볼륨의 비밀번호 변경은 MariaDB 내부에서 별도로 수행해야 한다.
+
+새로 띄운 DB에는 애플리케이션 계정이 없다. 로그인 화면의 아이디·비밀번호로 들어가려면 아래처럼 운영자 계정을 만들거나, 화면의 **회원가입**으로 사용자 계정을 만든다.
 
 ```bash
 docker compose exec -e CRD_NEW_PASSWORD='<비밀번호>' backend \
