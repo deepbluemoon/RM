@@ -105,7 +105,7 @@ docker compose -f compose.yaml -f compose.local.yaml up -d
 docker compose ps --all
 ```
 
-`compose.local.yaml`은 `backend`, `backend-init`, `backend-embed`, `frontend`를 로컬 이미지로 바꾼다. DB 볼륨은 유지되며, 임베딩 작업은 빠진 벡터만 채운다. Docker Hub 날짜 태그를 갱신한 뒤에는 기본 `docker compose up -d`로 돌아간다.
+`compose.local.yaml`은 `backend`, `backend-init`, `backend-embed`, `frontend`를 로컬 이미지로 바꾼다. DB 볼륨은 유지되며, 임베딩 작업은 빠진 벡터만 채운다. 이 문제를 고친 이미지(`0.1.1` 이상, #125)가 Docker Hub에 올라오면 `.env`의 `TAMJI_VERSION`을 그 버전으로 바꾸고 기본 `docker compose up -d`로 돌아간다.
 
 ### DB 비밀번호와 계정 만들기
 
