@@ -18,6 +18,7 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
       this.id = id
       this.classList = new Classes(id === 'activity' ? ['hidden'] : [])
       this.dataset = {}
+      this.style = {}
       this.previousElementSibling = { style: {} }
       this.listeners = {}
       this.attributes = {}
@@ -30,12 +31,20 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
     showModal() { this.open = true }
     close() { this.open = false }
     focus() {}
-    getBoundingClientRect() { return { top: 0 } }
+    getBoundingClientRect() {
+      return ({
+        'summary-grid': { left: 100, top: 200, bottom: 500, width: 1_000, height: 300 },
+        'alert-toggle': { left: 350, top: 200, bottom: 300, width: 220, height: 100 },
+        'alerts-popover': { left: 0, top: 0, bottom: 100, width: 440, height: 100 },
+        'summary-detail': { left: 0, top: 0, bottom: 100, width: 440, height: 100 },
+        'summary-cpu': { left: 600, top: 200, bottom: 300, width: 220, height: 100 },
+      })[this.id] || { left: 0, top: 0, bottom: 50, width: 100, height: 50 }
+    }
     setAttribute(key, value) { this.attributes[key] = value }
     removeAttribute(key) { delete this.attributes[key] }
     addEventListener(type, callback) { this.listeners[type] = callback }
     querySelectorAll(selector) {
-      if (['container-list', 'activity-container-list'].includes(this.id)) {
+      if (this.id === 'container-list') {
         this.rows = [...this.innerHTML.matchAll(/data-container-id="([^"]+)"/g)].map((match) => {
           const row = new Element('row')
           row.dataset.containerId = match[1]
@@ -68,6 +77,11 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
     link.dataset.viewLink = view
     return link
   })
+  const summaryButtons = ['running', 'cpu', 'memory'].map((key) => {
+    const button = new Element(`summary-${key}`)
+    button.dataset.summary = key
+    return button
+  })
   const events = {}
   const sources = []
   class EventSource {
@@ -92,7 +106,7 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
   }
   const source = (await fs.readFile(new URL('../src/public/app.js', import.meta.url), 'utf8')).replace(/^import [^\n]*\n/gm, '')
   const context = vm.createContext({
-    document: { getElementById: element, querySelectorAll: (selector) => selector === '.container-row' ? [...(element('container-list').rows || []), ...(element('activity-container-list').rows || [])] : links },
+    document: { getElementById: element, querySelectorAll: (selector) => selector === '.container-row' ? (element('container-list').rows || []) : selector === '[data-summary]' ? summaryButtons : links },
     window, EventSource, summarizeMetrics, formatPercent, httpChartData,
     fetch: async (url) => ({ ok: true, json: async () => url === '/api/error-codes' ? { codes: [], actions: [] } : overview }),
     setInterval: () => 0,
@@ -105,11 +119,13 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
   assert.equal(element('running-count').textContent, '1')
   assert.match(element('status-summary').innerHTML, /2XX/)
   assert.match(element('container-list').innerHTML, /api/)
-  assert.match(element('activity-container-list').innerHTML, /worker/)
+  assert.match(element('activity-container-select').innerHTML, /worker/)
   assert.equal(element('alert-count').textContent, '3')
   assert.equal(element('alerts-popover').classList.contains('hidden'), true)
   element('alert-toggle').listeners.click()
   assert.equal(element('alerts-popover').classList.contains('hidden'), false)
+  assert.equal(element('alerts-popover').style.left, '250px')
+  assert.equal(element('alerts-popover').style.top, '108px')
   element('alerts-list').alertRows.find((row) => row.dataset.alertId === 'HTTP-5XX-RATE-001:abc').listeners.click()
   assert.equal(element('alerts-popover').classList.contains('hidden'), true)
   assert.equal(element('http-warning-lamp').classList.contains('hidden'), false)
@@ -123,6 +139,9 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
   element('alerts-list').alertRows.find((row) => row.dataset.alertId === 'OPS-DOCKER-001').listeners.click()
   assert.equal(element('engine-warning-lamp').classList.contains('hidden'), false)
   assert.equal(element('http-warning-lamp').classList.contains('hidden'), true)
+  summaryButtons.find((button) => button.dataset.summary === 'cpu').listeners.click()
+  assert.equal(element('summary-detail').style.left, '500px')
+  assert.equal(element('summary-detail').style.top, '108px')
 
   element('container-list').rows[0].listeners.click()
   assert.equal(sources[0].url, '/api/logs/stream?containerId=abc&tail=200')
@@ -132,18 +151,27 @@ test('화면 전환과 컨테이너 선택은 기존 로그 연결을 유지한�
   assert.equal(element('overview').classList.contains('hidden'), true)
   assert.equal(element('activity').classList.contains('hidden'), false)
   assert.equal(element('logs-title').textContent, '로그 · api')
-  element('activity-container-list').rows.at(-1).listeners.click()
+  element('activity-container-select').listeners.change({ target: { value: 'def' } })
   assert.equal(sources[0].closed, true)
   assert.equal(sources[1].url, '/api/logs/stream?containerId=def&tail=200')
   window.location.hash = '#overview'
   events.hashchange()
   assert.equal(element('overview').classList.contains('hidden'), false)
   assert.equal(links[0].attributes['aria-current'], 'page')
+  overview.dockerAvailable = false
+  element('alert-toggle').listeners.click()
+  assert.equal(element('activity-container-select').innerHTML, '')
+  assert.equal(element('activity-container-select').disabled, true)
 })
 
 test('화면에서 상단 오류 배너를 제거하고 오류코드 안내는 dialog로 제공한다', async () => {
   const html = await fs.readFile(new URL('../src/public/index.html', import.meta.url), 'utf8')
   assert.doesNotMatch(html, /id="error-banner"/)
+  assert.match(html, /id="running-count">-<\/strong>/)
+  assert.match(html, /id="alert-count">-<\/strong>/)
+  assert.match(html, /id="cpu-total">-<\/strong>/)
+  assert.match(html, /id="memory-total">-<\/strong>/)
+  assert.match(html, /<select id="activity-container-select"[^>]*><\/select>/)
   assert.match(html, /<dialog id="error-codes"/)
   assert.match(html, /id="alert-toggle"[^>]+aria-expanded="false"/)
 })
