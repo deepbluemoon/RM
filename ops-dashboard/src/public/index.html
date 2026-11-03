@@ -53,10 +53,14 @@
           </section>
 
           <section class="summary-grid" aria-label="전체 요약">
-            <article class="summary-card accent-teal"><div class="summary-top"><span class="card-label">RUNNING CONTAINERS</span><span class="summary-icon">▦</span></div><strong id="running-count">확인 중</strong><span class="card-note">전체 <b id="total-count">확인 중</b>개 중</span></article>
-            <article class="summary-card accent-red"><div class="summary-top"><span class="card-label">ACTIVE ALERTS</span><span class="summary-icon">!</span></div><strong id="alert-count" class="danger-text">확인 중</strong><span class="card-note">임계치 초과 컨테이너</span></article>
-            <article class="summary-card accent-blue"><div class="summary-top"><span class="card-label">TOTAL CPU USAGE</span><span class="summary-icon">⌁</span></div><strong id="cpu-total">확인 중</strong><span class="card-note">실행 중 합계</span></article>
-            <article class="summary-card accent-pink"><div class="summary-top"><span class="card-label">MEMORY USAGE</span><span class="summary-icon">◇</span></div><strong id="memory-total">확인 중</strong><span class="card-note">전체 한도 기준</span></article>
+            <button class="summary-card accent-teal" type="button" data-summary="running" aria-expanded="false" aria-controls="summary-detail"><span class="summary-top"><span class="card-label">RUNNING CONTAINERS</span><span class="summary-icon" aria-hidden="true">▦</span></span><strong id="running-count">확인 중</strong></button>
+            <article class="summary-card accent-red"><div class="summary-top"><span class="card-label">ACTIVE ALERTS</span><span class="summary-icon" aria-hidden="true">!</span></div><strong id="alert-count" class="danger-text">확인 중</strong></article>
+            <button class="summary-card accent-blue" type="button" data-summary="cpu" aria-expanded="false" aria-controls="summary-detail"><span class="summary-top"><span class="card-label">TOTAL CPU USAGE</span><span class="summary-icon" aria-hidden="true">⌁</span></span><strong id="cpu-total">확인 중</strong></button>
+            <button class="summary-card accent-pink" type="button" data-summary="memory" aria-expanded="false" aria-controls="summary-detail"><span class="summary-top"><span class="card-label">MEMORY USAGE</span><span class="summary-icon" aria-hidden="true">◇</span></span><strong id="memory-total">확인 중</strong></button>
+            <section id="summary-detail" class="summary-detail hidden" role="region" aria-label="요약 상세" aria-live="polite">
+              <div class="summary-detail-head"><h2 id="summary-detail-title"></h2><button id="close-summary-detail" class="text-button" type="button">닫기</button></div>
+              <div id="summary-detail-content"></div>
+            </section>
           </section>
 
           <section class="panel alert-panel" aria-label="활성 경고">

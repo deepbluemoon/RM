@@ -1,7 +1,7 @@
 import { summarizeMetrics, formatPercent } from './metric-display.js'
 import { httpChartData } from './http-chart.js'
 
-const state = { overview: null, catalog: null, selectedId: null, logSource: null }
+const state = { overview: null, catalog: null, selectedId: null, logSource: null, summaryOpen: null, metricHistory: [] }
 const $ = (id) => document.getElementById(id)
 
 function formatBytes(bytes) {
@@ -28,7 +28,6 @@ function renderOverview() {
   const containers = overview.dockerAvailable ? (overview.containers || []) : []
   const metrics = summarizeMetrics(overview)
   $('running-count').textContent = metrics.running === null ? '-' : String(metrics.running)
-  $('total-count').textContent = metrics.total === null ? '-' : String(metrics.total)
   $('alert-count').textContent = String(overview.alerts?.length || 0)
   $('cpu-total').textContent = formatPercent(metrics.cpu, '-')
   $('memory-total').textContent = formatPercent(metrics.memory, '-')
@@ -41,9 +40,84 @@ function renderOverview() {
   renderAlerts(overview.alerts || [])
   renderStatusCodes(overview.statusCodes, overview.dockerAvailable)
   renderContainers(containers, overview.alerts || [], overview.dockerAvailable)
+  renderSummaryDetail(containers, metrics, overview.dockerAvailable)
   renderActions(overview.alerts || [])
   const banner = $('error-banner')
   if (overview.error) { banner.classList.remove('hidden'); banner.innerHTML = `<strong>OPS-DOCKER-001</strong> · ${escapeHtml(overview.error)}` } else banner.classList.add('hidden')
+}
+
+function recordMetricSample(overview) {
+  const metrics = summarizeMetrics(overview)
+  state.metricHistory.push({ at: Date.now(), cpu: metrics.cpu, memory: metrics.memory })
+  if (state.metricHistory.length > 61) state.metricHistory.shift()
+}
+
+function renderMetricGraph(key, color, title) {
+  const samples = state.metricHistory.filter((sample) => sample.at >= Date.now() - 5 * 60_000).slice(-61)
+  const values = samples.map((sample) => sample[key])
+  const finiteValues = values.filter(Number.isFinite)
+  if (finiteValues.length < 2) {
+    return '<div class="metric-graph-empty">그래프 데이터를 모으는 중</div>'
+  }
+  const max = Math.max(...finiteValues, 1)
+  const segments = []
+  let segment = []
+  values.forEach((value, index) => {
+    if (!Number.isFinite(value)) {
+      if (segment.length > 1) segments.push(segment.join(' '))
+      segment = []
+      return
+    }
+    const x = 2 + index / Math.max(values.length - 1, 1) * 196
+    const y = 43 - value / max * 37
+    segment.push(`${x.toFixed(1)},${y.toFixed(1)}`)
+  })
+  if (segment.length > 1) segments.push(segment.join(' '))
+  return `<svg class="metric-graph" viewBox="0 0 200 48" role="img" aria-label="최근 5분 ${title} 사용량 추이"><line x1="2" y1="43.5" x2="198" y2="43.5" />${segments.map((points) => `<polyline points="${points}" style="stroke:${color}" />`).join('')}</svg><div class="metric-graph-range"><span>5분 전</span><span>현재</span></div>`
+}
+
+function renderSummaryDetail(containers, metrics, dockerAvailable) {
+  const detail = $('summary-detail')
+  const content = $('summary-detail-content')
+  const title = $('summary-detail-title')
+  document.querySelectorAll('[data-summary]').forEach((button) => {
+    button.setAttribute('aria-expanded', String(button.dataset.summary === state.summaryOpen))
+  })
+  detail.classList.toggle('hidden', !state.summaryOpen)
+  if (!state.summaryOpen) return
+
+  if (state.summaryOpen === 'running') {
+    const running = containers.filter((container) => container.running)
+    title.textContent = `실행 중인 컨테이너 ${metrics.running ?? '-'}개`
+    content.innerHTML = !dockerAvailable
+      ? '<div class="metric-graph-empty">Docker 상태를 확인할 수 없습니다.</div>'
+      : running.length
+        ? `<ul class="summary-container-list">${running.map((container) => { const indicator = getContainerIndicator(container, state.overview?.alerts || []); return `<li><span class="status-lamp ${indicator.className}" aria-hidden="true"></span><span>${escapeHtml(container.name)}</span><small>${indicator.label}</small></li>` }).join('')}</ul>`
+        : '<div class="metric-graph-empty">실행 중인 컨테이너가 없습니다.</div>'
+    return
+  }
+
+  const isCpu = state.summaryOpen === 'cpu'
+  const metric = isCpu ? metrics.cpu : metrics.memory
+  const label = isCpu ? 'CPU 사용량' : '메모리 사용률'
+  const color = isCpu ? 'var(--blue)' : 'var(--pink)'
+  title.textContent = label
+  content.innerHTML = !dockerAvailable || !Number.isFinite(metric)
+    ? '<div class="metric-graph-empty">수집된 사용량 데이터가 없습니다.</div>'
+    : `<div class="metric-graph-current">현재 <strong>${formatPercent(metric, '-')}</strong></div>${renderMetricGraph(isCpu ? 'cpu' : 'memory', color, label)}`
+}
+
+function getContainerIndicator(container, alerts) {
+  const ownAlerts = alerts.filter((alert) => alert.containerId === container.id)
+  const dockerState = String(container.state || '').toLowerCase()
+  const dockerStatus = String(container.status || '').toLowerCase()
+  if (ownAlerts.length || dockerStatus.includes('unhealthy')) return { className: 'is-alert', label: '경고' }
+  if (['created', 'restarting'].includes(dockerState) || dockerStatus.includes('health: starting')) {
+    return { className: 'is-preparing', label: '준비 중' }
+  }
+  if (container.running) return { className: 'is-online', label: '실행 중' }
+  if (dockerState === 'paused') return { className: 'is-unknown', label: '일시 정지' }
+  return { className: 'is-unknown', label: '중지' }
 }
 
 function renderAlerts(alerts) {
@@ -73,9 +147,10 @@ function renderContainers(containers, alerts, dockerAvailable) {
   list.innerHTML = containers.map((container) => {
     const stats = container.stats
     const ownAlerts = alerts.filter((alert) => alert.containerId === container.id)
+    const indicator = getContainerIndicator(container, alerts)
     const selected = state.selectedId === container.id ? ' selected' : ''
     return `<button class="container-row${selected}" data-container-id="${escapeHtml(container.id)}" type="button">
-      <div class="row-top"><span class="container-name" title="${escapeHtml(container.name)}">${escapeHtml(container.name)}</span><span class="status${container.running ? '' : ' stopped'}">${container.running ? 'running' : 'stopped'}</span></div>
+      <div class="row-top"><span class="container-name" title="${escapeHtml(container.name)}">${escapeHtml(container.name)}</span><span class="status ${indicator.className}"><span class="status-lamp" aria-hidden="true"></span>${indicator.label}</span></div>
       <div class="container-id">${escapeHtml(container.id.slice(0, 12))} · ${escapeHtml(container.image)}</div>
       <div class="metrics"><div><div class="metric-label"><span>CPU</span><span class="metric-value">${formatPercent(stats?.cpuPercent)}</span></div>${stats && Number.isFinite(stats.cpuPercent) ? `<div class="bar"><i class="${stats.cpuPercent >= 80 ? 'warn' : ''}" style="width:${Math.min(Math.max(stats.cpuPercent, 0), 100)}%"></i></div>` : ''}</div><div><div class="metric-label"><span>MEM</span><span class="metric-value">${formatPercent(stats?.memoryPercent)}</span></div>${stats && Number.isFinite(stats.memoryPercent) ? `<div class="bar"><i class="${stats.memoryPercent >= 80 ? 'warn' : ''}" style="width:${Math.min(Math.max(stats.memoryPercent, 0), 100)}%"></i></div>` : ''}</div></div>
       ${ownAlerts.map((alert) => `<div class="row-alert"><b>${escapeHtml(alert.code)}</b> · ${escapeHtml(alert.resource)} ${alert.value}% 이상 · ${formatDuration(alert.durationSec)} 지속</div>`).join('')}
@@ -132,6 +207,7 @@ function selectContainer(containerId) {
 async function refresh() {
   const response = await fetch('/api/overview', { cache: 'no-store' })
   state.overview = await response.json()
+  recordMetricSample(state.overview)
   renderOverview()
 }
 
@@ -140,6 +216,26 @@ async function init() {
   $('codes-list').innerHTML = state.catalog.codes.map((item) => `<article class="code-item"><code>${escapeHtml(item.code)}</code><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.trigger)}<br />대응: ${escapeHtml(item.response)}</p></article>`).join('')
   $('clear-logs').addEventListener('click', () => { $('log-output').innerHTML = '<div class="log-empty"><span>⌁</span><p>로그를 선택하세요.</p></div>' })
   $('refresh-now').addEventListener('click', () => { void refresh().catch(() => {}) })
+  document.querySelectorAll('[data-summary]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.summaryOpen = state.summaryOpen === button.dataset.summary ? null : button.dataset.summary
+      renderOverview()
+    })
+  })
+  $('close-summary-detail').addEventListener('click', () => {
+    const trigger = document.querySelector(`[data-summary="${state.summaryOpen}"]`)
+    state.summaryOpen = null
+    renderOverview()
+    trigger?.focus()
+  })
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.summaryOpen) {
+      const trigger = document.querySelector(`[data-summary="${state.summaryOpen}"]`)
+      state.summaryOpen = null
+      renderOverview()
+      trigger?.focus()
+    }
+  })
   await refresh()
   setInterval(() => { void refresh().catch(() => {}) }, 5_000)
 }
