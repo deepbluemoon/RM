@@ -135,7 +135,7 @@ docker compose -f compose.yaml -f compose.prod.yaml up -d
 
 ## 7. 알아둘 점
 
-- **근거 검색은 BM25만 쓴다.** 임베딩(bge-m3)은 Ollama를 썼는데 컨테이너 구성에는 Ollama가 없다. 대체 방식은 별도 작업에서 정한다(`RAG_HYBRID=off`).
+- **근거 검색은 BM25 + bge-m3 벡터 하이브리드다(#98).** 임베딩은 `ollama` 컨테이너가 계산하고, 처음 기동할 때 `backend-embed`가 근거 벡터를 채운다. 벡터가 없거나 Ollama를 쓸 수 없으면 자동으로 BM25만 쓰고 분석은 계속된다.
 - **기본은 HTTP 구성이다.** 백엔드는 `COOKIE_SECURE=off`, `TRUST_PROXY=loopback, uniquelocal`로 실행된다(#66). HTTPS 앞단을 두는 운영 구성(`compose.prod.yaml`)은 `COOKIE_SECURE=auto`가 기본이다.
 - **arm64(Apple Silicon)** 이미지는 규칙상 함께 올린다. 이미지가 아직 amd64만 있으면 Mac에서는 에뮬레이션으로 느리게 동작할 수 있다.
 - Vertex 인증 파일이 없거나 쓸 수 없으면 모델 서버 `/health`가 M3·M4를 `error`로 표시하고(1분마다 다시 확인), 이유는 모델 서버 로그에 남는다. 이때는 3절을 확인한다.
