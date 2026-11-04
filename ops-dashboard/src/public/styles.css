@@ -145,6 +145,7 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .legend i { width: 7px; height: 7px; border-radius: 50%; }.legend-cpu { background: var(--cyan); }.legend-memory { background: var(--purple); }
 .legend small { margin-left: auto; color: var(--dim); font-size: 10px; }
 .io-panel { grid-column: span 2; min-height: 180px; }
+.nav-card { cursor: pointer; transition: border-color .15s, background .15s; }.nav-card:hover, .nav-card:focus-visible { border-color: #4a8e9d; background: #131a20; outline: none; }
 .text-button { padding: 4px 0; border: 0; background: transparent; color: #92b6ed; cursor: pointer; text-decoration: none; font-size: 11px; white-space: nowrap; }
 .text-button:hover { color: #c7ddff; text-decoration: underline; }
 .compact-list, .io-list, .alerts-list, .actions-list, .codes-list, .container-list { display: grid; align-content: start; gap: 8px; }
@@ -156,7 +157,8 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .io-values b { color: #cbd4e0; font-weight: 500; }
 .fill-panel { min-height: 300px; }
 .scroll-region { min-height: 0; overflow: auto; }
-.container-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.container-list { grid-template-columns: minmax(0, 1fr); }
+.inline-log-panel { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .container-row { display: block; width: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 5px; color: inherit; background: var(--panel-deep); text-align: left; cursor: pointer; }
 .container-row:hover, .container-row.selected { border-color: #4a8e9d; background: #131e25; }
 .container-row.is-alert-target, .engine-card.is-alert-target { border-color: var(--red); box-shadow: inset 3px 0 var(--red); }

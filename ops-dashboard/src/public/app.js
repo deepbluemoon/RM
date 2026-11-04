@@ -3,7 +3,7 @@ import { httpChartData } from './http-chart.js'
 
 const state = { overview: null, catalog: null, selectedId: null, logSource: null, history: [], lastSample: null, highlightedAlertId: null, pendingAction: null, pendingRecordOperation: null, packages: null }
 const $ = (id) => document.getElementById(id)
-const viewNames = { overview: '운영 현황', containers: '컨테이너', logs: '실시간 로그', 'status-codes': 'HTTP 응답', alerts: '활성 경고', playbooks: '오류 대응', 'error-codes': '오류 코드', packages: '패키지 업데이트' }
+const viewNames = { overview: '운영 현황', containers: '컨테이너', logs: '실시간 로그', 'status-codes': 'HTTP 응답', alerts: '활성 경고', playbooks: '오류 확인 및 대응', packages: '패키지 업데이트' }
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char])
@@ -277,7 +277,7 @@ function renderContainers(containers, alerts, dockerAvailable) {
     const metric = (label, value) => '<div><div class="metric-label"><span>' + label + '</span><span class="metric-value">' + formatPercent(value, '-') + '</span></div>' + (Number.isFinite(value) ? '<div class="bar"><i class="' + (value >= 80 ? 'warn' : '') + '" style="width:' + Math.min(Math.max(value, 0), 100) + '%"></i></div>' : '') + '</div>'
     return '<button class="container-row' + selected + '" data-container-id="' + escapeHtml(container.id) + '" type="button"><div class="row-top"><strong class="container-name">' + escapeHtml(container.name) + '</strong><span class="status' + statusClass + '">' + status + '</span></div><div class="container-id">' + escapeHtml(container.id.slice(0, 12)) + ' · ' + escapeHtml(container.image) + '</div><div class="metrics">' + metric('CPU', stats?.cpuPercent) + metric('MEM', stats?.memoryPercent) + '</div>' + ownAlerts.map((alert) => '<div class="row-alert">' + escapeHtml(alert.message || alert.code) + '</div>').join('') + '</button>'
   }).join('')
-  list.querySelectorAll('[data-container-id]').forEach((row) => row.addEventListener('click', () => selectContainer(row.dataset.containerId)))
+  list.querySelectorAll('[data-container-id]').forEach((row) => row.addEventListener('click', () => selectContainer(row.dataset.containerId, false)))
 }
 
 function renderActions(alerts) {
@@ -454,20 +454,34 @@ function appendLog(line) {
   output.append(item)
   while (output.children.length > 500) output.firstElementChild.remove()
   if (follow) output.scrollTop = output.scrollHeight
+  const inlineOutput = $('inline-log-output')
+  if (inlineOutput) {
+    if (inlineOutput.querySelector('.log-empty')) inlineOutput.innerHTML = ''
+    inlineOutput.append(item.cloneNode(true))
+    while (inlineOutput.children.length > 500) inlineOutput.firstElementChild.remove()
+    if (inlineOutput.scrollHeight - inlineOutput.scrollTop - inlineOutput.clientHeight < 40) inlineOutput.scrollTop = inlineOutput.scrollHeight
+  }
 }
 
-function selectContainer(containerId) {
+function selectContainer(containerId, navigateToLogs = true) {
   const container = state.overview?.containers?.find((item) => item.id === containerId)
   if (!container) return
   state.selectedId = containerId
   if (state.logSource) state.logSource.close()
   $('logs-title').textContent = '로그 · ' + container.name
   $('log-output').innerHTML = '<div class="log-empty">로그 스트림에 연결하는 중…</div>'
+  $('inline-log-title').textContent = '로그 · ' + container.name
+  $('inline-log-output').innerHTML = '<div class="log-empty">로그 스트림에 연결하는 중…</div>'
+  $('inline-log-panel').classList.remove('hidden')
   state.logSource = new EventSource('/api/logs/stream?containerId=' + encodeURIComponent(containerId) + '&tail=200')
   state.logSource.onmessage = (event) => { try { appendLog(JSON.parse(event.data).line) } catch { appendLog('[stream] 로그 형식을 읽을 수 없습니다.') } }
   state.logSource.addEventListener('error', () => appendLog('[stream] 로그 연결이 종료되었습니다.'))
   renderOverview()
-  window.location.hash = 'logs'
+  if (navigateToLogs) window.location.hash = 'logs'
+  else {
+    window.location.hash = 'containers'
+    requestAnimationFrame(() => $('inline-log-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+  }
 }
 
 async function refresh() {
@@ -491,8 +505,15 @@ async function refresh() {
 }
 
 async function init() {
+  $('playbooks').insertBefore($('error-codes'), $('action-result'))
+  $('view-error-codes').remove()
   showView()
   window.addEventListener('hashchange', showView)
+  document.querySelectorAll('[data-nav-card]').forEach((card) => {
+    const navigate = () => { window.location.hash = card.dataset.navCard }
+    card.addEventListener('click', (event) => { if (!event.target.closest('a, button')) navigate() })
+    card.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate() } })
+  })
   $('refresh-now').addEventListener('click', () => { void refresh() })
   $('refresh-packages').addEventListener('click', () => { void refreshPackages(true) })
   $('toggle-package-security').addEventListener('click', () => {
@@ -522,6 +543,7 @@ async function init() {
   $('cancel-record-operation').addEventListener('click', () => $('record-confirm-dialog').close())
   $('confirm-record-operation').addEventListener('click', () => { void performRecordOperation() })
   $('clear-logs').addEventListener('click', () => { $('log-output').innerHTML = '<div class="log-empty">화면에 표시된 로그를 비웠습니다.</div>' })
+  $('clear-inline-logs').addEventListener('click', () => { $('inline-log-output').innerHTML = '<div class="log-empty">화면에 표시된 로그를 비웠습니다.</div>' })
   try {
     const response = await fetch('/api/error-codes')
     if (!response.ok) throw new Error('HTTP ' + response.status)
