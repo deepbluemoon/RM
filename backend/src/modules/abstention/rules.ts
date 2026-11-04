@@ -10,6 +10,8 @@ export interface RuleVerdict {
 }
 
 /** 모델에 대한 지시·역할 변경 시도. 단어 하나가 아니라 지시 대상과 동작을 함께 찾는다. */
+// 검사 전에 길이를 제한해 악성 단일 조항으로 인한 정규식·문자 분류 비용을 제한한다.
+export const MAX_SCREENED_CLAUSE_CHARS = 10_000;
 const INJECTION = [
   /(이전|위의?|앞의?|기존)\s*(모든\s*)?(지시|명령|지침|규칙|프롬프트)(을|를|은|는)?\s*(무시|잊|따르지)/,
   /시스템\s*프롬프트|system\s*prompt|developer\s*message/i,
@@ -32,6 +34,9 @@ const MARKER_ONLY = /^[\s/·.,:;\-]*(?:[(<]?\s*(?:삭제|신설|좌동|생략|�
 
 export function ruleCheck(raw: string): RuleVerdict | null {
   const text = (raw ?? '').replace(/ /g, ' ');
+  if (text.length > MAX_SCREENED_CLAUSE_CHARS) {
+    return { reason: 'invalid_input', code: 'too_long', detail: '검사 가능한 조항 길이를 초과했습니다' };
+  }
   const compact = text.replace(/\s+/g, '');
   if (compact.length < 6) return { reason: 'invalid_input', code: 'too_short', detail: '내용이 너무 짧습니다' };
 

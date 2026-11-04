@@ -37,4 +37,7 @@ describe('판정 불가 관문 1(규칙)', () => {
       '제6조 개인정보 처리방침의 이전 버전은 홈페이지에서 확인할 수 있다.',
     ]) expect(ruleCheck(text), text).toBeNull();
   });
+  it('상한을 초과하는 조항은 비용이 큰 검사 전에 거부한다', () => {
+    expect(ruleCheck('가'.repeat(10_001))?.code).toBe('too_long');
+  });
 });

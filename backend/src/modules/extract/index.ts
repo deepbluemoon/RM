@@ -23,7 +23,7 @@ export interface ProbeResult {
   corrupt: boolean;
   pages: number | null;
   /** 사전 검사에서 본문을 읽지 못한 변형(HWP — research R-05a) → G2 unsupported_variant */
-  failure?: 'unsupported_variant';
+  failure?: 'unsupported_variant' | 'too_large';
 }
 
 export interface Extractor {

@@ -3,6 +3,7 @@
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
 import type { ExtractedDoc, ProbeResult } from './index.js';
+import { archiveXmlWithinLimit } from './zipLimit.js';
 
 type Node = Record<string, unknown>;
 
@@ -77,6 +78,7 @@ function textOf(nodes: Node[]): string {
 export async function probeHwpx(buf: Buffer): Promise<ProbeResult> {
   try {
     const zip = await JSZip.loadAsync(buf);
+    if (!(await archiveXmlWithinLimit(zip))) return { encrypted: false, corrupt: false, pages: null, failure: 'too_large' };
     // 암호 설정 문서는 manifest 에 encryption-data 가 있다
     const manifest = await zip.file('META-INF/manifest.xml')?.async('string');
     if (manifest && /encryption-data/i.test(manifest)) return { encrypted: true, corrupt: false, pages: null };

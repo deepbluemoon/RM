@@ -2,6 +2,7 @@
 // 암호화된 DOCX 는 ZIP 이 아니라 OLE(CFB) 컨테이너(EncryptedPackage)라 intake/formats.ts 서명 판별에서 먼저 걸러진다
 import JSZip from 'jszip';
 import type { ExtractedDoc, ProbeResult } from './index.js';
+import { archiveXmlWithinLimit } from './zipLimit.js';
 
 const OLE = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 
@@ -10,6 +11,7 @@ export async function probeDocx(buf: Buffer): Promise<ProbeResult> {
   try {
     const zip = await JSZip.loadAsync(buf);
     if (!zip.file('word/document.xml')) return { encrypted: false, corrupt: true, pages: null };
+    if (!(await archiveXmlWithinLimit(zip))) return { encrypted: false, corrupt: false, pages: null, failure: 'too_large' };
     // 쪽수는 docProps/app.xml 의 <Pages>(저장 시점 값)가 있을 때만 쓴다
     const app = await zip.file('docProps/app.xml')?.async('string');
     const m = app ? /<Pages>(\d+)<\/Pages>/.exec(app) : null;
