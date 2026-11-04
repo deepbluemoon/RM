@@ -378,3 +378,42 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
   #view-overview .io-table-head { position: sticky; top: 0; z-index: 1; padding: 5px 7px 8px; background: var(--panel); color: #b8b8c2; font-size: 10px; font-weight: 600; }
   .io-table-head small { color: var(--muted); font-size: 9px; font-weight: 400; }.io-network-label { color: #82d9e2; }.io-disk-label { color: #d5d5df; }
 }
+
+/* Shared operations spacing, including the package page. */
+.content-shell { padding-top: 16px; }
+@media (max-width: 900px) { .content-shell { padding-top: 14px; } }
+@media (max-width: 650px) { .content-shell { padding-top: 12px; } }
+
+/* Readability changes are limited to the four operations views. */
+:is(#view-overview, #view-containers, #view-status-codes, #view-error-codes)
+  :is(.view-description, .panel-caption, .response-center-description, .response-section-head h3,
+      .response-empty strong, .response-incident-select > strong, .response-action-heading h4,
+      .container-name, .log-line, .code-item p, .http-detail-explanation, .http-source-list li) {
+  font-size: 13px;
+}
+:is(#view-overview, #view-containers, #view-status-codes, #view-error-codes)
+  :is(.eyebrow, .panel-tag, .text-button, .response-action-state, .response-action-content p,
+      .response-action-content small, .response-run-button, .incident-target, .record-row small,
+      .resource-rank-name, .directory-group-counts, .directory-state, .io-cell b, .io-table-head,
+      .container-id, .container-log-hint, .log-controls select, .log-legend, .code-item code,
+      .http-chart-caption, .http-chart-caption small, .http-compact-row > strong small,
+      .http-code-chip, .http-percent, .http-source-list li > span) {
+  font-size: 12px;
+}
+
+#view-overview .io-row > strong {
+  color: #eef0f4;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#view-overview .io-table-head small {
+  color: #b9bdc6;
+  font-size: 11px;
+}
+#view-overview .io-cell b {
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+}

@@ -7,7 +7,7 @@
     <title>RM Ops · Monitor</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/mode-switch.css" />
-  <script type="module" src="/mode-switch.js"></script></head>
+  <script type="module" src="/mode-switch.js"></script><script type="module" blocking="render" src="/app.js"></script></head>
   <body>
     <div class="app-shell">
       <aside class="sidebar" aria-label="운영 대시보드 메뉴">
@@ -41,7 +41,7 @@
           <div id="error-banner" class="error-banner hidden" role="status" aria-live="polite"></div>
 
           <section class="view" id="view-overview" aria-labelledby="overview-title">
-            <nav class="mode-switch operations-mode-switch" aria-label="대시보드 모드"><span aria-current="page">운영</span><a href="/monitor.html">모니터링 <span aria-hidden="true">↗</span></a></nav>
+            <a class="mode-switch operations-mode-switch" href="/monitor.html" aria-label="모니터링 화면으로 전환"><span class="is-current">운영</span><span>모니터링</span></a>
             <div class="view-heading"><div><p class="eyebrow">OVERVIEW</p><h1 id="overview-title">운영 현황</h1><p class="view-description">컨테이너의 상태와 자원 사용량을 확인합니다.</p></div><span id="monitor-status" class="live-label"><span></span><span id="monitor-status-text">연결 확인 중</span></span></div>
             <section class="panel overview-alerts" aria-labelledby="response-center-title">
               <div class="panel-head response-center-head"><div><p class="eyebrow">OPERATIONS DESK</p><h2 id="response-center-title">경고 확인 및 조치</h2><p class="response-center-description">현재 상태를 확인하고 필요한 대응을 여기서 바로 실행하세요.</p></div><span id="response-status" class="response-status">확인 중</span></div>
@@ -84,6 +84,6 @@
         </main>
       </div>
     </div>
-    <script type="module" src="/app.js"></script>
+
   </body>
 </html>

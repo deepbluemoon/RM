@@ -1,9 +1,8 @@
 <!doctype html>
 <html lang="ko" data-mode="monitor">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RM · Live Monitor</title><link rel="stylesheet" href="/monitor.css"><link rel="stylesheet" href="/mode-switch.css"><script type="module" src="/mode-switch.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RM · Live Monitor</title><link rel="stylesheet" href="/monitor.css"><link rel="stylesheet" href="/mode-switch.css"><script type="module" src="/mode-switch.js"></script><script type="module" blocking="render" src="/monitor-wall.js"></script></head>
 <body><main class="wall">
-  <header class="masthead"><a class="identity" href="/#overview" aria-label="RM 운영 현황"><span class="brand">R<span>·</span></span><span><b>RM <em>MONITOR</em></b><small>INFRASTRUCTURE / LIVE OVERVIEW</small></span></a><div class="header-right"><span id="freshness" class="freshness">연결 확인 중</span><nav class="mode-switch" aria-label="대시보드 모드"><a href="/#overview">운영</a><span aria-current="page">모니터링</span></nav><button id="fullscreen" class="icon-button" aria-label="전체 화면으로 보기" title="전체 화면">⛶</button></div></header>
-  <section class="headline"><div><p class="eyebrow">SYSTEM OVERVIEW</p><h1>흐름을 한눈에.</h1></div><div class="time-block"><time id="clock">--:--:--</time><span id="date"></span></div></section>
+  <header class="masthead"><a class="identity" href="/#overview" aria-label="RM 운영 현황"><span class="brand">R<span>·</span></span><span><b>RM <em>MONITOR</em></b><small>INFRASTRUCTURE / LIVE OVERVIEW</small></span></a><div class="time-block"><time id="clock">--:--:--</time><span id="date"></span></div><div class="header-right"><span id="freshness" class="freshness">연결 확인 중</span><a class="mode-switch" href="/#overview" aria-label="운영 화면으로 전환"><span>운영</span><span class="is-current">모니터링</span></a><button id="fullscreen" class="icon-button" aria-label="전체 화면으로 보기" title="전체 화면">⛶</button></div></header>
   <section class="summary" aria-label="전체 상태 요약">
     <article class="status-tile" id="status-tile"><span class="tile-label">시스템 상태</span><strong id="system-status">연결 확인 중</strong><span id="status-detail">실제 관측 데이터를 기다립니다</span><span class="status-orbit" aria-hidden="true"></span></article>
     <article class="stat-tile"><span class="tile-label">실행 컨테이너 <i>01</i></span><strong id="running">—</strong><span id="running-note">전체 —개 중</span></article>
@@ -20,4 +19,4 @@
     <article class="panel attention-panel"><div class="panel-heading"><div><span class="eyebrow">NEEDS ATTENTION</span><h2>활성 경고 <span id="alert-count">—</span></h2></div><a href="/#overview">운영에서 대응 ↗</a></div><div id="alerts" class="alerts" role="status" aria-live="polite"></div></article>
   </section>
   <footer><span><i class="dot cyan"></i> 실제 Docker 관측 · 5초마다 갱신</span><span id="observed">마지막 관측 —</span><span>RM / OPERATIONS INTELLIGENCE</span></footer>
-</main><script type="module" src="/monitor-wall.js"></script></body></html>
+</main></body></html>
