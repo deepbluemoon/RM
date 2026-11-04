@@ -10,7 +10,7 @@ usage() {
   bash ops-dashboard/scripts/demo-container-cpu-load.sh status <컨테이너명>
   bash ops-dashboard/scripts/demo-container-cpu-load.sh stop <컨테이너명>
 
-start의 기본 시간은 300초이며, 10~1800초만 허용합니다. 부하는 컨테이너 CPU 1개 기준 약 80%를 목표로 합니다.
+start의 기본 시간은 300초이며, 10~1800초만 허용합니다. 부하는 컨테이너 CPU 1개 기준 약 88%를 목표로 합니다.
 USAGE
 }
 
@@ -62,12 +62,12 @@ function stop() {
 process.on("SIGTERM",stop);
 process.on("SIGINT",stop);
 setTimeout(stop,duration*1000);
-log("INFO","시연 CPU 부하를 시작합니다.",{pid:process.pid,targetPercent:80,durationSeconds:duration});
-log("WARNING","CPU 사용률 상승은 시연을 위해 의도된 상태입니다.",{targetPercent:80});
+log("INFO","시연 CPU 부하를 시작합니다.",{pid:process.pid,targetPercent:88,durationSeconds:duration});
+log("WARNING","CPU 사용률 상승은 시연을 위해 의도된 상태입니다.",{targetPercent:88});
 setTimeout(()=>log("ERROR","DEMO ONLY: 예시 오류 로그이며 실제 서비스 오류가 아닙니다.",{code:"DEMO-CPU-LOAD-ERROR"}),Math.min(5000,duration*500));
 function cycle() {
   const cycleStart=performance.now();
-  const busyUntil=cycleStart+800;
+  const busyUntil=cycleStart+880;
   let value=0;
   while (performance.now()<busyUntil) value=(value+1)|0;
   setTimeout(cycle,Math.max(0,1000-(performance.now()-cycleStart)));

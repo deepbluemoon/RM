@@ -16,22 +16,62 @@ test('80% 이상 자원은 지속 시간을 누적하고 경고를 만든다', a
   assert.equal(state.alerts.length, 1)
   assert.equal(state.alerts[0].code, 'OPS-CPU-80-001')
   assert.equal(state.alerts[0].durationSec, 65)
-  assert.match(state.alerts[0].message, /1분 5초 동안 80% 이상/)
+  assert.match(state.alerts[0].message, /경고 1분 5초 유지 중/)
 })
 
-test('임계치 미만으로 내려가면 기존 경고 지속 시간을 초기화한다', async () => {
+test('짧은 자원 급등은 경고를 켜지 않고 시작 임계치를 연속 유지해야 활성화한다', async () => {
   let time = 1_000
-  let high = true
-  const monitor = createMonitor({ now: () => time, readSnapshot: async () => [container('api', high ? 81 : 40, 81)] })
-  await monitor.tick()
-  time += 30_000
-  high = false
-  const cleared = await monitor.tick()
-  assert.deepEqual(cleared.alerts.map((item) => item.code), ['OPS-MEM-80-001'])
+  let cpu = 84
+  const monitor = createMonitor({ now: () => time, readSnapshot: async () => [container('api', cpu, 20)] })
+  assert.equal((await monitor.tick()).alerts.length, 0)
   time += 10_000
-  high = true
-  const restarted = await monitor.tick()
-  assert.equal(restarted.alerts.find((item) => item.code === 'OPS-CPU-80-001').durationSec, 0)
+  cpu = 79
+  assert.equal((await monitor.tick()).alerts.length, 0)
+  time += 1
+  cpu = 84
+  assert.equal((await monitor.tick()).alerts.length, 0)
+  time += 14_999
+  assert.equal((await monitor.tick()).alerts.length, 0)
+  time += 1
+  const active = await monitor.tick()
+  assert.equal(active.alerts[0].code, 'OPS-CPU-80-001')
+  assert.equal(active.alerts[0].durationSec, 15)
+})
+
+test('활성 경고는 해제 기준을 지속 하회하기 전까지 유지되고 반등하면 해제 타이머를 초기화한다', async () => {
+  let time = 1_000
+  let cpu = 84
+  const monitor = createMonitor({ now: () => time, readSnapshot: async () => [container('api', cpu, 20)] })
+  await monitor.tick()
+  time += 15_000
+  assert.equal((await monitor.tick()).alerts[0].phase, 'active')
+
+  cpu = 74
+  time += 5_000
+  let alert = (await monitor.tick()).alerts[0]
+  assert.equal(alert.phase, 'recovering')
+  assert.equal(alert.recoveryDurationSec, 0)
+
+  time += 20_000
+  cpu = 76
+  alert = (await monitor.tick()).alerts[0]
+  assert.equal(alert.phase, 'active')
+  assert.equal(alert.recoveryDurationSec, 0)
+
+  cpu = 74
+  time += 5_000
+  alert = (await monitor.tick()).alerts[0]
+  assert.equal(alert.phase, 'recovering')
+  time += 29_999
+  alert = (await monitor.tick()).alerts[0]
+  assert.equal(alert.phase, 'recovering')
+  assert.equal(alert.recoveryDurationSec, 29)
+  time += 1
+  assert.equal((await monitor.tick()).alerts.length, 0)
+})
+
+test('자원 경고 해제 임계치는 시작 임계치보다 낮아야 한다', () => {
+  assert.throws(() => createMonitor({ threshold: 80, clearThreshold: 80 }), /해제 임계치/)
 })
 
 test('Docker 조회가 실패하면 연결 오류코드를 활성화한다', async () => {

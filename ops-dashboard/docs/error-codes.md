@@ -5,8 +5,8 @@
 | 코드 | 조건 | 화면 메시지 의미 | 대응 스크립트 |
 |---|---|---|---|
 | `OPS-PREFLIGHT-001` | 사람이 선택한 변경 작업 실행 전 Docker·Compose·서비스·replica 설정 사전점검 실패 | 변경 없이 실행을 차단하고 실패 원인을 표시 | `preflight-ops.sh` |
-| `OPS-CPU-80-001` | 개별 컨테이너 CPU 사용률이 80% 이상 | CPU가 80% 이상인 상태와 지속 시간 표시 | `collect-container-incident.sh`; 별도 확인 후 `scale-service.sh` |
-| `OPS-MEM-80-001` | 개별 컨테이너 메모리 사용률이 80% 이상 | 메모리가 80% 이상인 상태와 지속 시간 표시 | `collect-container-incident.sh`; 별도 확인 후 `scale-service.sh` |
+| `OPS-CPU-80-001` | 개별 컨테이너 CPU 사용률이 기본 80% 이상으로 15초 연속 유지 | 경고를 활성화하고 지속 시간을 표시한다. 75% 미만이 30초 연속 유지되면 해제한다. | `collect-container-incident.sh`; 별도 확인 후 `scale-service.sh` |
+| `OPS-MEM-80-001` | 개별 컨테이너 메모리 사용률이 기본 80% 이상으로 15초 연속 유지 | 경고를 활성화하고 지속 시간을 표시한다. 75% 미만이 30초 연속 유지되면 해제한다. | `collect-container-incident.sh`; 별도 확인 후 `scale-service.sh` |
 | `OPS-DOCKER-001` | Docker CLI가 엔진에 연결되지 않음 | 자원·로그 수집을 일시 중지하고 연결 오류 표시 | `check-docker-access.sh` |
 | `HTTP-404-RATE-001` | 최근 access log에서 HTTP 404 비율이 20% 이상이고 10건 이상·30초 이상 지속 | 라우팅·배포 누락 확인이 필요한 상태 | 자동 스크립트 없음 |
 | `HTTP-429-RATE-001` | 최근 access log에서 HTTP 429 비율이 10% 이상이고 10건 이상·30초 이상 지속 | rate limit·호출자 폭주 확인이 필요한 상태 | 자동 스크립트 없음 |
@@ -15,6 +15,7 @@
 ## 스크립트 실행 안전 조건
 
 - 자원 경고가 발생해도 스크립트를 자동 실행하지 않는다. 운영자가 대상을 확인하고 실행을 선택해야 한다.
+- 자원 경고는 기본 5초 조회 주기에서 80% 이상이 15초 연속 유지될 때 활성화한다. 활성 경고는 75% 이상으로 잠깐 반등해도 유지하며, 75% 미만이 30초 연속 유지될 때 해제한다. 임계치와 지속시간은 `OPS_RESOURCE_THRESHOLD`, `OPS_RESOURCE_CLEAR_THRESHOLD`, `OPS_RESOURCE_ALERT_FOR_MS`, `OPS_RESOURCE_RECOVERY_FOR_MS`로 조정한다.
 - 확장은 `OPS_COMPOSE_FILE`, `OPS_SCALE_SERVICE`, `OPS_SCALE_TARGET`, `OPS_SCALE_ALLOWED_SERVICES`를 설정하고 현재 replica보다 큰 목표를 지정한 경우에만 가능하다. 기본 허용 목록은 비어 있다.
 - `collect-container-incident.sh`는 컨테이너 상태·종료 정보와 선택적으로 최근 로그 100줄(최대 256 KiB)을 로컬 보고서로 저장한다. 로그 마스킹은 알려진 패턴에 대한 최선형 처리이므로 공유 전 사람이 내용을 확인해야 한다.
 - `check-docker-access.sh`는 Docker CLI/context와 Engine 연결 가능 여부를 출력하며, Engine 연결이 불가능해도 점검 결과를 반환한다.
