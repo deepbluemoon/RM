@@ -95,7 +95,18 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .content-shell { width: 100%; max-width: 1920px; margin: 0 auto; padding: 22px 25px 30px; }
 .view { min-width: 0; }
 .view-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-.view-heading h1 { margin: 5px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -.035em; }
+.content-shell .view-heading > div > h1 {
+  margin: 5px 0 0;
+  font: 600 22px/1.25 inherit;
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -.035em;
+}
+@media (max-width: 650px) {
+  .content-shell .view-heading > div > h1 { font-size: 19px; }
+}
 .view-description { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 .eyebrow { margin: 0; color: #949494; font-size: 9px; }
 .live-label { display: inline-flex; align-items: center; gap: 7px; padding-bottom: 3px; color: var(--muted); font: 10px var(--mono); letter-spacing: .04em; white-space: nowrap; }
@@ -417,3 +428,33 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
   font-variant-numeric: tabular-nums;
   white-space: normal;
 }
+
+.container-list { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.container-group { min-width: 0; }
+.container-group h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14px; }
+.container-group h3 span { color: var(--muted); font: 12px var(--mono); }
+.container-group-grid { display: grid; grid-template-columns: repeat(2, minmax(320px, 1fr)); gap: 8px; align-items: start; }
+.container-group-grid[hidden] { display: none; }
+.container-group-empty { margin: 0; padding: 8px 0; color: var(--muted); font-size: 12px; }
+.container-entry { position: relative; }
+.can-stop .row-top { min-height: 27px; padding-right: 34px; }
+.container-stop {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #202026;
+  color: #e4e4ec;
+  font: 18px/1 system-ui, sans-serif;
+  cursor: pointer;
+  transition: background-color .18s ease, color .18s ease;
+}
+.container-stop:hover:not(:disabled) { background: #49262b; color: #ffd5d9; }
+.container-stop:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.container-stop:disabled { cursor: wait; }

@@ -147,14 +147,15 @@ function renderResourceRanking(key, overview, entrance = false) {
   const display = (value) => key === 'cpu' ? formatPercent(value) : value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(1)} GiB` : value >= 1024 ** 2 ? `${(value / 1024 ** 2).toFixed(1)} MiB` : value >= 1024 ? `${(value / 1024).toFixed(1)} KiB` : `${value} B`
   const markup = items.map((item,index) => `<div class="resource-rank-row" data-resource-id="${escapeHtml(item.id)}" title="${escapeHtml(item.name)} · ${display(item.value)}"><span class="resource-rank-position">${index+1}</span><span class="resource-rank-name">${escapeHtml(item.name)}</span><strong>${display(item.value)}</strong><div class="resource-rank-track"><span class="resource-rank-fill ${key}" style="width:${(item.value / max * 100).toFixed(2)}%"></span></div></div>`).join('') || `<div class="ranking-empty">${overview?.dockerAvailable ? '측정된 사용량이 없습니다.' : '사용량을 확인할 수 없습니다.'}</div>`
   const changed = setMarkup(target, markup)
-  $(key + '-ranking-note').textContent = !overview?.dockerAvailable ? 'Docker 연결 확인 필요' : `측정 ${measuredCount}/${runningCount}개 · ${key === 'cpu' ? 'CPU 사용률' : '메모리 실사용량'} 순 · 1위 기준`
+  const retained = overview?.containers?.some(container => container.statsRetained)
+  $(key + '-ranking-note').textContent = !overview?.dockerAvailable ? 'Docker 연결 확인 필요' : `측정 ${measuredCount}/${runningCount}개 · ${retained ? '일부 최근 측정값' : '1위 기준'}`
   if ((!changed && !entrance) || !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   target.querySelectorAll('[data-resource-id]').forEach((row,index) => {
     const old = previous.get(row.dataset.resourceId)
     const fresh = entrance || !old
     const fill = row.querySelector('.resource-rank-fill')
     fill.animate([{width:fresh ? '0%' : `${old.width}%`}, {width:fill.style.width}], {duration:fresh ? 480 : 300, delay:fresh ? index*65 : 0, easing:'cubic-bezier(.22,1,.36,1)', fill:'backwards'})
-    if (fresh) row.animate([{opacity:0,transform:'translateX(-10px)'},{opacity:1,transform:'translateX(0)'}], {duration:300,delay:index*65,easing:'ease-out',fill:'backwards'})
+    if (fresh) row.animate([{transform:'translateX(-6px)'},{transform:'translateX(0)'}], {duration:250,easing:'ease-out'})
     else if (Math.abs(old.top-row.getBoundingClientRect().top)>1) row.animate([{transform:`translateY(${old.top-row.getBoundingClientRect().top}px)`},{transform:'translateY(0)'}],{duration:300,easing:'cubic-bezier(.22,1,.36,1)'})
   })
 }
@@ -293,9 +294,10 @@ function renderStatusCodes(statusState, dockerAvailable) {
     const chips = codes.map((item) => `<button type="button" class="http-code-chip" data-http-code="${item.code}" data-focus-key="response:${item.code}" aria-pressed="false" aria-controls="http-response-detail" title="${escapeHtml(item.description)} · 출처와 설명 보기"><b>${item.code}</b><span>${item.count}건</span><i aria-hidden="true">↗</i></button>`).join('')
     return `<div class="http-compact-row status-${label}" data-status-class="${label}"><span class="http-class-label">${label.toUpperCase()}</span><div class="status-chart-track" aria-hidden="true"><span style="width:${percent}%"></span></div><strong>${count}건<small>${percent.toFixed(1)}%</small></strong><div class="http-code-chips">${chips || '<span class="http-no-code">상세 코드 미수집</span>'}</div></div>`
   }).join('')
-  const changed = setMarkup(target, `<div class="http-chart-caption"><span>전체 응답 <b>${chart.total}건</b></span><small>응답 코드를 누르면 상세 정보가 열립니다</small></div>${chart.state === 'partial' ? '<p class="status-chart-note">일부 로그 수집 실패 · 확인된 응답만 표시합니다.</p>' : ''}${bars}`)
+  const changed = setMarkup(target, `<div class="http-chart-caption"><span>전체 응답 <b>${chart.total}건</b></span><small>같은 응답 코드를 다시 누르면 상세 정보가 닫힙니다</small></div>${chart.state === 'partial' ? '<p class="status-chart-note">일부 로그 수집 실패 · 확인된 응답만 표시합니다.</p>' : ''}${bars}`)
   if (changed) target.querySelectorAll('[data-http-code]').forEach((button) => button.addEventListener('click', () => {
-    state.httpResponseCode = Number(button.dataset.httpCode)
+    const code = Number(button.dataset.httpCode)
+    state.httpResponseCode = state.httpResponseCode === code ? null : code
     target.querySelectorAll('[data-http-code]').forEach((item) => item.setAttribute('aria-pressed', String(Number(item.dataset.httpCode) === state.httpResponseCode)))
     renderHttpDetail(state.overview?.statusCodes, true)
   }))
@@ -312,7 +314,8 @@ function renderHttpDetail(statusState, animate = false) {
   const scrollTop = target.querySelector('.http-detail-scroll')?.scrollTop || 0
   const code = state.httpResponseCode
   if (!code || !statusState) {
-    setMarkup(target, '<div class="http-detail-placeholder"><span aria-hidden="true">↗</span><strong>어떤 응답인지 확인해 보세요</strong><p>그래프 옆의 응답 코드를 누르면<br />발생 컨테이너와 설명이 여기에 표시됩니다.</p></div>')
+    target.getAnimations?.().forEach(animation => animation.cancel())
+    const changed = setMarkup(target, '<div class="http-detail-placeholder"><span aria-hidden="true">↗</span><strong>어떤 응답인지 확인해 보세요</strong><p>그래프 옆의 응답 코드를 누르면<br />발생 컨테이너와 설명이 여기에 표시됩니다.</p></div>')
     return
   }
   const info = state.httpCodes.find((item) => Number(item.code) === code)
@@ -399,8 +402,41 @@ function toggleContainerLogs(containerId) {
   if (output) output.innerHTML = '<div class="log-empty">로그 스트림에 연결하는 중…</div>'
   const source = new EventSource('/api/logs/stream?containerId=' + encodeURIComponent(containerId) + '&tail=200')
   source.onmessage = (event) => { try { appendContainerLog(containerId, JSON.parse(event.data).line) } catch { appendContainerLog(containerId, '[stream] 로그 형식을 읽을 수 없습니다.') } }
-  source.addEventListener('error', () => appendContainerLog(containerId, '[stream] 로그 연결이 종료되었습니다.'))
+  source.addEventListener('end', () => {
+    source.close()
+    state.containerLogSources.delete(containerId)
+    appendContainerLog(containerId, '[stream] 로그 스트림이 종료되었습니다.')
+  })
+  source.addEventListener('error', () => {
+    if (source.readyState === EventSource.CLOSED) appendContainerLog(containerId, '[stream] 로그 연결이 종료되었습니다.')
+  })
   state.containerLogSources.set(containerId, source)
+}
+
+const stoppingContainers = new Set()
+
+async function stopContainer(container, button) {
+  if (stoppingContainers.has(container.id) || !window.confirm(container.name + ' 컨테이너를 중지할까요?')) return
+  stoppingContainers.add(container.id)
+  button.disabled = true
+  button.textContent = '…'
+  try {
+    const response = await fetch('/api/containers/stop', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-ops-intent': 'stop-container' },
+      body: JSON.stringify({ containerId: container.id }),
+    })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error || '컨테이너를 중지하지 못했습니다')
+    await refresh()
+    showOperationToast(container.name + ' 중지 완료')
+  } catch (error) {
+    showOperationToast(error.message, true)
+  } finally {
+    stoppingContainers.delete(container.id)
+    button.disabled = false
+    button.textContent = '×'
+  }
 }
 
 function renderContainers(containers, alerts, dockerAvailable) {
@@ -409,18 +445,22 @@ function renderContainers(containers, alerts, dockerAvailable) {
   if (!containers.length) { setMarkup(list, '<div class="empty">표시할 컨테이너가 없습니다.</div>'); return }
   if (!list.querySelector('.container-column')) {
     markupCache.delete(list)
-    list.innerHTML = '<div class="container-column"></div><div class="container-column"></div>'
+    list.innerHTML = [['running', '실행'], ['waiting', '대기'], ['stopped', '중지']].map(([key, label]) =>
+      '<section class="container-group" data-container-group="' + key + '"><h3>' + label + ' <span></span></h3><div class="container-group-grid"><div class="container-column"></div><div class="container-column"></div></div><p class="container-group-empty">해당 상태의 컨테이너가 없습니다.</p></section>'
+    ).join('')
   }
-  const columns = [...list.querySelectorAll('.container-column')]
+  const groups = new Map([...list.querySelectorAll('[data-container-group]')].map(group => [group.dataset.containerGroup, { group, columns: group.querySelectorAll('.container-column'), count: 0 }]))
   const entries = new Map([...list.querySelectorAll('[data-container-entry]')].map((entry) => [entry.dataset.containerEntry, entry]))
-  containers.forEach((container, index) => {
+  containers.forEach((container) => {
     const stats = container.stats
     const ownAlerts = alerts.filter((alert) => alert.containerId === container.id)
     const stateName = String(container.state || '').toLowerCase()
     const statusName = String(container.status || '').toLowerCase()
     const danger = ownAlerts.length || statusName.includes('unhealthy')
-    const preparing = ['created', 'restarting'].includes(stateName) || statusName.includes('health: starting')
-    const status = danger ? '경고' : preparing ? '준비 중' : container.running ? '실행 중' : '중지'
+    const preparing = ['created', 'restarting', 'paused'].includes(stateName) || statusName.includes('health: starting')
+    const group = groups.get(preparing ? 'waiting' : container.running ? 'running' : 'stopped')
+    const index = group.count++
+    const status = preparing ? '대기' : container.running ? '실행 중' : '중지'
     const statusClass = danger ? ' danger' : preparing ? ' warning' : container.running ? '' : ' stopped'
     const metric = (label, value) => '<div><div class="metric-label"><span>' + label + '</span><span class="metric-value">' + formatPercent(value, '-') + '</span></div>' + (Number.isFinite(value) ? '<div class="bar"><i class="' + (value >= 80 ? 'warn' : '') + '" style="width:' + Math.min(Math.max(value, 0), 100) + '%"></i></div>' : '') + '</div>'
     const expanded = state.expandedContainerLogs.has(container.id)
@@ -437,11 +477,25 @@ function renderContainers(containers, alerts, dockerAvailable) {
       entry.append(button)
     }
     entries.delete(container.id)
-    const column = columns[index % 2]
+    const column = group.columns[index % 2]
     if (column.children[Math.floor(index / 2)] !== entry) column.insertBefore(entry, column.children[Math.floor(index / 2)] || null)
     const row = entry.querySelector('.container-row')
     row.setAttribute('aria-expanded', String(expanded))
     setMarkup(row, '<div class="row-top"><strong class="container-name">' + escapeHtml(container.name) + '</strong><span class="status' + statusClass + '">' + status + '</span></div><div class="container-id">' + escapeHtml(container.id.slice(0, 12)) + ' · ' + escapeHtml(container.image) + '</div><div class="metrics">' + metric('CPU', stats?.cpuPercent) + metric('MEM', stats?.memoryPercent) + '</div>' + ownAlerts.map((alert) => '<div class="row-alert">' + escapeHtml(alert.message || alert.code) + '</div>').join('') + '<span class="container-log-hint">' + (expanded ? '로그 열림 · 클릭해 접기' : '클릭해 실시간 로그 펼치기') + '</span>')
+    let stopButton = entry.querySelector('.container-stop')
+    if (container.running && !preparing && !stopButton) {
+      stopButton = document.createElement('button')
+      stopButton.type = 'button'
+      stopButton.className = 'container-stop'
+      stopButton.textContent = '×'
+      stopButton.setAttribute('aria-label', container.name + ' 중지')
+      stopButton.title = container.name + ' 중지'
+      stopButton.addEventListener('click', () => void stopContainer(container, stopButton))
+      row.after(stopButton)
+    } else if (!container.running || preparing) {
+      stopButton?.remove()
+    }
+    entry.classList.toggle('can-stop', container.running && !preparing)
     const panel = entry.querySelector('.inline-log-panel')
     if (!expanded) panel?.remove()
     else if (!panel) {
@@ -452,6 +506,11 @@ function renderContainers(containers, alerts, dockerAvailable) {
       output.scrollTop = output.scrollHeight
     }
   })
+  for (const { group, count } of groups.values()) {
+    group.querySelector('h3 span').textContent = String(count)
+    group.querySelector('.container-group-empty').hidden = count > 0
+    group.querySelector('.container-group-grid').hidden = count === 0
+  }
   for (const [id, entry] of entries) {
     entry.remove()
     state.containerLogSources.get(id)?.close()
@@ -511,7 +570,8 @@ function openActionReview(actionId, code, alert, trigger) {
   }
   $('include-logs-option').classList.toggle('hidden', !action.includeLogs)
   $('include-recent-logs').checked = false
-  $('action-operator-name').value = localStorage.getItem('ops-operator-name') || ''
+  $('action-operator-name').value = ''
+  try { $('action-operator-name').value = localStorage.getItem('ops-operator-name') || '' } catch {}
   $('action-rationale').value = ''
   $('confirm-action').textContent = action.confirmation === 'change' ? '확인 후 변경 실행' : '검토 후 실행'
   $('action-confirm-dialog').showModal()
@@ -613,7 +673,7 @@ async function runAction() {
       body: JSON.stringify({ actionId: action.id, code, alertId: alert.id, operatorName, rationale, includeLogs: $('include-recent-logs').checked }),
     })
     const result = await response.json()
-    localStorage.setItem('ops-operator-name', operatorName)
+    try { localStorage.setItem('ops-operator-name', operatorName) } catch {}
     if (!response.ok) {
       const failure = new Error(result.error || '알 수 없는 오류')
       failure.reportId = result.reportId || ''
@@ -661,14 +721,19 @@ function renderActionResult(message, reportId = '') {
   }
 }
 
+let refreshSequence = 0
 async function refresh() {
+  const request = ++refreshSequence
   try {
-    const response = await fetch('/api/overview', { cache: 'no-store' })
+    const response = await fetch('/api/overview', { cache: 'no-store', signal: AbortSignal.timeout(4500) })
     if (!response.ok) throw new Error('HTTP ' + response.status)
-    state.overview = await response.json()
+    const overview = await response.json()
+    if (request !== refreshSequence) return
+    state.overview = overview
     try { sessionStorage.setItem('rm-overview-cache', JSON.stringify(state.overview)) } catch {}
     renderOverview()
   } catch (error) {
+    if (request !== refreshSequence) return
     $('error-banner').classList.remove('hidden')
     $('error-banner').textContent = '대시보드 데이터를 불러오지 못했습니다. ' + error.message
     $('connection-label').textContent = '대시보드 연결 오류'

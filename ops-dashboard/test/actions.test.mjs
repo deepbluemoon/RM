@@ -50,8 +50,8 @@ test('등록된 액션과 오류코드 허용 규칙을 판정한다', async () 
   assert.equal(canRunAction('collect-incident', { code: 'OPS-DOCKER-001' }).allowed, false)
   assert.equal(canRunAction('check-docker-access', { code: 'OPS-DOCKER-001' }).allowed, true)
   assert.equal(canRunAction('scale-service', { code: 'OPS-CPU-80-001', stateful: true }).allowed, false)
-  assert.match(canRunAction('scale-service', { code: 'OPS-CPU-80-001' }).reason, /서비스를 명시적으로 설정/)
-  assert.equal(canRunAction('scale-service', { code: 'OPS-CPU-80-001', composeService: 'backend' }).allowed, false)
+  assert.match(canRunAction('scale-service', { code: 'OPS-CPU-80-001' }).reason, /확장 대상이 일치하지 않습니다/)
+  assert.equal(canRunAction('scale-service', { code: 'OPS-CPU-80-001', composeService: 'backend' }).allowed, true)
 })
 
 test('확장은 명시적으로 허용한 안전 서비스와 경고 대상이 일치할 때만 허용한다', async () => {
