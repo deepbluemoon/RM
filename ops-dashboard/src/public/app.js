@@ -164,12 +164,8 @@ function renderOverview() {
   if (!overview) return
   const containers = overview.dockerAvailable ? (overview.containers || []) : []
   const metrics = summarizeMetrics(overview)
-  $('running-count').textContent = metrics.running === null ? '-' : String(metrics.running)
-  $('total-count').textContent = metrics.total === null ? '-' : String(metrics.total)
   $('alert-count').textContent = String(overview.alerts?.length || 0)
   $('nav-alert-count').textContent = String(overview.alerts?.length || 0)
-  $('cpu-total').textContent = formatPercent(metrics.cpu, '-')
-  $('memory-total').textContent = formatPercent(metrics.memory, '-')
   $('last-updated').textContent = new Date(overview.observedAt).toLocaleTimeString('ko-KR')
   $('connection-label').textContent = overview.dockerAvailable ? 'Docker 연결됨' : 'Docker 연결 오류'
   $('connection-label').previousElementSibling.style.background = overview.dockerAvailable ? 'var(--green)' : 'var(--red)'
@@ -488,7 +484,7 @@ async function refresh() {
     $('monitor-status-text').textContent = '연결 확인 필요'
     $('sidebar-engine').textContent = 'Dashboard unavailable'
     $('sidebar-engine-dot').className = 'engine-dot is-offline'
-    for (const id of ['running-count', 'total-count', 'alert-count', 'nav-alert-count', 'cpu-total', 'memory-total']) $(id).textContent = '-'
+    for (const id of ['alert-count', 'nav-alert-count']) $(id).textContent = '-'
     renderGauge('cpu', null)
     renderGauge('memory', null)
   }
