@@ -42,6 +42,9 @@ open http://127.0.0.1:9760
 | `OPS_DASHBOARD_HOST` | `127.0.0.1` | 서버 수신 주소. 컨테이너 이미지에서는 `0.0.0.0`을 사용하고 Compose는 호스트의 루프백에만 포트를 공개한다. |
 | `OPS_DASHBOARD_POLL_MS` | `5000` | Docker 자원 조회 주기(ms) |
 | `OPS_RESOURCE_THRESHOLD` | `80` | 자원 경고 임계치(%) |
+| `OPS_RESOURCE_CLEAR_THRESHOLD` | 임계치보다 5%p 낮음 (`75`) | 활성 경고를 해제하기 위한 낮은 임계치(%). 이 값 아래가 복구 지속시간 동안 유지되어야 경고를 해제한다. |
+| `OPS_RESOURCE_ALERT_FOR_MS` | `15000` | 시작 임계치 이상이 연속 유지되어야 경고를 표시하는 시간(ms) |
+| `OPS_RESOURCE_RECOVERY_FOR_MS` | `30000` | 해제 임계치 미만이 연속 유지되어야 경고를 해제하는 시간(ms) |
 | `OPS_CONTAINER_SCOPE` | `all` | `all`, `image`, `name`, `image-or-name` 중 선택 |
 | `OPS_IMAGE_PREFIXES` | 없음 | `image` 계열 범위에서 사용할 쉼표 구분 이미지 접두사 |
 | `OPS_NAME_PREFIXES` | 없음 | `name` 계열 범위에서 사용할 쉼표 구분 컨테이너 이름 접두사 |

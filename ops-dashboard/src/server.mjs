@@ -18,6 +18,10 @@ const publicDir = path.join(root, 'public')
 const port = Number(process.env.OPS_DASHBOARD_PORT || 9760)
 const host = process.env.OPS_DASHBOARD_HOST || '127.0.0.1'
 const pollMs = Math.max(1_000, Number(process.env.OPS_DASHBOARD_POLL_MS || 5_000))
+const resourceThreshold = Number(process.env.OPS_RESOURCE_THRESHOLD ?? 80)
+const resourceClearThreshold = Number(process.env.OPS_RESOURCE_CLEAR_THRESHOLD ?? Math.max(0, resourceThreshold - 5))
+const resourceAlertForMs = Number(process.env.OPS_RESOURCE_ALERT_FOR_MS ?? 15_000)
+const resourceRecoveryForMs = Number(process.env.OPS_RESOURCE_RECOVERY_FOR_MS ?? 30_000)
 const statusLogTail = Math.min(Math.max(Number(process.env.OPS_HTTP_STATUS_LOG_TAIL || 200), 20), 1_000)
 const projectRoot = process.env.OPS_PROJECT_ROOT || path.resolve(root, '../..')
 const packages = createPackageMonitor({
@@ -51,7 +55,10 @@ async function readSnapshotWithArchive() {
 const monitor = createMonitor({
   readSnapshot: readSnapshotWithArchive,
   readStatusLogs,
-  threshold: Number(process.env.OPS_RESOURCE_THRESHOLD || 80),
+  threshold: resourceThreshold,
+  clearThreshold: resourceClearThreshold,
+  alertForMs: resourceAlertForMs,
+  recoveryForMs: resourceRecoveryForMs,
   httpStatusAlertDurationMs: Math.max(0, Number(process.env.OPS_HTTP_STATUS_ALERT_DURATION_MS || 30_000)),
   deploymentVersion: process.env.OPS_DEPLOYMENT_VERSION || '',
 })

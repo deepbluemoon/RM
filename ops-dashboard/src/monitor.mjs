@@ -19,44 +19,84 @@ export function formatDuration(seconds) {
   return `${secs}초`
 }
 
-export function createMonitor({ readSnapshot, readStatusLogs = async () => ({ logs: {}, errors: [] }), threshold = 80, now = () => Date.now(), httpStatusAlertDurationMs = 30_000, deploymentVersion = '' } = {}) {
-  const thresholdStartedAt = new Map()
-  const previousMetrics = new Map()
+export function createMonitor({
+  readSnapshot,
+  readStatusLogs = async () => ({ logs: {}, errors: [] }),
+  threshold = 80,
+  clearThreshold = Math.max(0, threshold - 5),
+  alertForMs = 15_000,
+  recoveryForMs = 30_000,
+  now = () => Date.now(),
+  httpStatusAlertDurationMs = 30_000,
+  deploymentVersion = '',
+} = {}) {
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) throw new RangeError('자원 경고 임계치는 0~100 사이여야 합니다')
+  if (!Number.isFinite(clearThreshold) || clearThreshold < 0 || clearThreshold >= threshold) throw new RangeError('자원 경고 해제 임계치는 경고 임계치보다 낮아야 합니다')
+  if (!Number.isFinite(alertForMs) || alertForMs < 0) throw new RangeError('자원 경고 시작 지속시간은 0 이상이어야 합니다')
+  if (!Number.isFinite(recoveryForMs) || recoveryForMs < 0) throw new RangeError('자원 경고 해제 지속시간은 0 이상이어야 합니다')
+  const resourceStates = new Map()
   const httpStatusMonitor = createHttpStatusAggregator({ now, alertDurationMs: httpStatusAlertDurationMs, deploymentVersion })
   let latest = { observedAt: now(), containers: [], alerts: [], dockerAvailable: true, statusCodes: httpStatusMonitor.getState() }
 
   function makeAlerts(containers, observedAt) {
     const alerts = []
-    const activeKeys = new Set()
+    const observedKeys = new Set()
     for (const container of containers) {
       for (const metric of METRICS) {
         const value = container.stats?.[metric.key]
         if (typeof value !== 'number') continue
         const key = `${container.id}:${metric.key}`
+        observedKeys.add(key)
+        let state = resourceStates.get(key)
         if (value >= threshold) {
-          activeKeys.add(key)
-          const startedAt = thresholdStartedAt.get(key) ?? observedAt
-          thresholdStartedAt.set(key, startedAt)
-          alerts.push({
-            id: `${metric.code}:${container.id}`,
-            code: metric.code,
-            severity: 'warning',
-            containerId: container.id,
-            containerName: container.name,
-            containerImage: container.image,
-            composeService: container.composeService || '',
-            stateful: /(?:mariadb|mysql)(?::|$|\/)/i.test(`${container.image || ''}:${container.name || ''}`),
-            resource: metric.label,
-            value: round(value),
-            unit: metric.unit,
-            startedAt: new Date(startedAt).toISOString(),
-            durationSec: Math.max(0, Math.floor((observedAt - startedAt) / 1_000)),
-            message: `${container.name} ${metric.label} 사용률 ${round(value)}% — ${formatDuration((observedAt - startedAt) / 1_000)} 동안 ${threshold}% 이상`,
-          })
+          if (!state) {
+            state = { startedAt: observedAt, active: false, recoveryStartedAt: null }
+            resourceStates.set(key, state)
+          }
+          state.recoveryStartedAt = null
+          if (!state.active && observedAt - state.startedAt >= alertForMs) state.active = true
+        } else if (state && !state.active) {
+          // A brief spike that did not last long enough never becomes an alert.
+          resourceStates.delete(key)
+          state = null
+        } else if (state && value < clearThreshold) {
+          state.recoveryStartedAt ??= observedAt
+          if (observedAt - state.recoveryStartedAt >= recoveryForMs) {
+            resourceStates.delete(key)
+            state = null
+          }
+        } else if (state) {
+          // Between the clear and trigger thresholds, retain the active alert.
+          state.recoveryStartedAt = null
         }
+
+        if (!state?.active) continue
+        const durationSec = Math.max(0, Math.floor((observedAt - state.startedAt) / 1_000))
+        const recovering = state.recoveryStartedAt !== null
+        const recoveryDurationSec = recovering ? Math.max(0, Math.floor((observedAt - state.recoveryStartedAt) / 1_000)) : 0
+        alerts.push({
+          id: `${metric.code}:${container.id}`,
+          code: metric.code,
+          severity: 'warning',
+          phase: recovering ? 'recovering' : 'active',
+          containerId: container.id,
+          containerName: container.name,
+          containerImage: container.image,
+          composeService: container.composeService || '',
+          stateful: /(?:mariadb|mysql)(?::|$|\/)/i.test(`${container.image || ''}:${container.name || ''}`),
+          resource: metric.label,
+          value: round(value),
+          unit: metric.unit,
+          startedAt: new Date(state.startedAt).toISOString(),
+          durationSec,
+          recoveryDurationSec,
+          message: recovering
+            ? `${container.name} ${metric.label} ${round(value)}% — ${clearThreshold}% 미만 회복 중 ${recoveryDurationSec}/${Math.ceil(recoveryForMs / 1_000)}초`
+            : `${container.name} ${metric.label} ${round(value)}% — 경고 ${formatDuration(durationSec)} 유지 중 (해제 기준 ${clearThreshold}% 미만)`,
+        })
       }
     }
-    for (const key of thresholdStartedAt.keys()) if (!activeKeys.has(key)) thresholdStartedAt.delete(key)
+    for (const key of resourceStates.keys()) if (!observedKeys.has(key)) resourceStates.delete(key)
     return alerts
   }
 
