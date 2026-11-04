@@ -39,8 +39,17 @@ async function makeUi() {
     set innerHTML(value) {
       this.markup = value
       this.children = []
-      if (value === '<div class="container-column"></div><div class="container-column"></div>') {
-        for (let index = 0; index < 2; index++) { const column = new Element(); column.className = 'container-column'; this.append(column) }
+      for (const [, key] of value.matchAll(/data-container-group="([^"]+)"/g)) {
+        const group = new Element()
+        group.dataset.containerGroup = key
+        group.querySelector = (selector) => selector === 'h3 span' ? group.countLabel : group.querySelectorAll(selector)[0] || null
+        group.countLabel = new Element()
+        for (const className of ['container-column', 'container-column', 'container-group-grid', 'container-group-empty']) {
+          const child = new Element()
+          child.className = className
+          group.append(child)
+        }
+        this.append(group)
       }
     }
     contains(target) { return this === target || this.children.some((child) => child.contains(target)) }
@@ -52,6 +61,7 @@ async function makeUi() {
       return this.children.flatMap((child) => [...(matches(child) ? [child] : []), ...child.querySelectorAll(selector)])
     }
     append(child) { child.remove(); this.children.push(child); child.parent = this }
+    after(child) { this.parent.insertBefore(child, this.parent.children[this.parent.children.indexOf(this) + 1]) }
     insertBefore(child, reference) { child.remove(); const index = this.children.indexOf(reference); this.children.splice(index < 0 ? this.children.length : index, 0, child); child.parent = this }
     remove() { if (this.parent) { this.parent.children = this.parent.children.filter((child) => child !== this); this.parent = null } }
     insertAdjacentHTML(position, markup) {

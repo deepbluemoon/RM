@@ -1,0 +1,28 @@
+@view-transition { navigation: auto; }
+.mode-switch {
+  display: inline-flex; align-items: center; gap: 2px; padding: 3px;
+  background: #080b0d; border: 1px solid #2b3034; border-radius: 100px;
+  color: #a6adb3; text-decoration: none; font: 600 12px/1.4 system-ui,sans-serif;
+  view-transition-name: mode-switch;
+}
+.mode-switch > span { padding: 7px 14px; border-radius: 100px; white-space: nowrap; }
+.mode-switch .is-current { background: #23282d; color: #f5f6f7; }
+.mode-switch:hover { border-color: #626a70; color: #fff; }
+.mode-switch:focus-visible { outline: 2px solid #63eadc; outline-offset: 3px; }
+.operations-mode-control { display: flex; flex-direction: column; align-items: center; align-self: flex-start; flex: none; gap: 6px; }
+::view-transition-group(mode-switch) { animation-duration: .28s; }
+::view-transition-old(root) { animation: none; }
+::view-transition-new(root) { animation: mode-in-left .28s cubic-bezier(.2,.75,.25,1) both; mix-blend-mode: normal; }
+html[data-mode="monitor"]::view-transition-new(root) { animation-name: mode-in-right; }
+@keyframes mode-in-right { from { transform: translateX(56px); } }
+@keyframes mode-in-left { from { transform: translateX(-56px); } }
+.action-progress{display:flex;align-items:center;justify-content:center;gap:16px;padding:18px;color:#b3eee6}
+.action-progress svg{width:64px;height:64px;flex:none;transform:rotate(-90deg)}
+.action-progress circle{fill:none;stroke-width:5}.progress-track{stroke:#303b43}
+.progress-gauge{stroke:#67d6c9;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;animation:action-fill 2s ease-in-out infinite}
+.action-progress small{display:block;font-size:11px;color:#a0aeb7;margin-top:5px}
+.is-complete .progress-gauge{animation:none;stroke-dashoffset:0;transition:stroke-dashoffset .35s ease}
+.is-failed .progress-gauge{animation:none;stroke:#ef9292;stroke-dashoffset:25}
+@keyframes action-fill{0%{stroke-dashoffset:100}65%{stroke-dashoffset:0}100%{stroke-dashoffset:-100}}
+@media(prefers-reduced-motion:reduce){::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}.progress-gauge{animation:none;stroke-dashoffset:30}}
+::view-transition { pointer-events: none; }

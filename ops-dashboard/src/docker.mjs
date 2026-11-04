@@ -49,12 +49,12 @@ export async function listContainers() {
 
 function parsePercent(value) {
   const parsed = Number.parseFloat(String(value).replace('%', ''))
-  return Number.isFinite(parsed) ? parsed : 0
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function parseBytes(value) {
   const match = String(value).trim().match(/^([\d.]+)\s*([KMGTPE]?i?B)?$/i)
-  if (!match) return 0
+  if (!match) return null
   const amount = Number.parseFloat(match[1])
   const unit = (match[2] || 'B').toUpperCase()
   const units = { B: 0, KB: 1, KIB: 1, MB: 2, MIB: 2, GB: 3, GIB: 3, TB: 4, TIB: 4, PB: 5, PIB: 5, EB: 6, EIB: 6 }
@@ -63,7 +63,7 @@ function parseBytes(value) {
 
 function parseMemoryUsage(value) {
   const [used, limit] = String(value).split('/').map((part) => parseBytes(part))
-  return { usedBytes: used || 0, limitBytes: limit || 0 }
+  return { usedBytes: used ?? null, limitBytes: limit ?? null }
 }
 
 export async function listStats() {
@@ -97,7 +97,7 @@ export function filterContainers(containers, {
 }
 
 export async function readSnapshot() {
-  const [containers, stats] = await Promise.all([listContainers(), listStats()])
+  const [containers, stats] = await Promise.all([listContainers(), listStats().catch(() => [])])
   return filterContainers(containers).map((container) => ({
     ...container,
     running: container.state === 'running',

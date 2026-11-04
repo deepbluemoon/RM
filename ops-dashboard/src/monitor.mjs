@@ -100,6 +100,35 @@ export function createMonitor({
     return alerts
   }
 
+  function retainRecentMetrics(containers, observedAt) {
+    const next = new Map()
+    const display = containers.map(container => {
+      if (!container.running) return container
+      const current = { ...container.stats }
+      const previous = previousMetrics.get(container.id)
+      const measured = {}
+      let statsRetained = false
+      for (const field of ['cpuPercent', 'memoryPercent', 'memoryUsedBytes', 'memoryLimitBytes']) {
+        const valid = Number.isFinite(current[field]) && (field === 'memoryLimitBytes' ? current[field] > 0 : current[field] >= 0)
+        if (valid) measured[field] = { value: current[field], at: observedAt }
+        else {
+          current[field] = null
+          const last = previous?.[field]
+          if (last && observedAt - last.at <= 15000) {
+            current[field] = last.value
+            measured[field] = last
+            statsRetained = true
+          }
+        }
+      }
+      next.set(container.id, measured)
+      return statsRetained ? { ...container, stats: current, statsRetained } : container
+    })
+    previousMetrics.clear()
+    for (const [id, sample] of next) previousMetrics.set(id, sample)
+    return display
+  }
+
   async function tick() {
     const observedAt = now()
     try {
@@ -113,7 +142,7 @@ export function createMonitor({
       const statusCodes = httpStatusMonitor.observe(containers, statusCollection.logs || statusCollection, observedAt, statusCollection.errors || [])
       latest = {
         observedAt,
-        containers,
+        containers: retainRecentMetrics(containers, observedAt),
         alerts: [...makeAlerts(containers, observedAt), ...statusCodes.alerts],
         statusCodes,
         dockerAvailable: true,

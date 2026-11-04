@@ -7,6 +7,24 @@ import { createHttpStatusAggregator, HTTP_LOG_ADAPTERS, HTTP_STATUS_CODES, parse
 
 const container = (id, cpuPercent, memoryPercent) => ({ id, name: id, running: true, stats: { cpuPercent, memoryPercent } })
 
+test('누락된 통계만 마지막 실측값으로 잠시 표시하고 경고에는 사용하지 않는다', async () => {
+  let time = 1000
+  let stats = { cpuPercent: 85, memoryUsedBytes: 20, memoryLimitBytes: 100 }
+  const monitor = createMonitor({ now: () => time, readSnapshot: async () => [{ id: 'api', name: 'api', running: true, stats }] })
+  await monitor.tick()
+  time += 5000
+  stats = { cpuPercent: null, memoryUsedBytes: 0, memoryLimitBytes: 100 }
+  const partial = await monitor.tick()
+  assert.equal(partial.containers[0].stats.cpuPercent, 85)
+  assert.equal(partial.containers[0].stats.memoryUsedBytes, 0)
+  assert.equal(partial.containers[0].statsRetained, true)
+  assert.deepEqual(partial.alerts, [])
+  time += 11000
+  const expired = await monitor.tick()
+  assert.equal(expired.containers[0].stats.cpuPercent, null)
+  assert.equal(expired.containers[0].statsRetained, undefined)
+})
+
 test('80% 이상 자원은 지속 시간을 누적하고 경고를 만든다', async () => {
   let time = 1_000
   const monitor = createMonitor({ now: () => time, readSnapshot: async () => [container('api', 84.2, 31)] })
