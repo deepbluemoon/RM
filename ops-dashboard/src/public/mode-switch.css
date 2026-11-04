@@ -1,0 +1,16 @@
+@view-transition { navigation: auto; }
+.mode-switch { display:inline-flex; align-items:center; padding:4px; border:1px solid #33434c; border-radius:100px; background:#10171c; font:600 14px/1.4 system-ui,sans-serif; gap:4px; }
+.mode-switch>a,.mode-switch>span { padding:9px 20px; border-radius:100px; text-decoration:none; color:#aabfc8; white-space:nowrap; }
+.mode-switch>[aria-current] { background:#bcf8f1; color:#102926; }
+.mode-switch>a:hover { color:#fff; background:#24363d; }
+.mode-switch a:focus-visible { outline:2px solid #63eadc; outline-offset:3px; }
+.operations-mode-switch { float:right; margin:0 0 12px 18px; position:relative; z-index:1; }
+::view-transition-old(root) { animation:mode-out-right .46s cubic-bezier(.22,.68,0,1) both; }
+::view-transition-new(root) { animation:mode-in-left .46s cubic-bezier(.22,.68,0,1) both; }
+html[data-mode="monitor"]::view-transition-old(root) { animation-name:mode-out-left; }
+html[data-mode="monitor"]::view-transition-new(root) { animation-name:mode-in-right; }
+@keyframes mode-out-left { to { transform:translateX(-25%); opacity:0; } }
+@keyframes mode-in-right { from { transform:translateX(100%); opacity:.5; } }
+@keyframes mode-out-right { to { transform:translateX(25%); opacity:0; } }
+@keyframes mode-in-left { from { transform:translateX(-100%); opacity:.5; } }
+@media(prefers-reduced-motion:reduce) { ::view-transition-old(root),::view-transition-new(root) { animation:none!important; } }

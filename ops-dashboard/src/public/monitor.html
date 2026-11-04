@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ko" data-mode="monitor">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RM · Live Monitor</title><link rel="stylesheet" href="/monitor.css"><link rel="stylesheet" href="/mode-switch.css"><script type="module" src="/mode-switch.js"></script></head>
+<body><main class="wall">
+  <header class="masthead"><a class="identity" href="/#overview" aria-label="RM 운영 현황"><span class="brand">R<span>·</span></span><span><b>RM <em>MONITOR</em></b><small>INFRASTRUCTURE / LIVE OVERVIEW</small></span></a><div class="header-right"><span id="freshness" class="freshness">연결 확인 중</span><nav class="mode-switch" aria-label="대시보드 모드"><a href="/#overview">운영</a><span aria-current="page">모니터링</span></nav><button id="fullscreen" class="icon-button" aria-label="전체 화면으로 보기" title="전체 화면">⛶</button></div></header>
+  <section class="headline"><div><p class="eyebrow">SYSTEM OVERVIEW</p><h1>흐름을 한눈에.</h1></div><div class="time-block"><time id="clock">--:--:--</time><span id="date"></span></div></section>
+  <section class="summary" aria-label="전체 상태 요약">
+    <article class="status-tile" id="status-tile"><span class="tile-label">시스템 상태</span><strong id="system-status">연결 확인 중</strong><span id="status-detail">실제 관측 데이터를 기다립니다</span><span class="status-orbit" aria-hidden="true"></span></article>
+    <article class="stat-tile"><span class="tile-label">실행 컨테이너 <i>01</i></span><strong id="running">—</strong><span id="running-note">전체 —개 중</span></article>
+    <article class="stat-tile"><span class="tile-label">CPU 합계 <i>02</i></span><strong id="cpu">—</strong><span>실행 컨테이너 합계 · 100% 초과 가능</span></article>
+    <article class="stat-tile"><span class="tile-label">메모리 실사용량 <i>03</i></span><strong id="memory">—</strong><span>실행 컨테이너 합계</span></article>
+  </section>
+  <section class="charts">
+    <article class="panel trend-panel"><div class="panel-heading"><div><span class="eyebrow">RESOURCE PULSE</span><h2>자원 사용 추이</h2></div><span class="subtle">이 화면에서 관측한 최근 5분</span></div><div class="trend-pair"><div class="plot"><div class="plot-caption"><span><i class="dot cyan"></i> CPU 합계</span><b id="cpu-axis">—</b></div><svg id="cpu-chart" viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="CPU 합계 사용 추이"></svg></div><div class="plot"><div class="plot-caption"><span><i class="dot violet"></i> 메모리 실사용량</span><b id="memory-axis">—</b></div><svg id="memory-chart" viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="메모리 실사용량 추이"></svg></div></div><div class="plot-footer"><span id="history-start">수집 대기</span><span id="history-note">두 번 이상 관측하면 추이가 표시됩니다</span><span id="history-end">현재</span></div></article>
+    <article class="panel ranking-panel"><div class="panel-heading"><div><span class="eyebrow">RESOURCE LEADERS</span><h2>사용량 상위 5개</h2></div><div class="tabs" aria-label="순위 지표"><button data-metric="cpu" aria-pressed="true">CPU</button><button data-metric="memory" aria-pressed="false">메모리</button></div></div><div id="rankings" class="rankings"></div><span class="subtle" id="ranking-note">측정 대기</span></article>
+  </section>
+  <section class="details-grid">
+    <article class="panel"><div class="panel-heading"><div><span class="eyebrow">FLEET STATUS</span><h2>컨테이너 현황</h2></div><a href="/#containers">상세 ↗</a></div><div class="fleet-labels"><span>컨테이너</span><span>상태</span></div><div id="fleet" class="fleet"></div><div class="pagination"><span id="fleet-count" class="subtle"></span><div><button id="fleet-prev" aria-label="이전 컨테이너">←</button><span id="fleet-page">1 / 1</span><button id="fleet-next" aria-label="다음 컨테이너">→</button></div></div></article>
+    <article class="panel"><div class="panel-heading"><div><span class="eyebrow">RESPONSE MIX</span><h2>HTTP 응답 구성</h2></div><a href="/#status-codes">상세 ↗</a></div><div class="http-total"><strong id="http-total">—</strong><span>수집된 응답</span></div><div id="http-bar" class="http-bar" aria-label="HTTP 응답 분포"></div><div id="http-legend" class="http-legend"></div><p id="http-note" class="subtle">컨테이너 로그 기준 · 요청 지연은 측정하지 않습니다</p></article>
+    <article class="panel attention-panel"><div class="panel-heading"><div><span class="eyebrow">NEEDS ATTENTION</span><h2>활성 경고 <span id="alert-count">—</span></h2></div><a href="/#overview">운영에서 대응 ↗</a></div><div id="alerts" class="alerts" role="status" aria-live="polite"></div></article>
+  </section>
+  <footer><span><i class="dot cyan"></i> 실제 Docker 관측 · 5초마다 갱신</span><span id="observed">마지막 관측 —</span><span>RM / OPERATIONS INTELLIGENCE</span></footer>
+</main><script type="module" src="/monitor-wall.js"></script></body></html>
