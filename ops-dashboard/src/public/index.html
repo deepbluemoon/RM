@@ -68,6 +68,7 @@
                 <div class="code-dialog-head"><div><p class="eyebrow">OPERATOR REVIEW</p><h2 id="action-confirm-title">대응 작업 확인</h2></div><button id="close-action-dialog" class="text-button" type="button">닫기</button></div>
                 <p id="action-confirm-description" class="action-dialog-description"></p>
                 <dl class="action-review-details"><div><dt>오류 코드</dt><dd id="action-confirm-code"></dd></div><div><dt>대상</dt><dd id="action-confirm-target"></dd></div></dl>
+                <div class="operator-inputs"><label for="action-operator-name">운영자 이름</label><input id="action-operator-name" maxlength="64" autocomplete="name" required placeholder="이름 입력" /><label for="action-rationale">선택 근거</label><textarea id="action-rationale" maxlength="300" rows="3" required placeholder="이 대응을 선택한 이유를 간단히 입력"></textarea><small>입력한 이름은 인증된 계정 정보가 아닙니다. 실행 기록과 보고서에 저장됩니다.</small></div>
                 <label id="include-logs-option" class="include-logs-option hidden"><input id="include-recent-logs" type="checkbox" /><span><strong>최근 로그 100줄 포함</strong><small>로그에 개인정보나 비밀값이 있을 수 있습니다. 결과 파일을 공유하기 전에 직접 확인하세요.</small></span></label>
                 <div class="action-dialog-buttons"><button id="cancel-action" class="text-button" type="button">취소</button><button id="confirm-action" class="primary-action-button" type="button">검토 후 실행</button></div>
               </dialog>

@@ -6,6 +6,7 @@ const root = path.dirname(fileURLToPath(import.meta.url))
 const defaultFile = path.resolve(root, '..', '.ops-data', 'action-audit.jsonl')
 const maxFileBytes = 2 * 1024 * 1024
 const maxEntries = 2_000
+const cleanText = (value, max) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max)
 
 export function auditFilePath() {
   return path.resolve(process.env.OPS_ACTION_AUDIT_FILE || defaultFile)
@@ -14,9 +15,14 @@ export function auditFilePath() {
 export async function recordActionEvent(event) {
   const file = auditFilePath()
   await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
+  const actorName = cleanText(event.actorName || process.env.OPS_OPERATOR_NAME || process.env.OPS_OPERATOR_ID || process.env.USER || 'local-user', 64)
+  const actorId = cleanText(event.actorId || process.env.OPS_OPERATOR_ID, 64) || null
   const record = {
     at: new Date().toISOString(),
-    actor: String(process.env.OPS_OPERATOR_ID || process.env.USER || 'local-user').slice(0, 64),
+    actor: actorName,
+    actorId,
+    actorName,
+    rationale: cleanText(event.rationale, 300),
     actionId: String(event.actionId || '').slice(0, 80),
     actionLabel: String(event.actionLabel || '').slice(0, 160),
     code: String(event.code || '').slice(0, 80),
@@ -25,7 +31,7 @@ export async function recordActionEvent(event) {
     durationMs: Math.max(0, Number(event.durationMs) || 0),
     includeLogs: event.includeLogs === true,
     reportId: event.reportId || null,
-    reason: event.reason ? String(event.reason).slice(0, 256) : null,
+    reason: event.reason ? cleanText(event.reason, 256) : null,
   }
   let previous = ''
   try { previous = await fs.readFile(file, 'utf8') } catch (error) { if (error.code !== 'ENOENT') throw error }
