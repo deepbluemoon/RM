@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import vm from 'node:vm'
 import { summarizeMetrics, formatPercent } from '../src/public/metric-display.js'
-import { httpChartData } from '../src/public/http-chart.js'
+import { httpChartData, httpResponseDetails } from '../src/public/http-chart.js'
 
 async function makeUi() {
   class Classes {
@@ -27,7 +27,7 @@ async function makeUi() {
       this.attributes = {}
       this.previousElementSibling = { style: {} }
       this.children = []
-      this.innerHTML = ''
+      this.markup = ''
       this.textContent = ''
       this.scrollHeight = 0
       this.scrollTop = 0
@@ -35,9 +35,33 @@ async function makeUi() {
     }
     setAttribute(key, value) { this.attributes[key] = value }
     removeAttribute(key) { delete this.attributes[key] }
-    querySelector() { return null }
-    querySelectorAll() { return [] }
-    append(child) { this.children.push(child); child.remove = () => this.children.shift() }
+    get innerHTML() { return this.markup }
+    set innerHTML(value) {
+      this.markup = value
+      this.children = []
+      if (value === '<div class="container-column"></div><div class="container-column"></div>') {
+        for (let index = 0; index < 2; index++) { const column = new Element(); column.className = 'container-column'; this.append(column) }
+      }
+    }
+    contains(target) { return this === target || this.children.some((child) => child.contains(target)) }
+    querySelector(selector) { return this.querySelectorAll(selector)[0] || null }
+    querySelectorAll(selector) {
+      const attribute = selector.match(/^\[data-([a-z-]+)(?:="([^"]*)")?\]$/)
+      const key = attribute?.[1].replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())
+      const matches = (child) => selector.startsWith('.') ? child.className?.split(' ').includes(selector.slice(1)) : attribute ? key in child.dataset && (attribute[2] === undefined || child.dataset[key] === attribute[2]) : false
+      return this.children.flatMap((child) => [...(matches(child) ? [child] : []), ...child.querySelectorAll(selector)])
+    }
+    append(child) { child.remove(); this.children.push(child); child.parent = this }
+    insertBefore(child, reference) { child.remove(); const index = this.children.indexOf(reference); this.children.splice(index < 0 ? this.children.length : index, 0, child); child.parent = this }
+    remove() { if (this.parent) { this.parent.children = this.parent.children.filter((child) => child !== this); this.parent = null } }
+    insertAdjacentHTML(position, markup) {
+      if (markup.startsWith('<section')) {
+        const panel = new Element(); panel.className = 'inline-log-panel'
+        const button = new Element(); button.dataset.collapseLog = 'collapse'; panel.append(button)
+        const output = new Element(); output.dataset.inlineLogOutput = markup.match(/data-inline-log-output="([^"]*)"/)[1]; panel.append(output)
+        this.append(panel)
+      } else { const line = new Element(); line.markup = markup; this.append(line) }
+    }
     get firstElementChild() { return this.children[0] }
     addEventListener() {}
     showModal() { this.open = true }
@@ -50,7 +74,7 @@ async function makeUi() {
     if (!elements.has(id)) elements.set(id, new Element(id))
     return elements.get(id)
   }
-  const names = ['overview', 'containers', 'logs', 'status-codes', 'alerts', 'playbooks', 'error-codes', 'not-found']
+  const names = ['overview', 'containers', 'status-codes', 'playbooks', 'error-codes', 'packages', 'not-found']
   const views = names.map((name) => element('view-' + name))
   const links = names.slice(0, -1).map((name) => { const link = new Element(); link.dataset.viewLink = name; return link })
   const sources = []
@@ -62,17 +86,32 @@ async function makeUi() {
   const document = {
     getElementById: element,
     createElement: () => new Element(),
+    querySelector: (selector) => element('container-list').querySelector(selector),
     querySelectorAll: (selector) => selector === '.view' ? views : selector === '[data-view-link]' ? links : [],
   }
   let hash = ''
-  const window = { location: { get hash() { return hash }, set hash(value) { hash = value && !value.startsWith('#') ? '#' + value : value } } }
+  const window = { scrollTo() {}, location: { replace(value) { this.hash = value }, get hash() { return hash }, set hash(value) { hash = value && !value.startsWith('#') ? '#' + value : value } } }
   const source = (await fs.readFile(new URL('../src/public/app.js', import.meta.url), 'utf8'))
     .replace(/^import [^\n]*\n/gm, '')
-    .replace(/^void init\(\)\s*$/m, 'globalThis.ui = { state, showView, appendLog, renderOverview, focusAlert, selectContainer, renderStatusCodes, openActionReview, renderActionHistory, renderReports, openRecordConfirmation }')
-  const context = vm.createContext({ document, window, EventSource, summarizeMetrics, formatPercent, httpChartData })
+    .replace(/^void init\(\)\s*$/m, 'globalThis.ui = { state, renderHistory, containerKind, showView, logLineMarkup, appendContainerLog, renderOverview, renderContainers, renderAlerts, renderActions, focusAlert, toggleContainerLogs, renderStatusCodes, openActionReview, renderActionHistory, renderReports, openRecordConfirmation }')
+  const context = vm.createContext({ document, window, EventSource, CSS: { escape: (value) => value }, summarizeMetrics, formatPercent, httpChartData, httpResponseDetails })
   vm.runInContext(source, context)
   return { ui: context.ui, element, links, window, sources }
 }
+
+test('PC 추이 그래프는 기본 두 지표와 CPU·메모리 개별 선택을 제공한다', async () => {
+  const { ui, element } = await makeUi()
+  ui.state.history = [{ at: 1000, cpu: 20, memory: 30 }, { at: 6000, cpu: 25, memory: 35 }]
+  for (const [filter, cpu, memory] of [['both', true, true], ['cpu', true, false], ['memory', false, true]]) {
+    ui.state.historyFilter = filter
+    ui.renderHistory()
+    assert.equal(element('resource-history').innerHTML.includes('stroke="#39d9e5"'), cpu)
+    assert.equal(element('resource-history').innerHTML.includes('stroke="#a27aff"'), memory)
+  }
+  assert.equal(ui.containerKind({name:'rm-contract-risk-frontend'}).type, '프론트엔드')
+  assert.equal(ui.containerKind({name:'rm-contract-risk-backend'}).type, '백엔드')
+  assert.equal(ui.containerKind({name:'unknown'}).type, '미분류')
+})
 
 test('통합 화면은 HTTP 상세, 대응 확인과 운영 기록을 제공한다', async () => {
   const { ui, element } = await makeUi()
@@ -98,36 +137,40 @@ test('메뉴는 해시와 뒤로 가기에 맞춰 화면을 구분한다', async
   const { ui, element, links, window } = await makeUi()
   ui.showView()
   assert.equal(element('view-overview').classList.contains('hidden'), false)
-  window.location.hash = '#logs'
+  window.location.hash = '#status-codes'
   ui.showView()
   assert.equal(element('view-overview').classList.contains('hidden'), true)
-  assert.equal(element('view-logs').classList.contains('hidden'), false)
+  assert.equal(element('view-status-codes').classList.contains('hidden'), false)
   assert.equal(links[2].attributes['aria-current'], 'page')
+  window.location.hash = '#alerts'
+  ui.showView()
+  assert.equal(window.location.hash, '#overview')
+  ui.showView()
+  assert.equal(element('view-overview').classList.contains('hidden'), false)
   window.location.hash = '#missing'
   ui.showView()
   assert.equal(element('view-not-found').classList.contains('hidden'), false)
 })
 
-test('로그 레벨을 구분하고 원문을 안전한 텍스트로 표시하며 500줄을 유지한다', async () => {
+test('로그 레벨과 원문 이스케이프를 유지하고 열린 스트림은 500줄로 제한한다', async () => {
   const { ui, element } = await makeUi()
-  const output = element('log-output')
-  ui.appendLog('INFO [demo] <script>alert(1)</script>')
-  ui.appendLog('WARNING [demo] retry')
-  ui.appendLog('ERROR [demo] failed')
-  assert.equal(output.children[0].className, 'log-line level-info')
-  assert.equal(output.children[0].textContent, 'INFO [demo] <script>alert(1)</script>')
-  assert.equal(output.children[1].className, 'log-line level-warning')
-  assert.equal(output.children[2].className, 'log-line level-error')
-  for (let i = 0; i < 510; i++) ui.appendLog('INFO line')
+  assert.match(ui.logLineMarkup('INFO <script>'), /level-info.*&lt;script&gt;/)
+  assert.match(ui.logLineMarkup('WARNING retry'), /level-warning/)
+  assert.match(ui.logLineMarkup('ERROR failed'), /level-error/)
+  ui.state.overview = { dockerAvailable: true, containers: [{ id: 'abc', name: 'api', running: true }], alerts: [] }
+  ui.toggleContainerLogs('abc')
+  const output = element('container-list').querySelector('[data-inline-log-output="abc"]')
+  for (let i = 0; i < 510; i++) ui.appendContainerLog('abc', 'INFO line')
   assert.equal(output.children.length, 500)
+  assert.equal(ui.state.containerLogLines.get('abc').length, 500)
 })
 
 test('실측 데이터만 표시하고 수집 불가와 실제 0을 구분한다', async () => {
   const { ui, element } = await makeUi()
   ui.state.overview = { observedAt: 1000, dockerAvailable: false, containers: [], alerts: [], statusCodes: null }
   ui.renderOverview()
-  assert.equal(element('cpu-total').textContent, '-')
-  assert.equal(element('running-count').textContent, '-')
+  assert.equal(element('cpu-gauge-value').textContent, '-')
+  assert.match(element('container-counts').textContent, /확인할 수 없습니다/)
   assert.equal(element('monitor-status-text').textContent, '연결 확인 필요')
   ui.state.overview = {
     observedAt: 2000, dockerAvailable: true, alerts: [],
@@ -135,8 +178,8 @@ test('실측 데이터만 표시하고 수집 불가와 실제 0을 구분한다
     statusCodes: { totals: { classCounts: { '1xx': 0, '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0 } } },
   }
   ui.renderOverview()
-  assert.equal(element('cpu-total').textContent, '0.0%')
-  assert.equal(element('memory-total').textContent, '25.0%')
+  assert.equal(element('cpu-gauge-value').textContent, '0.0%')
+  assert.equal(element('memory-gauge-value').textContent, '25.0%')
   assert.match(element('io-summary').innerHTML, /2kB/)
   ui.state.overview.observedAt = 7000
   ui.state.overview.containers[0].stats.cpuPercent = 5
@@ -165,7 +208,7 @@ test('경고 선택은 관련 화면으로 이동하고 대상 표시를 유지�
   assert.equal(element('engine-warning').classList.contains('hidden'), true)
 })
 
-test('컨테이너를 바꾸면 이전 로그 스트림을 닫고 선택한 로그로 이동한다', async () => {
+test('좌우 컨테이너 로그는 독립적으로 열리고 갱신 시 로그 DOM과 스크롤을 보존한다', async () => {
   const { ui, element, window, sources } = await makeUi()
   ui.state.overview = {
     observedAt: 1000, dockerAvailable: true, alerts: [], statusCodes: null,
@@ -174,11 +217,58 @@ test('컨테이너를 바꾸면 이전 로그 스트림을 닫고 선택한 로�
       { id: 'def', name: 'worker', image: 'demo', state: 'running', running: true, stats: null },
     ],
   }
-  ui.selectContainer('abc')
+  ui.toggleContainerLogs('abc')
   assert.match(sources[0].url, /containerId=abc/)
-  assert.equal(window.location.hash, '#logs')
-  assert.equal(element('logs-title').textContent, '로그 · api')
-  ui.selectContainer('def')
-  assert.equal(sources[0].closed, true)
+  const originalOutput = element('container-list').querySelector('[data-inline-log-output="abc"]')
+  originalOutput.scrollTop = 37
+  ui.toggleContainerLogs('def')
+  assert.equal(sources[0].closed, false)
   assert.match(sources[1].url, /containerId=def/)
+  assert.equal(window.location.hash, '')
+  ui.renderOverview()
+  assert.equal(element('container-list').querySelector('[data-inline-log-output="abc"]'), originalOutput)
+  assert.equal(originalOutput.scrollTop, 37)
+  const columns = element('container-list').querySelectorAll('.container-column')
+  assert.equal(columns[0].children[0].dataset.containerEntry, 'abc')
+  assert.equal(columns[1].children[0].dataset.containerEntry, 'def')
+  ui.toggleContainerLogs('abc')
+  assert.equal(sources[0].closed, true)
+  assert.equal(sources[1].closed, false)
+  assert.equal(ui.state.expandedContainerLogs.has('def'), true)
+})
+
+test('운영 현황에서 대응 스크립트는 관련 활성 경고에만 실행 버튼을 제공한다', async () => {
+  const { ui, element } = await makeUi()
+  ui.state.catalog = { codes: [], actions: [
+    { id: 'collect-incident', label: '진단', codes: ['HTTP-5XX-RATE-001'] },
+    { id: 'check-docker-access', label: 'Docker 점검', codes: ['OPS-DOCKER-001'] },
+  ] }
+  ui.renderActions([])
+  assert.equal((element('overview-actions').innerHTML.match(/ disabled/g) || []).length, 2)
+  const alerts = [{ id: 'http:1', code: 'HTTP-5XX-RATE-001', containerName: 'api' }]
+  ui.renderAlerts(alerts, true)
+  ui.renderActions(alerts)
+  const markup = element('overview-actions').innerHTML
+  assert.match(markup, /is-ready/)
+  assert.match(markup, /data-action-id="collect-incident" data-alert-id="http:1"[^>]*>검토 후 실행/)
+  assert.equal((markup.match(/ disabled/g) || []).length, 1)
+  assert.match(element('alert-preview').innerHTML, /api/)
+})
+
+test('활성 경고 전용 메뉴와 페이지는 제거하고 운영 현황에 조치를 둔다', async () => {
+  const html = await fs.readFile(new URL('../src/public/index.html', import.meta.url), 'utf8')
+  assert.doesNotMatch(html, /href="#alerts"|id="view-alerts"|id="alerts-list"/)
+  assert.match(html, /id="overview-actions"/)
+  assert.match(html, /id="overview-action-result"/)
+})
+
+test('HTTP 막대 옆에 실제 코드 구성과 출처를 표시하고 HTML은 이스케이프한다', async () => {
+  const { ui, element } = await makeUi()
+  ui.state.httpCodes = [{ code: 302, description: 'Found' }, { code: 304, description: 'Not Modified' }]
+  ui.renderStatusCodes({ totals: { classCounts: { '1xx': 0, '2xx': 0, '3xx': 2, '4xx': 0, '5xx': 0 }, counts: { 302: 1, 304: 1 } }, containers: [{ name: '<script>api</script>', total: 2, counts: { 302: 1, 304: 1 }, classCounts: { '5xx': 0 } }] }, true)
+  const markup = element('status-summary').innerHTML
+  assert.match(markup, /302<\/b> Found <em>1건/)
+  assert.match(markup, /304<\/b> Not Modified <em>1건/)
+  assert.match(markup, /&lt;script&gt;api&lt;\/script&gt;/)
+  assert.doesNotMatch(markup, /<script>/)
 })

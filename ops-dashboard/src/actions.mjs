@@ -19,6 +19,10 @@ export const ACTIONS = [
   { id: 'check-docker-access', label: 'Docker 연결 상태 점검', description: 'Docker CLI, 선택된 context, Engine 연결 가능 여부를 확인합니다.', script: 'check-docker-access.sh', codes: ['OPS-DOCKER-001'], confirmation: 'review', manualPath: '/docs/response-scripts.md' },
 ]
 
+export function activeAlertFor(state, code, alertId) {
+  return (state.alerts || []).find((alert) => alert.code === code && (alertId === undefined || alert.id === alertId)) || null
+}
+
 export function createActionPolicy(actions = ACTIONS) {
   const actionMap = new Map(actions.map((item) => [item.id, item]))
   function actionFor(actionId) {

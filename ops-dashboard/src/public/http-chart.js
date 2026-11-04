@@ -9,3 +9,15 @@ export function httpChartData(status, dockerAvailable) {
   if (!total) return { state: partial ? 'unavailable' : 'empty', bars: [] }
   return { state: partial ? 'partial' : 'ready', total, bars: values.filter(({ count }) => count > 0).map((item) => ({ ...item, percent: item.count / total * 100 })) }
 }
+
+export function httpResponseDetails(status, statusClass, catalog = []) {
+  const descriptions = new Map(catalog.map((item) => [Number(item.code), item.description]))
+  return Object.entries(status?.totals?.counts || {})
+    .filter(([code, count]) => `${Math.floor(Number(code) / 100)}xx` === statusClass && Number.isSafeInteger(count) && count > 0)
+    .sort(([left], [right]) => Number(left) - Number(right))
+    .map(([code, count]) => {
+      const services = (status.containers || []).filter((item) => item.counts?.[code] > 0)
+      const sources = services.map((item) => `${item.name || item.id} (${item.counts[code]}건)`)
+      return { code: Number(code), count, description: descriptions.get(Number(code)) || 'HTTP 응답', sources }
+    })
+}
