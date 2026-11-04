@@ -30,9 +30,11 @@
 ### Compose 서비스 replica 수를 목표값으로 변경
 
 - 파일: `scripts/scale-service.sh`
-- 활성 조건: CPU·메모리 경고. MariaDB/MySQL 등 상태 저장 서비스는 서버 정책에서 차단한다.
-- 동작: 대시보드에서 사람이 명시적으로 선택하고 확인한 뒤에만 Compose replica를 변경한다. 목표는 현재 수보다 큰 경우만 허용하며, 실제 실행 수→목표 수를 확인창에 표시한다. 실행 전 `preflight-ops.sh`가 환경·서비스 허용 목록·현재 수·최대 20개 안전 상한을 점검한다. 변경 후 replica 개수와 설정된 healthcheck를 최대 `OPS_SCALE_WAIT_SECONDS` 동안 확인한다.
-- 변경 영향: 서비스 인스턴스 수가 바뀌며, 해당 서비스의 상태 공유·작업 라우팅·자원 한도를 사전에 확인해야 한다.
+- 활성 조건: 백엔드 컨테이너의 CPU·메모리 경고. 경고는 버튼을 활성화하며 실행은 운영자가 확인한 뒤에만 시작한다.
+- 동작: 기본 목표는 backend replica 1개에서 2개다. 사전 점검은 활성 분석 요청·실행이 없는지 DB에서 확인하고, 변경 직전에 다시 확인한다. 진행 중 분석을 찾거나 DB 조회에 실패하면 실행을 차단한다. 활성 분석이 없어도 확장 중에는 새 분석을 접수하지 않도록 운영자가 잠시 시연을 조정한다.
+- 요청 분산: 프런트 Nginx가 Docker DNS에서 `backend` 주소를 다시 조회하고 여러 주소에 요청을 분산한다. `frontend/nginx/default.conf.template` 변경을 포함한 프런트 이미지가 빌드된 뒤에는 Nginx access log의 `upstream` 주소로 실제 전달 대상을 확인한다.
+- 변경 영향: Compose가 동일한 backend 이미지를 사용해 복제본을 추가한다. 확장은 자동 실행되지 않으며, 스크립트의 실행 전 확인과 사전 점검을 거친다. MariaDB/MySQL, frontend, model-server, 초기화 서비스는 확장 대상에서 차단한다.
+- 확인·복구: 변경 후 replica 수와 healthcheck를 최대 `OPS_SCALE_WAIT_SECONDS` 동안 확인한다. 사후 확인 실패는 자동 롤백하지 않으므로 사람이 상태를 확인한다. 진행 중 분석이 없을 때 `docker compose up -d --scale backend=1 backend`로 시연 복제본을 정리한다.
 - 중단: 사전점검 실패 시 변경하지 않는다. 사후 확인 실패는 자동 롤백하지 않으며, 부분 변경됐을 수 있으므로 현재 인스턴스 수와 서비스 상태를 확인한 뒤 재시도·복구를 사람이 결정한다.
 
 ## 화면 동작
