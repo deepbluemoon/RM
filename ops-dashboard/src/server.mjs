@@ -1,8 +1,9 @@
 import http from 'node:http'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { hostname } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { readSnapshot, readLogs, streamLogs, assertContainerId } from './docker.mjs'
+import { readSnapshot, readLogs, streamLogs, assertContainerId, listContainers, filterContainers, runDocker } from './docker.mjs'
 import { createLogArchive } from './log-archive.mjs'
 import { createMonitor } from './monitor.mjs'
 import { ACTIONS, activeAlertFor, canRunAction, runAction } from './actions.mjs'
@@ -54,6 +55,11 @@ const monitor = createMonitor({
   httpStatusAlertDurationMs: Math.max(0, Number(process.env.OPS_HTTP_STATUS_ALERT_DURATION_MS || 30_000)),
   deploymentVersion: process.env.OPS_DEPLOYMENT_VERSION || '',
 })
+let pendingMonitorTick
+function refreshMonitor() {
+  pendingMonitorTick ??= monitor.tick().finally(() => { pendingMonitorTick = null })
+  return pendingMonitorTick
+}
 
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' }
 
@@ -147,12 +153,31 @@ async function handle(req, res) {
         tail: url.searchParams.get('tail') || 200,
         onData: (line) => res.write(`data: ${JSON.stringify({ line })}\n\n`),
         onError: (error) => res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`),
-        onClose: () => res.end(),
+        onClose: () => res.end('event: end\ndata: {}\n\n'),
       })
       req.on('close', stop)
       return
     } catch (error) {
       return sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/containers/stop') {
+    if (req.headers['x-ops-intent'] !== 'stop-container' || req.headers['sec-fetch-site'] === 'cross-site') {
+      return sendJson(res, 403, { error: '대시보드에서 중지 요청을 보내세요' })
+    }
+    try {
+      const input = await readJsonBody(req, 2048)
+      const id = input?.containerId
+      if (typeof id !== 'string' || !/^[a-f0-9]{12,64}$/.test(id)) return sendJson(res, 400, { error: '유효하지 않은 컨테이너 ID입니다' })
+      const target = filterContainers(await listContainers()).find(container => container.id === id)
+      if (!target || target.state !== 'running') return sendJson(res, 409, { error: '현재 감시 범위에서 실행 중인 컨테이너가 아닙니다' })
+      if (hostname().startsWith(id)) return sendJson(res, 409, { error: '현재 대시보드 컨테이너는 중지할 수 없습니다' })
+      await runDocker(['stop', id], { timeout: 35000 })
+      await pendingMonitorTick
+      await refreshMonitor()
+      return sendJson(res, 200, { ok: true })
+    } catch (error) {
+      return sendJson(res, error.statusCode || 500, { error: error.message })
     }
   }
   if (req.method === 'POST' && url.pathname === '/api/actions/run') {
@@ -231,9 +256,9 @@ const server = http.createServer((req, res) => {
     res.destroy()
   })
 })
-await monitor.tick()
+await refreshMonitor()
 void packages.refresh()
-setInterval(() => { void monitor.tick() }, pollMs).unref()
+setInterval(() => { void refreshMonitor() }, pollMs).unref()
 server.listen(port, host, () => process.stdout.write(`RM ops dashboard listening on http://${host}:${port}\n`))
 process.once('SIGINT', () => { logArchive.close(); server.close() })
 process.once('SIGTERM', () => { logArchive.close(); server.close() })

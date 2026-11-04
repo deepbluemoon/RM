@@ -33,6 +33,8 @@ test('측정된 0과 실제 수치 및 부분 수집을 구분한다', () => {
   assert.deepEqual(summarizeMetrics({ dockerAvailable: true, containers: [first] }), { running: 1, total: 1, cpu: 0, memory: 0 })
   assert.deepEqual(summarizeMetrics({ dockerAvailable: true, containers: [first, second] }), { running: 2, total: 2, cpu: 12.5, memory: 25 })
   assert.equal(summarizeMetrics({ dockerAvailable: true, containers: [first, { running: true, stats: null }] }).cpu, null)
+  assert.deepEqual(summarizeMetrics({ dockerAvailable: true, containers: [{ running: true, stats: { cpuPercent: 7 } }] }), { running: 1, total: 1, cpu: 7, memory: null })
+  assert.deepEqual(summarizeMetrics({ dockerAvailable: true, containers: [{ running: true, stats: { memoryUsedBytes: 40, memoryLimitBytes: 100 } }] }), { running: 1, total: 1, cpu: null, memory: 40 })
   assert.equal(formatPercent(0), '0.0%')
   assert.equal(formatPercent(0, '-'), '0.0%')
 })
