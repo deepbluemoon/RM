@@ -7,6 +7,17 @@ import path from 'node:path'
 
 const loadActions = () => import('../src/actions.mjs')
 
+test('같은 오류 코드가 여러 대상에서 발생해도 선택한 경고에만 대응한다', async () => {
+  const { activeAlertFor } = await loadActions()
+  const first = { id: 'cpu:api', code: 'OPS-CPU-80-001', containerId: 'api' }
+  const second = { id: 'cpu:worker', code: 'OPS-CPU-80-001', containerId: 'worker' }
+  const state = { alerts: [first, second] }
+  assert.equal(activeAlertFor(state, second.code, second.id), second)
+  assert.equal(activeAlertFor(state, second.code, 'cpu:removed'), null)
+  assert.equal(activeAlertFor(state, 'OPS-MEM-80-001', second.id), null)
+  assert.equal(activeAlertFor(state, first.code), first)
+})
+
 async function withDocker(callback, fails = false) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'rm-ops-action-'))
   const dockerPath = path.join(directory, 'docker')

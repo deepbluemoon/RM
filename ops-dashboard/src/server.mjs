@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readSnapshot, readLogs, streamLogs, assertContainerId } from './docker.mjs'
 import { createMonitor } from './monitor.mjs'
-import { ACTIONS, canRunAction, runAction } from './actions.mjs'
+import { ACTIONS, activeAlertFor, canRunAction, runAction } from './actions.mjs'
 import { ERROR_CODES } from './errors.mjs'
 import { HTTP_STATUS_CODES, HTTP_STATUS_ALERT_RULES } from './http-status.mjs'
 import { readActionHistory, recordActionEvent } from './action-audit.mjs'
@@ -56,10 +56,6 @@ function sendJson(res, status, body) {
 
 function routePath(req) {
   return new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname
-}
-
-function activeCodeFor(state, code) {
-  return state.alerts.find((alert) => alert.code === code) || null
 }
 
 async function serveStatic(req, res) {
@@ -146,7 +142,7 @@ async function handle(req, res) {
     req.on('end', async () => {
       try {
         const input = JSON.parse(body || '{}')
-        const alert = activeCodeFor(monitor.getState(), input.code)
+        const alert = activeAlertFor(monitor.getState(), input.code, input.alertId)
         if (!alert) {
           try { await recordActionEvent({ actionId: input.actionId, code: input.code, status: 'failure', reason: '현재 활성화된 오류코드가 아닙니다' }) } catch {}
           return sendJson(res, 409, { error: '현재 활성화된 오류코드가 아닙니다' })
