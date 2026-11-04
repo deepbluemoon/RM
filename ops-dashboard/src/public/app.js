@@ -510,6 +510,8 @@ function openActionReview(actionId, code, alert, trigger) {
   }
   $('include-logs-option').classList.toggle('hidden', !action.includeLogs)
   $('include-recent-logs').checked = false
+  $('action-operator-name').value = localStorage.getItem('ops-operator-name') || ''
+  $('action-rationale').value = ''
   $('confirm-action').textContent = action.confirmation === 'change' ? '확인 후 변경 실행' : '검토 후 실행'
   $('action-confirm-dialog').showModal()
 }
@@ -525,7 +527,7 @@ function showOperationToast(message, isError = false) {
 function renderActionHistory(events) {
   const target = $('action-history')
   if (!events.length) { target.innerHTML = '<p class="record-empty">기록된 실행이 없습니다.</p>'; return }
-  target.innerHTML = events.map((event) => `<div class="record-row"><div><strong>${escapeHtml(event.actionLabel || event.actionId)}</strong><small>${escapeHtml(new Date(event.at).toLocaleString('ko-KR'))} · ${escapeHtml(event.actor)} · ${escapeHtml(event.code)} · ${escapeHtml(event.target || '대상 없음')}</small><small class="record-status-${event.status === 'success' ? 'success' : 'failure'}">${event.status === 'success' ? '실행 완료' : '실행 실패'}${event.includeLogs ? ' · 로그 포함' : ''}</small></div>${event.reportId ? `<a href="/api/reports/${encodeURIComponent(event.reportId)}">보고서</a>` : ''}</div>`).join('')
+  target.innerHTML = events.map((event) => `<div class="record-row"><div><strong>${escapeHtml(event.actionLabel || event.actionId)}</strong><small>${escapeHtml(new Date(event.at).toLocaleString('ko-KR'))} · ${escapeHtml(event.actorName || event.actor)} · ${escapeHtml(event.code)} · ${escapeHtml(event.target || '대상 없음')}</small>${event.rationale ? `<small>선택 근거: ${escapeHtml(event.rationale)}</small>` : ''}<small class="record-status-${event.status === 'success' ? 'success' : 'failure'}">${event.status === 'success' ? '실행 완료' : '실행 실패'}${event.includeLogs ? ' · 로그 포함' : ''}</small></div>${event.reportId ? `<a href="/api/reports/${encodeURIComponent(event.reportId)}">보고서</a>` : ''}</div>`).join('')
 }
 
 function renderReports(reports) {
@@ -588,6 +590,12 @@ async function runAction() {
   const pending = state.pendingAction
   if (!pending) return
   const { action, code, alert } = pending
+  const operatorName = $('action-operator-name').value.trim()
+  const rationale = $('action-rationale').value.trim()
+  if (!operatorName || !rationale) {
+    showOperationToast('운영자 이름과 선택 근거를 입력하세요.', true)
+    return
+  }
   state.actionRunning = true
   renderActions(state.overview?.alerts || [])
   $('confirm-action').disabled = true
@@ -599,10 +607,15 @@ async function runAction() {
     const response = await fetch('/api/actions/run', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ actionId: action.id, code, alertId: alert.id, includeLogs: $('include-recent-logs').checked }),
+      body: JSON.stringify({ actionId: action.id, code, alertId: alert.id, operatorName, rationale, includeLogs: $('include-recent-logs').checked }),
     })
     const result = await response.json()
-    if (!response.ok) throw new Error(result.error || '알 수 없는 오류')
+    localStorage.setItem('ops-operator-name', operatorName)
+    if (!response.ok) {
+      const failure = new Error(result.error || '알 수 없는 오류')
+      failure.reportId = result.reportId || ''
+      throw failure
+    }
     const output = result.output || ''
     const degraded = output.includes('engine=unreachable') || output.includes('docker_cli=missing')
     const summary = output.replace(/^report=.*\n?/m, '').trim()
@@ -613,7 +626,7 @@ async function runAction() {
     await refreshOperatorRecords().catch(() => {})
     await refresh().catch(() => {})
   } catch (error) {
-    renderActionResult(`${action.label} 실패\n${error instanceof Error ? error.message : String(error)}`)
+    renderActionResult(`${action.label} 실패\n${error instanceof Error ? error.message : String(error)}`, error.reportId || '')
     showOperationToast(`${action.label} 실행에 실패했습니다. 대응 영역의 상세 결과를 확인하세요.`, true)
     $('action-confirm-dialog').close()
   } finally {

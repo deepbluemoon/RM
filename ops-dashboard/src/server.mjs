@@ -3,12 +3,13 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readSnapshot, readLogs, streamLogs, assertContainerId } from './docker.mjs'
+import { createLogArchive } from './log-archive.mjs'
 import { createMonitor } from './monitor.mjs'
 import { ACTIONS, activeAlertFor, canRunAction, runAction } from './actions.mjs'
 import { ERROR_CODES } from './errors.mjs'
 import { HTTP_STATUS_CODES, HTTP_STATUS_ALERT_RULES } from './http-status.mjs'
 import { readActionHistory, recordActionEvent } from './action-audit.mjs'
-import { deleteExpiredReports, deleteReport, listReports, readReport } from './reports.mjs'
+import { createActionReport, deleteExpiredReports, deleteReport, listReports, readReport, readReportReview, updateReportReview } from './reports.mjs'
 import { createPackageMonitor } from './packages.mjs'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
@@ -39,8 +40,15 @@ async function readStatusLogs(containers) {
   return { logs, errors }
 }
 
+const logArchive = createLogArchive()
+async function readSnapshotWithArchive() {
+  const snapshot = await readSnapshot()
+  await logArchive.sync(snapshot.containers)
+  return snapshot
+}
+
 const monitor = createMonitor({
-  readSnapshot,
+  readSnapshot: readSnapshotWithArchive,
   readStatusLogs,
   threshold: Number(process.env.OPS_RESOURCE_THRESHOLD || 80),
   httpStatusAlertDurationMs: Math.max(0, Number(process.env.OPS_HTTP_STATUS_ALERT_DURATION_MS || 30_000)),
@@ -92,7 +100,18 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { reports: await listReports() }) }
     catch { return sendJson(res, 500, { error: '진단 보고서를 읽지 못했습니다' }) }
   }
-  const reportMatch = url.pathname.match(/^\/api\/reports\/(incident\.[a-zA-Z0-9]{8})$/)
+  const reportMatch = url.pathname.match(/^\/api\/reports\/((?:incident|action)\.[a-zA-Z0-9]{8})$/)
+  const reviewMatch = url.pathname.match(/^\/api\/reports\/((?:incident|action)\.[a-zA-Z0-9]{8})\/review$/)
+  if (reviewMatch && req.method === 'GET') {
+    try { return sendJson(res, 200, await readReportReview(reviewMatch[1])) }
+    catch (error) { return sendJson(res, error.code === 'ENOENT' ? 404 : 400, { error: error.message }) }
+  }
+  if (reviewMatch && req.method === 'PUT') {
+    try {
+      const input = await readJsonBody(req, 12_000)
+      return sendJson(res, 200, await updateReportReview(reviewMatch[1], input))
+    } catch (error) { return sendJson(res, error.code === 'ENOENT' ? 404 : error.statusCode || 400, { error: error.message }) }
+  }
   if (reportMatch && req.method === 'GET') {
     try {
       const report = await readReport(reportMatch[1])
@@ -137,41 +156,73 @@ async function handle(req, res) {
     }
   }
   if (req.method === 'POST' && url.pathname === '/api/actions/run') {
-    let body = ''
-    req.on('data', (chunk) => { body += chunk })
-    req.on('end', async () => {
+    void (async () => {
       try {
-        const input = JSON.parse(body || '{}')
+        const input = await readJsonBody(req, 16_000)
+        const operatorName = String(input.operatorName || '').trim()
+        const rationale = String(input.rationale || '').trim()
+        if (!operatorName || operatorName.length > 64 || /[\u0000-\u001f\u007f]/.test(operatorName)) return sendJson(res, 400, { error: '운영자 이름은 1~64자로 입력하세요' })
+        if (!rationale || rationale.length > 300 || /[\u0000-\u001f\u007f]/.test(rationale)) return sendJson(res, 400, { error: '선택 근거는 1~300자로 입력하세요' })
         const alert = activeAlertFor(monitor.getState(), input.code, input.alertId)
         if (!alert) {
-          try { await recordActionEvent({ actionId: input.actionId, code: input.code, status: 'failure', reason: '현재 활성화된 오류코드가 아닙니다' }) } catch {}
+          try { await recordActionEvent({ actionId: input.actionId, code: input.code, actorName: operatorName, rationale, status: 'failure', reason: '현재 활성화된 오류코드가 아닙니다' }) } catch {}
           return sendJson(res, 409, { error: '현재 활성화된 오류코드가 아닙니다' })
         }
         const permission = canRunAction(input.actionId, alert)
         const action = ACTIONS.find((item) => item.id === input.actionId)
         if (!permission.allowed) {
-          try { await recordActionEvent({ actionId: input.actionId, actionLabel: action?.label, code: input.code, target: alert.containerName, status: 'failure', reason: permission.reason }) } catch {}
+          try { await recordActionEvent({ actionId: input.actionId, actionLabel: action?.label, code: input.code, target: alert.containerName, actorName: operatorName, rationale, status: 'failure', reason: permission.reason }) } catch {}
           return sendJson(res, 409, { error: permission.reason })
         }
         const startedAt = Date.now()
         try {
           const result = await runAction(input.actionId, { code: input.code, containerId: alert.containerId, includeLogs: input.includeLogs === true })
-          const reportId = result.output.match(/^report=.*\/(incident\.[a-zA-Z0-9]{8})\/incident\.txt$/m)?.[1] || null
+          const diagnosticReportId = result.output.match(/^report=.*\/(incident\.[a-zA-Z0-9]{8})\/incident\.txt$/m)?.[1] || null
+          const reportId = await createActionReport({ at: new Date().toISOString(), actorName: operatorName, actorId: process.env.OPS_OPERATOR_ID, rationale, actionLabel: action?.label, code: input.code, target: alert.containerName, status: 'success', durationMs: Date.now() - startedAt, diagnosticReportId, output: result.output })
           let auditRecorded = true
-          try { await recordActionEvent({ actionId: input.actionId, actionLabel: action?.label, code: input.code, target: alert.containerName, status: 'success', durationMs: Date.now() - startedAt, includeLogs: input.includeLogs === true, reportId }) } catch { auditRecorded = false }
+          try { await recordActionEvent({ actionId: input.actionId, actionLabel: action?.label, code: input.code, target: alert.containerName, actorName: operatorName, rationale, status: 'success', durationMs: Date.now() - startedAt, includeLogs: input.includeLogs === true, reportId }) } catch { auditRecorded = false }
           return sendJson(res, 200, { ok: true, ...result, reportId, auditRecorded })
         } catch (error) {
+          let reportId = null
+          try { reportId = await createActionReport({ at: new Date().toISOString(), actorName: operatorName, actorId: process.env.OPS_OPERATOR_ID, rationale, actionLabel: action?.label, code: input.code, target: alert.containerName, status: 'failure', durationMs: Date.now() - startedAt, failureReason: error instanceof Error ? error.message : String(error) }) } catch {}
           let auditRecorded = true
-          try { await recordActionEvent({ actionId: input.actionId, actionLabel: action?.label, code: input.code, target: alert.containerName, status: 'failure', durationMs: Date.now() - startedAt, includeLogs: input.includeLogs === true, reason: error instanceof Error ? error.message : String(error) }) } catch { auditRecorded = false }
-          return sendJson(res, 500, { error: error instanceof Error ? error.message : String(error), auditRecorded })
+          try { await recordActionEvent({ actionId: input.actionId, actionLabel: action?.label, code: input.code, target: alert.containerName, actorName: operatorName, rationale, status: 'failure', durationMs: Date.now() - startedAt, includeLogs: input.includeLogs === true, reportId, reason: error instanceof Error ? error.message : String(error) }) } catch { auditRecorded = false }
+          return sendJson(res, 500, { error: error instanceof Error ? error.message : String(error), reportId, auditRecorded })
         }
       } catch (error) {
         return sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) })
       }
-    })
+    })()
     return
   }
   return serveStatic(req, res)
+}
+
+function readJsonBody(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    let size = 0
+    let tooLarge = false
+    req.on('data', (chunk) => {
+      if (tooLarge) return
+      size += chunk.length
+      if (size > maxBytes) {
+        tooLarge = true
+        return
+      }
+      body += chunk.toString('utf8')
+    })
+    req.on('end', () => {
+      if (tooLarge) {
+        const error = new Error('요청 본문이 허용 크기를 초과했습니다')
+        error.statusCode = 413
+        reject(error)
+        return
+      }
+      try { resolve(JSON.parse(body || '{}')) } catch { reject(new Error('JSON 요청 본문이 올바르지 않습니다')) }
+    })
+    req.on('error', reject)
+  })
 }
 
 const server = http.createServer((req, res) => {
@@ -184,3 +235,5 @@ await monitor.tick()
 void packages.refresh()
 setInterval(() => { void monitor.tick() }, pollMs).unref()
 server.listen(port, host, () => process.stdout.write(`RM ops dashboard listening on http://${host}:${port}\n`))
+process.once('SIGINT', () => { logArchive.close(); server.close() })
+process.once('SIGTERM', () => { logArchive.close(); server.close() })

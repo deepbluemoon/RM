@@ -283,6 +283,11 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .action-review-details div { display: grid; grid-template-columns: 90px 1fr; gap: 10px; }
 .action-review-details dt { color: var(--muted); font-size: 12px; }
 .action-review-details dd { margin: 0; font: 12px var(--mono); overflow-wrap: anywhere; }
+.operator-inputs { display: grid; gap: 7px; margin: 14px 0; }
+.operator-inputs label { color: var(--muted-strong); font-size: 12px; }
+.operator-inputs input, .operator-inputs textarea { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); color: var(--ink); font-family: inherit; font-size: 12px; line-height: 1.45; }
+.operator-inputs textarea { resize: vertical; }
+.operator-inputs small { color: var(--muted); font-size: 10px; line-height: 1.45; }
 .include-logs-option { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0; padding: 12px; border: 1px solid rgba(245,158,11,.45); border-radius: 6px; background: rgba(245,158,11,.06); }
 .include-logs-option input { margin: 3px 0 0; accent-color: var(--amber); }
 .include-logs-option strong, .include-logs-option small { display: block; }
