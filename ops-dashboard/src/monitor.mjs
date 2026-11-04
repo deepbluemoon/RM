@@ -35,6 +35,7 @@ export function createMonitor({
   if (!Number.isFinite(alertForMs) || alertForMs < 0) throw new RangeError('자원 경고 시작 지속시간은 0 이상이어야 합니다')
   if (!Number.isFinite(recoveryForMs) || recoveryForMs < 0) throw new RangeError('자원 경고 해제 지속시간은 0 이상이어야 합니다')
   const resourceStates = new Map()
+  const previousMetrics = new Map()
   const httpStatusMonitor = createHttpStatusAggregator({ now, alertDurationMs: httpStatusAlertDurationMs, deploymentVersion })
   let latest = { observedAt: now(), containers: [], alerts: [], dockerAvailable: true, statusCodes: httpStatusMonitor.getState() }
 
