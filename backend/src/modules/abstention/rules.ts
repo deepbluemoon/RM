@@ -9,15 +9,23 @@ export interface RuleVerdict {
   detail: string;
 }
 
-/** 모델(M3)에 대한 지시·역할 변경 시도. 계약 문장에는 나오지 않는 표현만 쓴다 */
+/** 모델에 대한 지시·역할 변경 시도. 단어 하나가 아니라 지시 대상과 동작을 함께 찾는다. */
 const INJECTION = [
-  /(이전|위의?|앞의?|기존)\s*(모든\s*)?(지시|명령|지침|규칙|프롬프트)(을|를)?\s*(무시|잊|따르지)/,
+  /(이전|위의?|앞의?|기존)\s*(모든\s*)?(지시|명령|지침|규칙|프롬프트)(을|를|은|는)?\s*(무시|잊|따르지)/,
   /시스템\s*프롬프트|system\s*prompt|developer\s*message/i,
-  /ignore\s+(all\s+|any\s+)?(previous|prior|above)\s+(instructions|prompts?)/i,
+  /(?:ignore|disregard|forget|override)\s+(?:(?:all|any)\s+)?(?:previous|prior|above|earlier|system|developer)\s+(?:instructions?|prompts?|messages?)/i,
+  /(?:ignore|disregard|override)\s+(?:your|the)\s+(?:instructions?|system\s+prompt)/i,
+  /(?:새로운|새)\s*(시스템|개발자)\s*(지시|메시지|프롬프트)/,
+  /(?:위의?|이전|기존)\s*(지시|지침|규칙)보다\s*(?:다음|아래)\s*(지시|지침|규칙)(?:을|를)?\s*우선/,
   /(너는|당신은)\s*이제|you\s+are\s+now|act\s+as\s+(a|an)\b/i,
+  /<\|(?:im_start|im_end)\|>|\[(?:system|developer|assistant)\]/i,
   /(위법|불공정|정상)(이\s*아니라고|이라고)\s*(답|판정|출력)/,
   /(risk_class|evidence_ids|json)\s*(을|를|은|는)?\s*(다음과\s*같이|이렇게)?\s*(출력|반환|답)/i,
+  /(?:risk_class|evidence_ids)\s*[:=]\s*(?:normal|illegal|unfair|dispute|\[\s*\])/i,
 ];
+
+// 입력은 변경하지 않는다. 검사용 복사본만 정규화해 전각 문자·영폭 문자 우회를 검사한다.
+const injectionView = (text: string): string => text.normalize('NFKC').replace(/[\u200B-\u200F\u2060\uFEFF]/g, '');
 
 const HEADER = /^\s*제\s*\d+\s*조(?:\s*의\s*\d+)?\s*(?:[(\[【<][^)\]】>]{0,40}[)\]】>])?\s*/;
 const MARKER_ONLY = /^[\s/·.,:;\-]*(?:[(<]?\s*(?:삭제|신설|좌동|생략|이하\s*생략|전략|중략|후략)\s*[)>]?[\s/·.,:;\-]*)*$/;
@@ -27,8 +35,9 @@ export function ruleCheck(raw: string): RuleVerdict | null {
   const compact = text.replace(/\s+/g, '');
   if (compact.length < 6) return { reason: 'invalid_input', code: 'too_short', detail: '내용이 너무 짧습니다' };
 
+  const screened = injectionView(text);
   for (const re of INJECTION) {
-    if (re.test(text)) return { reason: 'prompt_injection', code: 'injection', detail: '모델에 대한 지시문으로 보이는 문장이 있습니다' };
+    if (re.test(screened)) return { reason: 'prompt_injection', code: 'injection', detail: '모델에 대한 지시문으로 보이는 문장이 있습니다' };
   }
 
   // 조 머리·편집 표시만 있고 본문이 없는 조항
