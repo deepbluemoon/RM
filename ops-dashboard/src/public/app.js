@@ -205,7 +205,11 @@ function renderAlerts(alerts, dockerAvailable) {
     return '<button type="button" class="alert-card" data-alert-id="' + escapeHtml(alert.id) + '"><span class="alert-card-top"><strong>' + escapeHtml(alert.code) + '</strong><span class="alert-resource">' + escapeHtml(alert.resource) + '</span></span><p>' + escapeHtml(details) + '</p></button>'
   }).join('')
   list.querySelectorAll('[data-alert-id]').forEach((button) => button.addEventListener('click', () => focusAlert(button.dataset.alertId)))
-  preview.innerHTML = alerts.slice(0, 3).map((alert) => '<div class="compact-alert"><strong>' + escapeHtml(alert.code) + '</strong><span>' + escapeHtml(alert.containerName || alert.resource) + '</span></div>').join('')
+  preview.innerHTML = alerts.map((alert) => '<button type="button" class="compact-alert" data-alert-id="' + escapeHtml(alert.id) + '"><strong>' + escapeHtml(alert.code) + '</strong><span>' + escapeHtml(alert.message || alert.containerName || alert.resource) + '</span><span class="alert-action">대응 열기 ↗</span></button>').join('')
+  preview.querySelectorAll('[data-alert-id]').forEach((button) => button.addEventListener('click', () => {
+    state.highlightedAlertId = button.dataset.alertId
+    window.location.hash = 'playbooks'
+  }))
 }
 
 function renderAlertTarget(alerts) {
@@ -250,6 +254,8 @@ function renderStatusCodes(statusState, dockerAvailable) {
 
 function renderIo(containers, dockerAvailable) {
   const target = $('io-summary')
+  const running = dockerAvailable ? containers.filter((container) => container.running).length : null
+  $('container-counts').textContent = dockerAvailable ? `컨테이너 ${containers.length}개 · 실행 중 ${running}개` : '컨테이너 수를 확인할 수 없습니다.'
   const rows = containers.filter((container) => container.stats)
   if (!rows.length) { target.innerHTML = '<div class="empty">' + (dockerAvailable ? '수집된 I/O 데이터가 없습니다.' : 'Docker 연결을 확인해 주세요.') + '</div>'; return }
   target.innerHTML = rows.map((container) => '<div class="io-row"><strong>' + escapeHtml(container.name) + '</strong><span class="io-values"><span>NET RX/TX <b>' + escapeHtml(container.stats.networkIo || '-') + '</b></span><span>DISK R/W <b>' + escapeHtml(container.stats.blockIo || '-') + '</b></span></span></div>').join('')
