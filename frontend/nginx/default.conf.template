@@ -3,7 +3,7 @@
 # TLS·도메인은 운영용 설정에서 앞단에 둔다. 여기서는 HTTP 만 받는다.
 
 # 요청 본문·쿼리를 접근 로그에 남기지 않는다(FR-009) — 경로만
-log_format crd '$remote_addr [$time_local] "$request_method $uri" $status $body_bytes_sent $request_time';
+log_format crd '$remote_addr [$time_local] "$request_method $uri" $status $body_bytes_sent $request_time upstream=$upstream_addr';
 
 server {
   # 일반 사용자 nginx 는 1024 미만 포트를 쓸 수 없어 8080 에서 받는다

@@ -12,10 +12,14 @@ if [[ "$target" == "$current" ]]; then
   exit 0
 fi
 
+if [[ "${OPS_SCALE_SERVICE:-}" == backend ]]; then
+  "$script_dir/check-active-analyses.sh" "$OPS_COMPOSE_FILE"
+fi
+
 docker compose -f "$OPS_COMPOSE_FILE" up -d --scale "$OPS_SCALE_SERVICE=$target" "$OPS_SCALE_SERVICE"
 printf 'compose_service=%s replicas=%s->%s\n' "$OPS_SCALE_SERVICE" "$current" "$target"
 
-wait_seconds="${OPS_SCALE_WAIT_SECONDS:-30}"
+wait_seconds="${OPS_SCALE_WAIT_SECONDS:-60}"
 [[ "$wait_seconds" =~ ^[1-9][0-9]*$ ]] && (( wait_seconds <= 300 )) || { printf 'postcheck=invalid_wait_timeout\n' >&2; exit 2; }
 elapsed=0
 while (( elapsed <= wait_seconds )); do

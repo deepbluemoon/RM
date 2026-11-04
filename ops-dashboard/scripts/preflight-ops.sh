@@ -6,12 +6,13 @@ fail() {
   exit 1
 }
 
+script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 compose_file="${OPS_COMPOSE_FILE:-}"
 service="${OPS_SCALE_SERVICE:-}"
 target="${OPS_SCALE_TARGET:-2}"
 max_target="${OPS_SCALE_MAX:-5}"
 allowed_raw="${OPS_SCALE_ALLOWED_SERVICES:-}"
-blocked_raw="${OPS_SCALE_BLOCKED_SERVICES:-backend,frontend,model-server,mariadb,mysql,database,db,backend-init,backend-embed}"
+blocked_raw="${OPS_SCALE_BLOCKED_SERVICES:-frontend,model-server,mariadb,mysql,database,db,backend-init,backend-embed}"
 
 [[ -n "$compose_file" ]] || fail 'OPS_COMPOSE_FILE 환경변수가 필요합니다'
 [[ -f "$compose_file" && -r "$compose_file" ]] || fail "Compose 파일을 읽을 수 없습니다: $compose_file"
@@ -51,6 +52,9 @@ running_ids="$(docker compose -f "$compose_file" ps --status running -q "$servic
 current="$(printf '%s\n' "$running_ids" | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')"
 current="${current:-0}"
 (( target >= current )) || fail "목표 replica 수가 현재 실행 수보다 작아 축소 요청을 차단했습니다: $current -> $target"
+if [[ "$service" == backend && "$target" -gt "$current" ]]; then
+  "$script_dir/check-active-analyses.sh" "$compose_file" || fail '진행 중인 분석이 있거나 분석 상태를 확인할 수 없어 백엔드 확장을 차단했습니다'
+fi
 
 printf 'preflight=ok\n'
 printf 'compose_file=%s\n' "$compose_file"

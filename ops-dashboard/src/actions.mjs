@@ -6,15 +6,15 @@ import path from 'node:path'
 const root = path.dirname(fileURLToPath(import.meta.url))
 const execFileAsync = promisify(execFile)
 const parseList = (value) => String(value || '').split(',').map((item) => item.trim()).filter(Boolean)
-const scaleService = String(process.env.OPS_SCALE_SERVICE || '').trim()
-const scaleAllowedServices = parseList(process.env.OPS_SCALE_ALLOWED_SERVICES)
-const scaleBlockedServices = parseList(process.env.OPS_SCALE_BLOCKED_SERVICES || 'backend,frontend,model-server,mariadb,mysql,database,db,backend-init,backend-embed')
+const scaleService = String(process.env.OPS_SCALE_SERVICE || 'backend').trim()
+const scaleAllowedServices = parseList(process.env.OPS_SCALE_ALLOWED_SERVICES || 'backend')
+const scaleBlockedServices = parseList(process.env.OPS_SCALE_BLOCKED_SERVICES || 'frontend,model-server,mariadb,mysql,database,db,backend-init,backend-embed')
 const scaleTarget = Number(process.env.OPS_SCALE_TARGET || 2)
-const scaleMax = Number(process.env.OPS_SCALE_MAX || 5)
+const scaleMax = Number(process.env.OPS_SCALE_MAX || 2)
 const scaleHardMax = 20
 
 export const ACTIONS = [
-  { id: 'scale-service', label: 'Compose 서비스 replica 수를 목표값으로 변경', description: '현재 실행 수보다 큰 목표 replica 수로 변경합니다. 자동 확장하지 않습니다.', script: 'scale-service.sh', codes: ['OPS-CPU-80-001', 'OPS-MEM-80-001'], confirmation: 'change', manualPath: '/docs/response-scripts.md', targetService: scaleService, targetReplicas: scaleTarget, maxReplicas: scaleMax, hardMaxReplicas: scaleHardMax, allowedServices: scaleAllowedServices, blockedServices: scaleBlockedServices },
+  { id: 'scale-service', label: '백엔드 복제본 2개로 확장', description: '백엔드 자원 경고 시 수동으로 한 개를 추가합니다. 진행 중인 분석은 차단하며, 확장 중에는 새 분석 접수를 잠시 멈춰야 합니다.', script: 'scale-service.sh', codes: ['OPS-CPU-80-001', 'OPS-MEM-80-001'], confirmation: 'change', manualPath: '/docs/response-scripts.md', targetService: scaleService, targetReplicas: scaleTarget, maxReplicas: scaleMax, hardMaxReplicas: scaleHardMax, allowedServices: scaleAllowedServices, blockedServices: scaleBlockedServices },
   { id: 'collect-incident', label: '컨테이너 장애 정보 묶음 수집', description: '컨테이너 상태와 종료 정보를 로컬 보고서로 저장합니다. 최근 로그는 선택 사항입니다.', script: 'collect-container-incident.sh', codes: ['OPS-CPU-80-001', 'OPS-MEM-80-001', 'HTTP-5XX-RATE-001'], confirmation: 'review', includeLogs: true, manualPath: '/docs/response-scripts.md' },
   { id: 'check-docker-access', label: 'Docker 연결 상태 점검', description: 'Docker CLI, 선택된 context, Engine 연결 가능 여부를 확인합니다.', script: 'check-docker-access.sh', codes: ['OPS-DOCKER-001'], confirmation: 'review', manualPath: '/docs/response-scripts.md' },
 ]
@@ -59,11 +59,19 @@ export function createActionRunner(execute = execFileAsync) {
       const { stdout } = await execute('bash', [path.join(root, '..', 'scripts', action.script)], {
         env: {
           ...process.env,
+          OPS_COMPOSE_FILE: process.env.OPS_COMPOSE_FILE || path.resolve(root, '../../compose.yaml'),
+          OPS_SCALE_SERVICE: process.env.OPS_SCALE_SERVICE || scaleService,
+          OPS_SCALE_TARGET: String(scaleTarget),
+          OPS_SCALE_MAX: String(scaleMax),
+          OPS_SCALE_ALLOWED_SERVICES: process.env.OPS_SCALE_ALLOWED_SERVICES || scaleAllowedServices.join(','),
+          OPS_SCALE_BLOCKED_SERVICES: process.env.OPS_SCALE_BLOCKED_SERVICES || scaleBlockedServices.join(','),
+          OPS_SCALE_WAIT_SECONDS: process.env.OPS_SCALE_WAIT_SECONDS || '60',
           OPS_ERROR_CODE: code,
           OPS_CONTAINER_ID: containerId || '',
           OPS_INCLUDE_LOGS: includeLogs ? 'true' : 'false',
+          OPS_DIAGNOSTICS_DIR: process.env.OPS_DIAGNOSTICS_DIR || path.resolve(root, '..', '.ops-data', 'reports'),
         },
-        timeout: 30_000,
+        timeout: actionId === 'scale-service' ? 90_000 : 30_000,
         maxBuffer: 1_000_000,
       })
       return { actionId, code, output: String(stdout).trim() }
