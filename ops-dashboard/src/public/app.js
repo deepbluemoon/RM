@@ -1,3 +1,4 @@
+import { beginActionProgress, endActionProgress } from './action-progress.js'
 import { summarizeMetrics, formatPercent, topContainerMetrics } from './metric-display.js'
 import { httpChartData, httpResponseDetails } from './http-chart.js'
 
@@ -596,7 +597,9 @@ async function runAction() {
     showOperationToast('운영자 이름과 선택 근거를 입력하세요.', true)
     return
   }
+  if (state.actionRunning) return
   state.actionRunning = true
+  beginActionProgress($('confirm-action'))
   renderActions(state.overview?.alerts || [])
   $('confirm-action').disabled = true
   $('close-action-dialog').disabled = true
@@ -616,6 +619,7 @@ async function runAction() {
       failure.reportId = result.reportId || ''
       throw failure
     }
+    await endActionProgress(true)
     const output = result.output || ''
     const degraded = output.includes('engine=unreachable') || output.includes('docker_cli=missing')
     const summary = output.replace(/^report=.*\n?/m, '').trim()
@@ -626,6 +630,7 @@ async function runAction() {
     await refreshOperatorRecords().catch(() => {})
     await refresh().catch(() => {})
   } catch (error) {
+    await endActionProgress(false)
     renderActionResult(`${action.label} 실패\n${error instanceof Error ? error.message : String(error)}`, error.reportId || '')
     showOperationToast(`${action.label} 실행에 실패했습니다. 대응 영역의 상세 결과를 확인하세요.`, true)
     $('action-confirm-dialog').close()
@@ -661,6 +666,7 @@ async function refresh() {
     const response = await fetch('/api/overview', { cache: 'no-store' })
     if (!response.ok) throw new Error('HTTP ' + response.status)
     state.overview = await response.json()
+    try { sessionStorage.setItem('rm-overview-cache', JSON.stringify(state.overview)) } catch {}
     renderOverview()
   } catch (error) {
     $('error-banner').classList.remove('hidden')
@@ -677,6 +683,8 @@ async function refresh() {
 }
 
 async function init() {
+  try { const cached=JSON.parse(sessionStorage.getItem('rm-overview-cache')||'null'); if(cached&&Date.now()-cached.observedAt<20000){state.overview=cached;renderOverview()} } catch {}
+
   document.querySelectorAll('[data-history-filter]').forEach((button) => button.addEventListener('click', () => {
     state.historyFilter = state.historyFilter === button.dataset.historyFilter ? 'both' : button.dataset.historyFilter
     document.querySelectorAll('[data-history-filter]').forEach((item) => item.setAttribute('aria-pressed', String(state.historyFilter === 'both' || state.historyFilter === item.dataset.historyFilter)))

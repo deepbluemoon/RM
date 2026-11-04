@@ -10,6 +10,7 @@ const colors = { '1xx':'#a4b5c4', '2xx':'#5ae6ce', '3xx':'#a7a2ff', '4xx':'#ffc0
 let data = null, failed = false, metric = 'cpu', page = 0, samples = [], lastSample = null
 try { const saved=JSON.parse(sessionStorage.getItem('rm-wall-history')||'[]'); if(Array.isArray(saved))samples=saved.filter(item=>Number.isFinite(item?.at)&&item.at>Date.now()-300000).slice(-100) } catch {}
 lastSample=samples.at(-1)?.at??null
+try { const cached=JSON.parse(sessionStorage.getItem('rm-overview-cache')||'null');if(cached&&Date.now()-cached.observedAt<20000)data=cached } catch {}
 function render() {
   const summary = wallSummary(failed ? null : data)
   const available = summary.available
@@ -65,7 +66,7 @@ function drawChart(field,color){
   $(field+'-chart').innerHTML=[10,55,100,145].map(y=>`<line x1="0" x2="600" y1="${y}" y2="${y}" stroke="#293a45" stroke-dasharray="3 5"/>`).join('')+paths.map(points=>`<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`).join('')+(values.length<2?'<text x="300" y="85" text-anchor="middle">관측 데이터 수집 중</text>':'')
 }
 async function poll(){
-  try{const response=await fetch('/api/overview',{cache:'no-store',signal:AbortSignal.timeout(8000)});if(!response.ok)throw new Error('수집 실패');data=await response.json();failed=false}catch{failed=true}
+  try{const response=await fetch('/api/overview',{cache:'no-store',signal:AbortSignal.timeout(8000)});if(!response.ok)throw new Error('수집 실패');data=await response.json();try{sessionStorage.setItem('rm-overview-cache',JSON.stringify(data))}catch{};failed=false}catch{failed=true}
   render();setTimeout(poll,5000)
 }
 document.querySelectorAll('[data-metric]').forEach(button=>button.addEventListener('click',()=>{metric=button.dataset.metric;document.querySelectorAll('[data-metric]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));render()}))
