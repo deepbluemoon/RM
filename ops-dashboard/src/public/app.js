@@ -1,7 +1,7 @@
 import { summarizeMetrics, formatPercent } from './metric-display.js'
 import { httpChartData } from './http-chart.js'
 
-const state = { overview: null, catalog: null, selectedId: null, logSource: null, history: [], lastSample: null, highlightedAlertId: null, pendingAction: null, pendingRecordOperation: null, packages: null }
+const state = { overview: null, catalog: null, selectedId: null, logSource: null, expandedContainerLogs: new Set(), containerLogSources: new Map(), containerLogLines: new Map(), history: [], lastSample: null, highlightedAlertId: null, pendingAction: null, pendingRecordOperation: null, packages: null }
 const $ = (id) => document.getElementById(id)
 const viewNames = { overview: '운영 현황', containers: '컨테이너', logs: '실시간 로그', 'status-codes': 'HTTP 응답', alerts: '활성 경고', playbooks: '오류 확인 및 대응', packages: '패키지 업데이트' }
 
@@ -257,8 +257,54 @@ function renderIo(containers, dockerAvailable) {
   target.innerHTML = rows.map((container) => '<div class="io-row"><strong>' + escapeHtml(container.name) + '</strong><span class="io-values"><span>NET RX/TX <b>' + escapeHtml(container.stats.networkIo || '-') + '</b></span><span>DISK R/W <b>' + escapeHtml(container.stats.blockIo || '-') + '</b></span></span></div>').join('')
 }
 
+function logLineMarkup(line) {
+  const match = String(line).match(/\b(ERROR|FATAL|CRITICAL|WARN(?:ING)?|INFO)\b/i)
+  const level = match ? match[1].toUpperCase() : ''
+  const className = level === 'INFO' ? ' level-info' : level.startsWith('WARN') ? ' level-warning' : level ? ' level-error' : ''
+  return `<div class="log-line${className}">${escapeHtml(line)}</div>`
+}
+
+function appendContainerLog(containerId, line) {
+  const lines = state.containerLogLines.get(containerId) || []
+  lines.push(line)
+  if (lines.length > 500) lines.shift()
+  state.containerLogLines.set(containerId, lines)
+  const output = document.querySelector(`[data-inline-log-output="${CSS.escape(containerId)}"]`)
+  if (!output) return
+  const follow = output.scrollHeight - output.scrollTop - output.clientHeight < 40
+  if (output.querySelector('.log-empty')) output.innerHTML = ''
+  output.insertAdjacentHTML('beforeend', logLineMarkup(line))
+  if (output.children.length > 500) output.firstElementChild.remove()
+  if (follow) output.scrollTop = output.scrollHeight
+}
+
+function toggleContainerLogs(containerId) {
+  if (state.expandedContainerLogs.has(containerId)) {
+    state.expandedContainerLogs.delete(containerId)
+    state.containerLogSources.get(containerId)?.close()
+    state.containerLogSources.delete(containerId)
+    renderOverview()
+    return
+  }
+  state.expandedContainerLogs.add(containerId)
+  state.containerLogLines.set(containerId, [])
+  renderOverview()
+  const output = document.querySelector(`[data-inline-log-output="${CSS.escape(containerId)}"]`)
+  if (output) output.innerHTML = '<div class="log-empty">로그 스트림에 연결하는 중…</div>'
+  const source = new EventSource('/api/logs/stream?containerId=' + encodeURIComponent(containerId) + '&tail=200')
+  source.onmessage = (event) => { try { appendContainerLog(containerId, JSON.parse(event.data).line) } catch { appendContainerLog(containerId, '[stream] 로그 형식을 읽을 수 없습니다.') } }
+  source.addEventListener('error', () => appendContainerLog(containerId, '[stream] 로그 연결이 종료되었습니다.'))
+  state.containerLogSources.set(containerId, source)
+  requestAnimationFrame(() => document.querySelector(`[data-inline-log-output="${CSS.escape(containerId)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+}
+
 function renderContainers(containers, alerts, dockerAvailable) {
   const list = $('container-list')
+  const listScrollTop = list.scrollTop
+  const logScrollPositions = new Map([...list.querySelectorAll('[data-inline-log-output]')].map((output) => [output.dataset.inlineLogOutput, {
+    scrollTop: output.scrollTop,
+    follow: output.scrollHeight - output.scrollTop - output.clientHeight < 40,
+  }]))
   const selector = $('log-container-select')
   selector.innerHTML = '<option value="">컨테이너 선택</option>' + containers.map((container) => '<option value="' + escapeHtml(container.id) + '"' + (container.id === state.selectedId ? ' selected' : '') + '>' + escapeHtml(container.name) + '</option>').join('')
   selector.disabled = !containers.length
@@ -275,9 +321,19 @@ function renderContainers(containers, alerts, dockerAvailable) {
     const status = danger ? '경고' : preparing ? '준비 중' : container.running ? '실행 중' : '중지'
     const statusClass = danger ? ' danger' : preparing ? ' warning' : container.running ? '' : ' stopped'
     const metric = (label, value) => '<div><div class="metric-label"><span>' + label + '</span><span class="metric-value">' + formatPercent(value, '-') + '</span></div>' + (Number.isFinite(value) ? '<div class="bar"><i class="' + (value >= 80 ? 'warn' : '') + '" style="width:' + Math.min(Math.max(value, 0), 100) + '%"></i></div>' : '') + '</div>'
-    return '<button class="container-row' + selected + '" data-container-id="' + escapeHtml(container.id) + '" type="button"><div class="row-top"><strong class="container-name">' + escapeHtml(container.name) + '</strong><span class="status' + statusClass + '">' + status + '</span></div><div class="container-id">' + escapeHtml(container.id.slice(0, 12)) + ' · ' + escapeHtml(container.image) + '</div><div class="metrics">' + metric('CPU', stats?.cpuPercent) + metric('MEM', stats?.memoryPercent) + '</div>' + ownAlerts.map((alert) => '<div class="row-alert">' + escapeHtml(alert.message || alert.code) + '</div>').join('') + '</button>'
+    const expanded = state.expandedContainerLogs.has(container.id)
+    const logLines = state.containerLogLines.get(container.id) || []
+    const logContent = logLines.length ? logLines.map((line) => logLineMarkup(line)).join('') : '<div class="log-empty">로그를 불러오는 중…</div>'
+    const inlineLogs = expanded ? `<section class="inline-log-panel"><div class="panel-head"><div><p class="eyebrow">LIVE LOGS</p><h3>로그 · ${escapeHtml(container.name)}</h3></div><button class="text-button" type="button" data-collapse-log="${escapeHtml(container.id)}">접기</button></div><div class="log-legend" aria-label="로그 수준 색상 안내"><span class="info"><i aria-hidden="true"></i>INFO</span><span class="warning"><i aria-hidden="true"></i>WARN</span><span class="error"><i aria-hidden="true"></i>ERROR</span></div><div class="log-output" data-inline-log-output="${escapeHtml(container.id)}" role="log" aria-live="polite">${logContent}</div></section>` : ''
+    return '<div class="container-entry"><button class="container-row' + selected + '" data-container-id="' + escapeHtml(container.id) + '" type="button" aria-expanded="' + expanded + '"><div class="row-top"><strong class="container-name">' + escapeHtml(container.name) + '</strong><span class="status' + statusClass + '">' + status + '</span></div><div class="container-id">' + escapeHtml(container.id.slice(0, 12)) + ' · ' + escapeHtml(container.image) + '</div><div class="metrics">' + metric('CPU', stats?.cpuPercent) + metric('MEM', stats?.memoryPercent) + '</div>' + ownAlerts.map((alert) => '<div class="row-alert">' + escapeHtml(alert.message || alert.code) + '</div>').join('') + '<span class="container-log-hint">' + (expanded ? '로그 열림 · 클릭해 접기' : '클릭해 실시간 로그 펼치기') + '</span></button>' + inlineLogs + '</div>'
   }).join('')
-  list.querySelectorAll('[data-container-id]').forEach((row) => row.addEventListener('click', () => selectContainer(row.dataset.containerId, false)))
+  list.scrollTop = listScrollTop
+  for (const [containerId, position] of logScrollPositions) {
+    const output = list.querySelector(`[data-inline-log-output="${CSS.escape(containerId)}"]`)
+    if (output) output.scrollTop = position.follow ? output.scrollHeight : Math.min(position.scrollTop, output.scrollHeight)
+  }
+  list.querySelectorAll('[data-container-id]').forEach((row) => row.addEventListener('click', () => toggleContainerLogs(row.dataset.containerId)))
+  list.querySelectorAll('[data-collapse-log]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); toggleContainerLogs(button.dataset.collapseLog) }))
 }
 
 function renderActions(alerts) {
@@ -454,13 +510,6 @@ function appendLog(line) {
   output.append(item)
   while (output.children.length > 500) output.firstElementChild.remove()
   if (follow) output.scrollTop = output.scrollHeight
-  const inlineOutput = $('inline-log-output')
-  if (inlineOutput) {
-    if (inlineOutput.querySelector('.log-empty')) inlineOutput.innerHTML = ''
-    inlineOutput.append(item.cloneNode(true))
-    while (inlineOutput.children.length > 500) inlineOutput.firstElementChild.remove()
-    if (inlineOutput.scrollHeight - inlineOutput.scrollTop - inlineOutput.clientHeight < 40) inlineOutput.scrollTop = inlineOutput.scrollHeight
-  }
 }
 
 function selectContainer(containerId, navigateToLogs = true) {
@@ -470,18 +519,11 @@ function selectContainer(containerId, navigateToLogs = true) {
   if (state.logSource) state.logSource.close()
   $('logs-title').textContent = '로그 · ' + container.name
   $('log-output').innerHTML = '<div class="log-empty">로그 스트림에 연결하는 중…</div>'
-  $('inline-log-title').textContent = '로그 · ' + container.name
-  $('inline-log-output').innerHTML = '<div class="log-empty">로그 스트림에 연결하는 중…</div>'
-  $('inline-log-panel').classList.remove('hidden')
   state.logSource = new EventSource('/api/logs/stream?containerId=' + encodeURIComponent(containerId) + '&tail=200')
   state.logSource.onmessage = (event) => { try { appendLog(JSON.parse(event.data).line) } catch { appendLog('[stream] 로그 형식을 읽을 수 없습니다.') } }
   state.logSource.addEventListener('error', () => appendLog('[stream] 로그 연결이 종료되었습니다.'))
   renderOverview()
   if (navigateToLogs) window.location.hash = 'logs'
-  else {
-    window.location.hash = 'containers'
-    requestAnimationFrame(() => $('inline-log-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
-  }
 }
 
 async function refresh() {
@@ -543,7 +585,6 @@ async function init() {
   $('cancel-record-operation').addEventListener('click', () => $('record-confirm-dialog').close())
   $('confirm-record-operation').addEventListener('click', () => { void performRecordOperation() })
   $('clear-logs').addEventListener('click', () => { $('log-output').innerHTML = '<div class="log-empty">화면에 표시된 로그를 비웠습니다.</div>' })
-  $('clear-inline-logs').addEventListener('click', () => { $('inline-log-output').innerHTML = '<div class="log-empty">화면에 표시된 로그를 비웠습니다.</div>' })
   try {
     const response = await fetch('/api/error-codes')
     if (!response.ok) throw new Error('HTTP ' + response.status)
