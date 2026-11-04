@@ -1,7 +1,7 @@
-import { summarizeMetrics, formatPercent } from './metric-display.js'
+import { summarizeMetrics, formatPercent, topContainerMetrics } from './metric-display.js'
 import { httpChartData, httpResponseDetails } from './http-chart.js'
 
-const state = { historyFilter: 'both', overview: null, catalog: null, httpCodes: [], responseAlertId: null, expandedContainerLogs: new Set(), containerLogSources: new Map(), containerLogLines: new Map(), history: [], lastSample: null, highlightedAlertId: null, pendingAction: null, pendingRecordOperation: null, packages: null }
+const state = { httpResponseCode: null, historyFilter: 'both', overview: null, catalog: null, httpCodes: [], responseAlertId: null, expandedContainerLogs: new Set(), containerLogSources: new Map(), containerLogLines: new Map(), history: [], lastSample: null, highlightedAlertId: null, pendingAction: null, pendingRecordOperation: null, packages: null }
 const $ = (id) => document.getElementById(id)
 const viewNames = { overview: '운영 현황', containers: '컨테이너', 'status-codes': 'HTTP 응답', 'error-codes': '오류 확인', packages: '패키지 업데이트' }
 const markupCache = new WeakMap()
@@ -46,7 +46,6 @@ function renderPackages(data) {
   $('package-security-count').textContent = data.advisories?.length ?? '-'
   $('package-release-count').textContent = data.releases?.length ?? '-'
   $('nav-package-alert-count').textContent = data.advisories?.length ?? '-'
-  $('nav-package-alert-count').classList.toggle('is-critical', Boolean(data.advisories?.length))
   $('package-checked-at').textContent = data.checkedAt ? new Date(data.checkedAt).toLocaleString('ko-KR') : data.status === 'loading' ? '확인 중' : '미확인'
   const advisoryList = $('package-advisories')
   advisoryList.innerHTML = data.advisories?.length ? data.advisories.map((item) => {
@@ -122,6 +121,10 @@ function showView() {
   })
   $('page-title').textContent = viewNames[view] || '화면을 찾을 수 없음'
   window.scrollTo({ top: 0, behavior: 'instant' })
+  if (view === 'overview' && state.overview) {
+    renderResourceRanking('cpu', state.overview, true)
+    renderResourceRanking('memory', state.overview, true)
+  }
 }
 
 function recordSample(overview, metrics) {
@@ -132,10 +135,27 @@ function recordSample(overview, metrics) {
   state.history = state.history.filter((sample) => sample.at >= observed - 300000).slice(-61)
 }
 
-function renderGauge(key, value) {
-  $(key + '-gauge-value').textContent = formatPercent(value, '-')
-  $(key + '-gauge').style.strokeDasharray = Number.isFinite(value) ? Math.max(0, Math.min(value, 100)) + ' 100' : '0 100'
-  $(key + '-gauge').parentElement?.setAttribute('aria-label', Number.isFinite(value) ? `${value.toFixed(1)}%` : '수집 불가')
+function renderResourceRanking(key, overview, entrance = false) {
+  const target = $(key + '-ranking')
+  const {items, measuredCount, runningCount} = topContainerMetrics(overview, key)
+  const previous = new Map([...target.querySelectorAll('[data-resource-id]')].map((row) => {
+    const track = row.querySelector('.resource-rank-track')
+    return [row.dataset.resourceId, {top:row.getBoundingClientRect().top, width:track.clientWidth ? row.querySelector('.resource-rank-fill').getBoundingClientRect().width / track.clientWidth * 100 : 0}]
+  }))
+  const max = Math.max(0, ...items.map(item => item.value)) || 1
+  const display = (value) => key === 'cpu' ? formatPercent(value) : value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(1)} GiB` : value >= 1024 ** 2 ? `${(value / 1024 ** 2).toFixed(1)} MiB` : value >= 1024 ? `${(value / 1024).toFixed(1)} KiB` : `${value} B`
+  const markup = items.map((item,index) => `<div class="resource-rank-row" data-resource-id="${escapeHtml(item.id)}" title="${escapeHtml(item.name)} · ${display(item.value)}"><span class="resource-rank-position">${index+1}</span><span class="resource-rank-name">${escapeHtml(item.name)}</span><strong>${display(item.value)}</strong><div class="resource-rank-track"><span class="resource-rank-fill ${key}" style="width:${(item.value / max * 100).toFixed(2)}%"></span></div></div>`).join('') || `<div class="ranking-empty">${overview?.dockerAvailable ? '측정된 사용량이 없습니다.' : '사용량을 확인할 수 없습니다.'}</div>`
+  const changed = setMarkup(target, markup)
+  $(key + '-ranking-note').textContent = !overview?.dockerAvailable ? 'Docker 연결 확인 필요' : `측정 ${measuredCount}/${runningCount}개 · ${key === 'cpu' ? 'CPU 사용률' : '메모리 실사용량'} 순 · 1위 기준`
+  if ((!changed && !entrance) || !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  target.querySelectorAll('[data-resource-id]').forEach((row,index) => {
+    const old = previous.get(row.dataset.resourceId)
+    const fresh = entrance || !old
+    const fill = row.querySelector('.resource-rank-fill')
+    fill.animate([{width:fresh ? '0%' : `${old.width}%`}, {width:fill.style.width}], {duration:fresh ? 480 : 300, delay:fresh ? index*65 : 0, easing:'cubic-bezier(.22,1,.36,1)', fill:'backwards'})
+    if (fresh) row.animate([{opacity:0,transform:'translateX(-10px)'},{opacity:1,transform:'translateX(0)'}], {duration:300,delay:index*65,easing:'ease-out',fill:'backwards'})
+    else if (Math.abs(old.top-row.getBoundingClientRect().top)>1) row.animate([{transform:`translateY(${old.top-row.getBoundingClientRect().top}px)`},{transform:'translateY(0)'}],{duration:300,easing:'cubic-bezier(.22,1,.36,1)'})
+  })
 }
 
 function renderHistory() {
@@ -170,7 +190,7 @@ function renderHistory() {
     const y = 126 - ratio * 110
     return '<line class="history-grid" x1="34" y1="' + y + '" x2="586" y2="' + y + '"/><text class="history-axis" x="0" y="' + (y + 3) + '">' + Math.round(max * ratio) + '%</text>'
   }).join('')
-  target.innerHTML = '<svg viewBox="0 0 600 146" preserveAspectRatio="none" role="img" aria-label="페이지를 연 이후 수집한 CPU 및 메모리 사용 추이">' + grid + (state.historyFilter !== 'memory' ? lines('cpu', '#39d9e5') : '') + (state.historyFilter !== 'cpu' ? lines('memory', '#a27aff') : '') + '</svg>'
+  target.innerHTML = '<svg viewBox="0 0 600 146" preserveAspectRatio="none" role="img" aria-label="페이지를 연 이후 수집한 CPU 및 메모리 사용 추이">' + grid + (state.historyFilter !== 'memory' ? lines('cpu', 'var(--accent)') : '') + (state.historyFilter !== 'cpu' ? lines('memory', 'var(--memory)') : '') + '</svg>'
 }
 
 function renderOverview() {
@@ -190,8 +210,8 @@ function renderOverview() {
   $('monitor-status-text').textContent = overview.dockerAvailable ? 'LIVE MONITORING' : '연결 확인 필요'
   $('error-banner').classList.add('hidden')
   recordSample(overview, metrics)
-  renderGauge('cpu', metrics.cpu)
-  renderGauge('memory', metrics.memory)
+  renderResourceRanking('cpu', overview)
+  renderResourceRanking('memory', overview)
   renderHistory()
   renderAlerts(overview.alerts || [], overview.dockerAvailable)
   renderStatusCodes(overview.statusCodes, overview.dockerAvailable)
@@ -257,29 +277,69 @@ function focusAlert(alertId) {
 function renderStatusCodes(statusState, dockerAvailable) {
   const chart = httpChartData(statusState, dockerAvailable)
   const target = $('status-summary')
-  if (chart.state === 'unavailable') { setMarkup(target, '<div class="empty">HTTP 응답을 수집할 수 없습니다.</div>'); return }
-  if (chart.state === 'empty') { setMarkup(target, '<div class="empty">수집된 HTTP 응답이 없습니다.</div>'); return }
-  const services = [...(statusState.containers || [])].map(item => ({...item, service: item.name || item.id})).sort((a, b) => b.total - a.total).slice(0, 4)
-  const routes = [...(statusState.routes || [])].sort((a, b) => b.total - a.total).slice(0, 4)
-  const correlations = (statusState.correlations || []).slice(0, 3)
-  const serviceRows = services.map((item) => `<li><span>${escapeHtml(item.service)}</span><small>${item.total}건 · 5xx ${item.classCounts['5xx']}</small></li>`).join('')
-  const routeRows = routes.map((item) => `<li><span><b>${escapeHtml(item.method || '—')}</b> ${escapeHtml(item.route)}</span><small>${escapeHtml(item.service)} · ${item.total}건</small></li>`).join('')
-  const correlationRows = correlations.map((item) => `<li><span>${escapeHtml(item.containerName || item.service)} · HTTP ${escapeHtml(item.status)}${item.method ? ` · ${escapeHtml(item.method)}` : ''}${item.route ? ` ${escapeHtml(item.route)}` : ''}</span><small>${item.deploymentVersion ? `배포 ${escapeHtml(item.deploymentVersion)} · ` : ''}${item.traceId ? `trace ${escapeHtml(item.traceId)}` : item.requestId ? `request ${escapeHtml(item.requestId)}` : '요청 ID 없음'}</small></li>`).join('')
-  const previousWidths = new Map([...target.querySelectorAll('[data-status-class]')].map((row) => [row.dataset.statusClass, row.querySelector('.status-chart-track span').style.width]))
+  if (chart.state === 'unavailable' || chart.state === 'empty') {
+    setMarkup(target, `<div class="empty">${chart.state === 'empty' ? '수집된 HTTP 응답이 없습니다.' : 'HTTP 응답을 확인할 수 없습니다.'}</div>`)
+    renderHttpDetail(null)
+    return
+  }
+  const previousWidths = new Map([...target.querySelectorAll('[data-status-class]')].map((row) => {
+    const track = row.querySelector('.status-chart-track')
+    const width = track.getBoundingClientRect().width
+    return [row.dataset.statusClass, width ? `${row.querySelector('.status-chart-track span').getBoundingClientRect().width / width * 100}%` : '0%']
+  }))
   const bars = chart.bars.map(({ label, count, percent }) => {
-    const responses = httpResponseDetails(statusState, label, state.httpCodes)
-    const details = responses.map((item) => `<div class="status-response-item"><span><b>${item.code}</b> ${escapeHtml(item.description)} <em>${item.count}건</em></span>${item.sources.length ? `<small>${escapeHtml(item.sources.join(' · '))}</small>` : ''}</div>`).join('')
-    return `<div class="status-chart-row status-${label}" data-status-class="${label}"><span>${label.toUpperCase()}</span><div class="status-chart-track" aria-hidden="true"><span style="width:${percent}%"></span></div><strong>${count}건</strong><div class="status-response-details">${details || '<small>상세 코드 정보가 수집되지 않았습니다.</small>'}</div></div>`
+    const codes = httpResponseDetails(statusState, label, state.httpCodes)
+    const chips = codes.map((item) => `<button type="button" class="http-code-chip" data-http-code="${item.code}" data-focus-key="response:${item.code}" aria-pressed="false" aria-controls="http-response-detail" title="${escapeHtml(item.description)} · 출처와 설명 보기"><b>${item.code}</b><span>${item.count}건</span><i aria-hidden="true">↗</i></button>`).join('')
+    return `<div class="http-compact-row status-${label}" data-status-class="${label}"><span class="http-class-label">${label.toUpperCase()}</span><div class="status-chart-track" aria-hidden="true"><span style="width:${percent}%"></span></div><strong>${count}건<small>${percent.toFixed(1)}%</small></strong><div class="http-code-chips">${chips || '<span class="http-no-code">상세 코드 미수집</span>'}</div></div>`
   }).join('')
-  const changed = setMarkup(target, `${chart.state === 'partial' ? '<p class="status-chart-note">일부 로그를 수집하지 못했습니다. 아래 수치는 확인된 응답만 포함합니다.</p>' : ''}<p class="status-chart-note">최근 수집된 로그에서 확인된 응답 ${chart.total}건</p>${bars}<div class="status-breakdowns"><section><h3>컨테이너별</h3><ul>${serviceRows || '<li class="status-breakdown-empty">집계할 서비스가 없습니다.</li>'}</ul></section><section><h3>라우트별</h3><ul>${routeRows || '<li class="status-breakdown-empty">요청 경로 정보가 수집되지 않았습니다.</li>'}</ul></section></div><section class="request-correlations"><h3>배포 · 요청 상관관계</h3><ul>${correlationRows || '<li class="status-breakdown-empty">배포 버전 또는 trace/request ID 로그가 없습니다.</li>'}</ul></section>`)
-  if (changed && previousWidths.size && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    target.querySelectorAll('[data-status-class]').forEach((row) => {
-      const bar = row.querySelector('.status-chart-track span')
-      const previous = previousWidths.get(row.dataset.statusClass)
-      if (previous) bar.animate([{ width: previous }, { width: bar.style.width }], { duration: 220, easing: 'ease-out' })
-    })
+  const changed = setMarkup(target, `<div class="http-chart-caption"><span>전체 응답 <b>${chart.total}건</b></span><small>응답 코드를 누르면 상세 정보가 열립니다</small></div>${chart.state === 'partial' ? '<p class="status-chart-note">일부 로그 수집 실패 · 확인된 응답만 표시합니다.</p>' : ''}${bars}`)
+  if (changed) target.querySelectorAll('[data-http-code]').forEach((button) => button.addEventListener('click', () => {
+    state.httpResponseCode = Number(button.dataset.httpCode)
+    target.querySelectorAll('[data-http-code]').forEach((item) => item.setAttribute('aria-pressed', String(Number(item.dataset.httpCode) === state.httpResponseCode)))
+    renderHttpDetail(state.overview?.statusCodes, true)
+  }))
+  target.querySelectorAll('[data-http-code]').forEach((button) => button.setAttribute('aria-pressed', String(Number(button.dataset.httpCode) === state.httpResponseCode)))
+  if (changed && window.matchMedia && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) target.querySelectorAll('[data-status-class]').forEach((row) => {
+    const bar = row.querySelector('.status-chart-track span')
+    bar.animate([{width:previousWidths.get(row.dataset.statusClass) || '0%'}, {width:bar.style.width}], {duration:380, easing:'cubic-bezier(.22,1,.36,1)'})
+  })
+  renderHttpDetail(statusState)
+}
+
+function renderHttpDetail(statusState, animate = false) {
+  const target = $('http-response-detail')
+  const scrollTop = target.querySelector('.http-detail-scroll')?.scrollTop || 0
+  const code = state.httpResponseCode
+  if (!code || !statusState) {
+    setMarkup(target, '<div class="http-detail-placeholder"><span aria-hidden="true">↗</span><strong>어떤 응답인지 확인해 보세요</strong><p>그래프 옆의 응답 코드를 누르면<br />발생 컨테이너와 설명이 여기에 표시됩니다.</p></div>')
+    return
+  }
+  const info = state.httpCodes.find((item) => Number(item.code) === code)
+  const total = statusState.totals?.counts?.[code] || 0
+  const meanings = {100:'요청을 계속 보내도 된다는 중간 응답입니다.',101:'연결을 WebSocket 등 다른 프로토콜로 전환한 응답입니다.',200:'요청이 정상적으로 처리되었습니다.',201:'요청한 리소스가 새로 생성되었습니다.',202:'요청을 접수했으며 처리는 아직 진행 중일 수 있습니다.',204:'요청을 처리했으며 응답 본문은 없습니다.',301:'리소스가 다른 주소로 영구 이동했습니다.',302:'다른 주소로 임시 이동하도록 안내한 응답입니다.',304:'리소스가 변경되지 않아 기존 캐시를 사용할 수 있습니다.',400:'요청 형식이나 입력값을 확인해야 합니다.',401:'인증이 필요하거나 인증 정보가 유효하지 않습니다.',403:'해당 리소스에 접근할 권한이 없습니다.',404:'요청한 경로나 리소스를 찾을 수 없습니다.',422:'요청 형식은 이해했지만 입력 내용의 검증을 통과하지 못했습니다.',429:'허용된 요청 횟수를 초과했습니다.',500:'서버 내부 처리 중 오류가 발생했습니다.',502:'중간 서버가 상위 서버에서 유효한 응답을 받지 못했습니다.',503:'서버가 과부하 또는 점검 등으로 요청을 처리할 수 없습니다.',504:'상위 서버의 응답을 기다리다 시간이 초과되었습니다.'}
+  const explanation = meanings[code] || ({1:'요청 처리 도중 전달된 정보성 응답입니다.',2:'요청이 성공적으로 처리된 응답입니다.',3:'리디렉션 또는 캐시 관련 응답입니다.',4:'클라이언트 요청에 대한 확인이 필요한 응답입니다.',5:'서버 측 처리 오류를 나타내는 응답입니다.'})[Math.floor(code / 100)]
+  const sources = (statusState.containers || []).filter((item) => item.counts?.[code] > 0).sort((a,b) => b.counts[code] - a.counts[code])
+  const sourceMarkup = sources.map((item) => `<li><span>${escapeHtml(item.name || item.id)}</span><strong>${item.counts[code]}건 <small>${total ? (item.counts[code] / total * 100).toFixed(1) : 0}%</small></strong></li>`).join('')
+  const routes = (statusState.routes || []).filter((item) => item.counts?.[code] > 0)
+  const correlations = (statusState.correlations || []).filter((item) => Number(item.status) === code)
+  const requests = [...routes.slice(0,5).map((item) => `<li>${escapeHtml(item.method || '—')} ${escapeHtml(item.route)} <small>${item.counts[code]}건</small></li>`), ...correlations.slice(0,3).map((item) => `<li>${escapeHtml(item.containerName || '')} <small>${escapeHtml(item.traceId || item.requestId || item.deploymentVersion || '')}</small></li>`)].join('')
+  const changed = setMarkup(target, `<div class="http-detail-heading"><div><small>RESPONSE DETAIL</small><h3>HTTP ${code}</h3></div><button type="button" id="http-detail-close" class="text-button" aria-label="응답 상세 닫기">닫기 ×</button></div><p class="http-detail-name">${escapeHtml(info?.description || 'HTTP 응답')}</p><p class="http-detail-explanation">${escapeHtml(explanation)}</p><div class="http-source-heading"><strong>발생 컨테이너</strong><span>${total}건</span></div><div class="http-detail-scroll"><ul class="http-source-list">${sourceMarkup || '<li>현재 수집 범위에 이 응답이 없습니다.</li>'}</ul>${requests ? `<details class="http-request-extra" data-detail-id="http-requests:${code}"><summary>요청 정보</summary><ul>${requests}</ul></details>` : ''}</div>`)
+  if (changed) $('http-detail-close').addEventListener('click', () => {
+    state.httpResponseCode = null
+    $('status-summary').querySelectorAll('[data-http-code]').forEach((button) => button.setAttribute('aria-pressed','false'))
+    renderHttpDetail(statusState)
+    $('status-summary').querySelector(`[data-http-code="${code}"]`)?.focus({preventScroll:true})
+  })
+  if (changed && !animate) {
+    const scroll = target.querySelector('.http-detail-scroll')
+    if (scroll) scroll.scrollTop = scrollTop
+  }
+  if (animate && target.animate && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    target.getAnimations().forEach((animation) => animation.cancel())
+    target.animate([{opacity:.15,transform:'translateX(24px)'},{opacity:1,transform:'translateX(0)'}], {duration:320,easing:'cubic-bezier(.22,1,.36,1)'})
   }
 }
+
 
 function renderIo(containers, dockerAvailable) {
   const target = $('io-summary')
@@ -287,7 +347,7 @@ function renderIo(containers, dockerAvailable) {
   $('container-counts').textContent = dockerAvailable ? `컨테이너 ${containers.length}개 · 실행 중 ${running}개` : '컨테이너 수를 확인할 수 없습니다.'
   const rows = containers.filter((container) => container.stats)
   if (!rows.length) { target.innerHTML = '<div class="empty">' + (dockerAvailable ? '수집된 I/O 데이터가 없습니다.' : 'Docker 연결을 확인해 주세요.') + '</div>'; return }
-  target.innerHTML = rows.map((container) => '<div class="io-row"><strong>' + escapeHtml(container.name) + '</strong><span class="io-values"><span>NET RX/TX <b>' + escapeHtml(container.stats.networkIo || '-') + '</b></span><span>DISK R/W <b>' + escapeHtml(container.stats.blockIo || '-') + '</b></span></span></div>').join('')
+  target.innerHTML = '<div class="io-table-head" aria-hidden="true"><span>컨테이너</span><span class="io-network-label">↕ 네트워크 <small>수신 / 송신</small></span><span class="io-disk-label">▤ 디스크 <small>읽기 / 쓰기</small></span></div>' + rows.map((container) => '<div class="io-row"><strong title="' + escapeHtml(container.name) + '">' + escapeHtml(container.name) + '</strong><span class="io-values"><span class="io-cell io-network" aria-label="네트워크 수신 / 송신"><b>' + escapeHtml(container.stats.networkIo || '-') + '</b></span><span class="io-cell io-disk" aria-label="디스크 읽기 / 쓰기"><b>' + escapeHtml(container.stats.blockIo || '-') + '</b></span></span></div>').join('')
 }
 
 function logLineMarkup(line) {
@@ -598,8 +658,8 @@ async function refresh() {
     $('sidebar-engine').textContent = 'Dashboard unavailable'
     $('sidebar-engine-dot').className = 'engine-dot is-offline'
     for (const id of ['alert-count', 'nav-alert-count']) $(id).textContent = '-'
-    renderGauge('cpu', null)
-    renderGauge('memory', null)
+    renderResourceRanking('cpu', null)
+    renderResourceRanking('memory', null)
   }
 }
 
@@ -695,7 +755,7 @@ async function init() {
 void init()
 
 function containerKind(container) {
-  const name = String(container.composeService || container.name || '').toLowerCase()
+  const name = `${container.composeService || ''} ${container.name || ''}`.trim().toLowerCase()
   const rules = [
     [/model[-_]server|ml[-_]service[-_]api/, '모델 API', '모델 추론과 API 요청 처리'],
     [/frontend|front[-_]end|(?:^|[-_])web(?:[-_]|$)/, '프론트엔드', '웹 화면 제공 및 API 프록시'],
@@ -703,7 +763,9 @@ function containerKind(container) {
     [/mariadb|mysql|postgres|database|(?:^|[-_])db(?:[-_]|$)/, '데이터베이스', '서비스 데이터 저장'],
     [/ollama|embedding/, '임베딩', '검색용 벡터 생성'],
     [/grafana|prometheus|metrics|dashboard/, '모니터링', '지표 수집·시각화·운영 관측'],
-    [/(?:^|[-_])api(?:[-_]|$)/, 'API', 'API 요청 처리'],
+    [/(?:^|[-_\s])api(?:[-_\s]|$)/, 'API', 'API 요청 처리'],
+    [/nginx|proxy|traefik/, '프록시', '서비스 요청 전달 및 라우팅'],
+    [/worker|celery/, '작업 워커', '백그라운드 작업 처리'],
     [/redis|cache/, '캐시', '캐시·임시 데이터 처리'],
   ]
   const match = rules.find(([pattern]) => pattern.test(name))
@@ -713,8 +775,23 @@ function containerKind(container) {
 function renderContainerDirectory(containers, available) {
   const target = $('container-directory')
   if (!available || !containers.length) { setMarkup(target, '<p class="empty">컨테이너 정보를 확인할 수 없습니다.</p>'); return }
-  setMarkup(target, containers.map(container => {
-    const kind = containerKind(container)
-    return '<details class="directory-item" data-detail-id="directory:' + escapeHtml(container.id) + '"><summary><span class="directory-kind">' + escapeHtml(kind.type) + '</span><strong>' + escapeHtml(container.name) + '</strong><span class="directory-state">' + (container.running ? '실행 중' : '중지') + '</span></summary><dl><dt>역할</dt><dd>' + escapeHtml(kind.description) + ' · 이름 기준 분류</dd><dt>이미지</dt><dd>' + escapeHtml(container.image) + '</dd><dt>서비스</dt><dd>' + escapeHtml(container.composeService || '정보 없음') + '</dd><dt>컨테이너 ID</dt><dd>' + escapeHtml(container.id) + '</dd></dl></details>'
+  const groups = groupContainerKinds(containers)
+  const scrollTop = target.scrollTop
+  const changed = setMarkup(target, `<div class="directory-total"><strong>전체 ${containers.length}개</strong><span>${groups.length}개 종류 · 이름 규약 기준</span></div>` + groups.map(group => {
+    const members = group.items.map(container => `<details class="directory-item directory-member" data-detail-id="directory:${escapeHtml(container.id)}"><summary><strong title="${escapeHtml(container.name)}">${escapeHtml(container.name)}</strong><span class="directory-state ${container.running ? 'is-running' : 'is-stopped'}">${container.running ? '실행 중' : '중지'}</span></summary><dl><dt>이미지</dt><dd>${escapeHtml(container.image)}</dd><dt>서비스</dt><dd>${escapeHtml(container.composeService || '정보 없음')}</dd><dt>컨테이너 ID</dt><dd>${escapeHtml(container.id)}</dd></dl></details>`).join('')
+    return `<details class="directory-group" name="container-role" data-detail-id="role:${escapeHtml(group.type)}"><summary><span class="directory-group-arrow" aria-hidden="true">›</span><strong>${escapeHtml(group.type)}</strong><b>${group.items.length}</b><span class="directory-group-counts"><span class="running-count">실행 ${group.runningCount}</span><span>중지 ${group.items.length-group.runningCount}</span></span></summary><div class="directory-members"><p>${escapeHtml(group.description)}</p>${members}</div></details>`
   }).join(''))
+  if (changed) target.scrollTop = scrollTop
+}
+
+function groupContainerKinds(containers) {
+  const groups = new Map()
+  for (const container of containers) {
+    const kind = containerKind(container)
+    if (!groups.has(kind.type)) groups.set(kind.type, {...kind, items:[], runningCount:0})
+    const group = groups.get(kind.type)
+    group.items.push(container)
+    if (container.running) group.runningCount++
+  }
+  return [...groups.values()].sort((a,b) => b.items.length-a.items.length || a.type.localeCompare(b.type))
 }

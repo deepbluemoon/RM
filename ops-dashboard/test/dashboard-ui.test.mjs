@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import vm from 'node:vm'
-import { summarizeMetrics, formatPercent } from '../src/public/metric-display.js'
-import { httpChartData, httpResponseDetails } from '../src/public/http-chart.js'
+import { summarizeMetrics, formatPercent, topContainerMetrics } from '../src/public/metric-display.js'
+import { httpChartData, httpResponseDetails, selectHttpContainer } from '../src/public/http-chart.js'
 
 async function makeUi() {
   class Classes {
@@ -93,8 +93,8 @@ async function makeUi() {
   const window = { scrollTo() {}, location: { replace(value) { this.hash = value }, get hash() { return hash }, set hash(value) { hash = value && !value.startsWith('#') ? '#' + value : value } } }
   const source = (await fs.readFile(new URL('../src/public/app.js', import.meta.url), 'utf8'))
     .replace(/^import [^\n]*\n/gm, '')
-    .replace(/^void init\(\)\s*$/m, 'globalThis.ui = { state, renderHistory, containerKind, showView, logLineMarkup, appendContainerLog, renderOverview, renderContainers, renderAlerts, renderActions, focusAlert, toggleContainerLogs, renderStatusCodes, openActionReview, renderActionHistory, renderReports, openRecordConfirmation }')
-  const context = vm.createContext({ document, window, EventSource, CSS: { escape: (value) => value }, summarizeMetrics, formatPercent, httpChartData, httpResponseDetails })
+    .replace(/^void init\(\)\s*$/m, 'globalThis.ui = { state, renderHistory, containerKind, groupContainerKinds, showView, logLineMarkup, appendContainerLog, renderOverview, renderContainers, renderAlerts, renderActions, focusAlert, toggleContainerLogs, renderStatusCodes, openActionReview, renderActionHistory, renderReports, openRecordConfirmation }')
+  const context = vm.createContext({ document, window, EventSource, CSS: { escape: (value) => value }, summarizeMetrics, formatPercent, topContainerMetrics, httpChartData, httpResponseDetails, selectHttpContainer })
   vm.runInContext(source, context)
   return { ui: context.ui, element, links, window, sources }
 }
@@ -105,20 +105,37 @@ test('PC 추이 그래프는 기본 두 지표와 CPU·메모리 개별 선택�
   for (const [filter, cpu, memory] of [['both', true, true], ['cpu', true, false], ['memory', false, true]]) {
     ui.state.historyFilter = filter
     ui.renderHistory()
-    assert.equal(element('resource-history').innerHTML.includes('stroke="#39d9e5"'), cpu)
-    assert.equal(element('resource-history').innerHTML.includes('stroke="#a27aff"'), memory)
+    assert.equal(element('resource-history').innerHTML.includes('stroke="var(--accent)"'), cpu)
+    assert.equal(element('resource-history').innerHTML.includes('stroke="var(--memory)"'), memory)
   }
   assert.equal(ui.containerKind({name:'rm-contract-risk-frontend'}).type, '프론트엔드')
   assert.equal(ui.containerKind({name:'rm-contract-risk-backend'}).type, '백엔드')
   assert.equal(ui.containerKind({name:'unknown'}).type, '미분류')
 })
 
+test('컨테이너 구성은 종류별로 전체 개수와 실행·중지 수를 빠짐없이 나눈다', async () => {
+  const {ui} = await makeUi()
+  const containers = [
+    {id:'a',name:'rm-contract-risk-backend',running:true},
+    {id:'b',name:'rm-contract-risk-backend-2',running:false},
+    {id:'c',name:'rm-contract-risk-frontend',running:true},
+    {id:'d',name:'unclassified',running:false},
+  ]
+  const groups = ui.groupContainerKinds(containers)
+  assert.equal(groups.reduce((total,group)=>total+group.items.length,0),4)
+  assert.equal(groups.find(group=>group.type==='백엔드').items.length,2)
+  assert.equal(groups.find(group=>group.type==='백엔드').runningCount,1)
+  assert.equal(groups.find(group=>group.type==='프론트엔드').items.length,1)
+  assert.equal(groups.find(group=>group.type==='미분류').items[0].id,'d')
+})
+
 test('통합 화면은 HTTP 상세, 대응 확인과 운영 기록을 제공한다', async () => {
   const { ui, element } = await makeUi()
-  ui.renderStatusCodes({ totals: { classCounts: { '1xx': 0, '2xx': 1, '3xx': 0, '4xx': 0, '5xx': 0 } }, services: [{ service: 'backend', total: 1, classCounts: { '5xx': 0 } }], routes: [{ service: 'backend', method: 'GET', route: '/api/health', total: 1 }], correlations: [{ service: 'backend', status: 503, traceId: 'trace-123', deploymentVersion: 'release-7' }] }, true)
-  assert.match(element('status-summary').innerHTML, /backend/)
-  assert.match(element('status-summary').innerHTML, /\/api\/health/)
-  assert.match(element('status-summary').innerHTML, /trace-123/)
+  ui.state.httpResponseCode = 503
+  ui.renderStatusCodes({ totals: { classCounts: { '1xx': 0, '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 1 }, counts: {503:1} }, containers: [{ name: 'backend', counts: {503:1} }], routes: [{ service: 'backend', method: 'GET', route: '/api/health', counts: {503:1} }], correlations: [{ containerName: 'backend', status: 503, traceId: 'trace-123' }] }, true)
+  assert.match(element('http-response-detail').innerHTML, /backend/)
+  assert.match(element('http-response-detail').innerHTML, /\/api\/health/)
+  assert.match(element('http-response-detail').innerHTML, /trace-123/)
   ui.state.catalog = { actions: [{ id: 'diagnose', label: '진단', includeLogs: true }] }
   ui.openActionReview('diagnose', 'OPS-1', { containerName: 'api' }, null)
   assert.equal(element('action-confirm-target').textContent, 'api')
@@ -169,7 +186,7 @@ test('실측 데이터만 표시하고 수집 불가와 실제 0을 구분한다
   const { ui, element } = await makeUi()
   ui.state.overview = { observedAt: 1000, dockerAvailable: false, containers: [], alerts: [], statusCodes: null }
   ui.renderOverview()
-  assert.equal(element('cpu-gauge-value').textContent, '-')
+  assert.match(element('cpu-ranking').innerHTML, /확인할 수 없습니다/)
   assert.match(element('container-counts').textContent, /확인할 수 없습니다/)
   assert.equal(element('monitor-status-text').textContent, '연결 확인 필요')
   ui.state.overview = {
@@ -178,8 +195,8 @@ test('실측 데이터만 표시하고 수집 불가와 실제 0을 구분한다
     statusCodes: { totals: { classCounts: { '1xx': 0, '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0 } } },
   }
   ui.renderOverview()
-  assert.equal(element('cpu-gauge-value').textContent, '0.0%')
-  assert.equal(element('memory-gauge-value').textContent, '25.0%')
+  assert.match(element('cpu-ranking').innerHTML, /0.0%/)
+  assert.match(element('memory-ranking').innerHTML, /25 B/)
   assert.match(element('io-summary').innerHTML, /2kB/)
   ui.state.overview.observedAt = 7000
   ui.state.overview.containers[0].stats.cpuPercent = 5
@@ -260,15 +277,20 @@ test('활성 경고 전용 메뉴와 페이지는 제거하고 운영 현황에 
   assert.doesNotMatch(html, /href="#alerts"|id="view-alerts"|id="alerts-list"/)
   assert.match(html, /id="overview-actions"/)
   assert.match(html, /id="overview-action-result"/)
+  assert.doesNotMatch(html, /id="http-container-filter"/)
+  assert.match(html, /id="http-response-detail"/)
 })
 
 test('HTTP 막대 옆에 실제 코드 구성과 출처를 표시하고 HTML은 이스케이프한다', async () => {
   const { ui, element } = await makeUi()
   ui.state.httpCodes = [{ code: 302, description: 'Found' }, { code: 304, description: 'Not Modified' }]
+  ui.state.httpResponseCode = 302
   ui.renderStatusCodes({ totals: { classCounts: { '1xx': 0, '2xx': 0, '3xx': 2, '4xx': 0, '5xx': 0 }, counts: { 302: 1, 304: 1 } }, containers: [{ name: '<script>api</script>', total: 2, counts: { 302: 1, 304: 1 }, classCounts: { '5xx': 0 } }] }, true)
-  const markup = element('status-summary').innerHTML
-  assert.match(markup, /302<\/b> Found <em>1건/)
-  assert.match(markup, /304<\/b> Not Modified <em>1건/)
+  const markup = element('status-summary').innerHTML + element('http-response-detail').innerHTML
+  assert.match(markup, /data-http-code="302"/)
+  assert.match(markup, /data-http-code="304"/)
+  assert.match(markup, /Found/)
   assert.match(markup, /&lt;script&gt;api&lt;\/script&gt;/)
   assert.doesNotMatch(markup, /<script>/)
+  assert.doesNotMatch(element('status-summary').innerHTML, /api&lt;/)
 })
