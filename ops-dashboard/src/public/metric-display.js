@@ -19,3 +19,13 @@ export function summarizeMetrics(overview) {
 export function formatPercent(value, unavailable = '수집 불가') {
   return Number.isFinite(value) ? `${value.toFixed(1)}%` : unavailable
 }
+
+export function topContainerMetrics(overview, metric) {
+  const running = overview?.dockerAvailable ? (overview.containers || []).filter((item) => item.running) : []
+  const field = metric === 'cpu' ? 'cpuPercent' : 'memoryUsedBytes'
+  const measured = running.filter((item) => Number.isFinite(item.stats?.[field]) && item.stats[field] >= 0)
+  const items = measured.map((item) => ({ id: item.id, name: item.name || item.id, value: item.stats[field] }))
+    .sort((left, right) => right.value - left.value || left.name.localeCompare(right.name) || left.id.localeCompare(right.id))
+    .slice(0, 5)
+  return { items, measuredCount: measured.length, runningCount: running.length }
+}

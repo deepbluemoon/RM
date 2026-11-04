@@ -38,6 +38,7 @@ case "\$1" in
       printf 'line-one\\nline-two\\npartial'
     else
       printf '2026-11-02T00:00:00Z application ready\\n'
+      printf '2026-11-02T00:00:01Z GET /health status=503\\n' >&2
     fi
     ;;
   version)
@@ -93,6 +94,8 @@ test('로그 tail을 읽고 follow 스트림의 잔여 버퍼를 flush한다', a
   await withDocker(async () => {
     const logs = await readLogs('abc123', { tail: 0, since: '1m' })
     assert.match(logs, /application ready/)
+    assert.match(logs, /GET \/health status=503/)
+    assert.ok(logs.indexOf('application ready') < logs.indexOf('status=503'))
 
     const lines = []
     await new Promise((resolve, reject) => {

@@ -10,6 +10,18 @@ export function httpChartData(status, dockerAvailable) {
   return { state: partial ? 'partial' : 'ready', total, bars: values.filter(({ count }) => count > 0).map((item) => ({ ...item, percent: item.count / total * 100 })) }
 }
 
+export function selectHttpContainer(status, containerId = '') {
+  if (!status || !containerId) return status
+  const container = (status.containers || []).find((item) => item.id === containerId)
+  if (!container) return { ...status, totals: null, containers: [], routes: [], correlations: [] }
+  const names = (status.containers || []).map((item) => item.name).filter(Boolean)
+  const collectionErrors = (status.collectionErrors || []).filter((error) => {
+    const text = String(error)
+    return text.startsWith(`${container.name}:`) || !names.some((name) => text.startsWith(`${name}:`))
+  })
+  return { ...status, totals: { total: container.total, counts: container.counts, classCounts: container.classCounts }, containers: [container], routes: [], correlations: (status.correlations || []).filter((item) => item.containerName === container.name), collectionErrors }
+}
+
 export function httpResponseDetails(status, statusClass, catalog = []) {
   const descriptions = new Map(catalog.map((item) => [Number(item.code), item.description]))
   return Object.entries(status?.totals?.counts || {})

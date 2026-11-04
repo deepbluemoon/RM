@@ -20,7 +20,7 @@ function runDocker(args, options = {}) {
         reject(new Error(message))
         return
       }
-      resolve(String(stdout))
+      resolve(options.includeStderr ? [stdout, stderr].filter(Boolean).join('\n') : String(stdout))
     })
     options.signal?.addEventListener('abort', () => child.kill('SIGTERM'), { once: true })
   })
@@ -111,7 +111,12 @@ export async function readLogs(containerId, { tail = 200, since } = {}) {
   const args = ['logs', '--timestamps', '--tail', String(Math.min(Math.max(Number(tail) || 200, 1), 1_000))]
   if (since) args.push('--since', String(since))
   args.push(containerId)
-  return runDocker(args, { timeout: 20_000 })
+  const output = await runDocker(args, { timeout: 20_000, includeStderr: true })
+  return output.split('\n').filter(Boolean).sort((left, right) => {
+    const a = left.match(/^\d{4}-\d{2}-\d{2}T\S+/)?.[0]
+    const b = right.match(/^\d{4}-\d{2}-\d{2}T\S+/)?.[0]
+    return a && b ? a.localeCompare(b) : 0
+  }).join('\n')
 }
 
 export function streamLogs(containerId, { tail = 200, onData, onError, onClose } = {}) {
