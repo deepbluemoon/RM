@@ -35,3 +35,30 @@ RM / MONITOR          연결 상태 · 마지막 관측       운영 | 모니터
 
 main 최신 상태에서 분기하며 병합 직전에 origin/main을 다시 반영하고 충돌 및 검사를 수행한다.
 운영 컨테이너를 바꾸지 않고 별도 로컬 포트에서 미리 확인한다.
+
+## 로컬 시연
+
+PowerShell에서 저장소 루트를 기준으로 실행한다. Node 20 이상과 Docker CLI가 필요하다.
+
+```powershell
+$env:OPS_DASHBOARD_PORT = '9761'
+$env:OPS_DASHBOARD_HOST = '127.0.0.1'
+$env:OPS_CONTAINER_SCOPE = 'name'
+$env:OPS_NAME_PREFIXES = 'rm-contract-risk-'
+node ops-dashboard/src/server.mjs
+```
+
+운영 화면: http://127.0.0.1:9761/#overview
+모니터링 화면: http://127.0.0.1:9761/monitor.html
+이미 같은 포트가 실행 중이면 중복 기동하지 않는다. 모니터링 서버 자체의 컨테이너화는 필요 없다.
+전체 화면 버튼 또는 F11을 사용한다. 추이는 실제 관측 이후 쌓이며 같은 탭의 모드 왕복에서 최근 5분을 보존한다.
+
+## 2026-11-04 검증 결과
+
+- 통과: 실제 RM 컨테이너 3개 실행/전체 7개 연결, 운영/모니터링 링크 왕복, CPU/메모리 순위 선택, 목록 페이지 이동.
+- 통과: 1920×1080 및 3840×2160에서 페이지 가로/세로 넘침 없음. Full HD 컨테이너 목록 내부 넘침 없음.
+- 통과: 새 데이터 처리 검사 2개, JavaScript 구문 검사, git diff --check.
+- 전체 검사: 62개 중 60개 통과, 2개 실패. 변경 전 main 사본에서 동일 실패 재현.
+  - actions.test.mjs: 서비스 미설정 안내 문구 기대값 불일치.
+  - dashboard-ui.test.mjs: 기존 VM 테스트에 localStorage 모의 객체 누락.
+- 미실행: 실제 시연 디스플레이에서의 거리별 가독성, Chrome 외 브라우저의 전환 대체 동작.
