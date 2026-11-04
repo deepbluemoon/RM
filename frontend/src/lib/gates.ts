@@ -22,7 +22,7 @@ interface Entry { title: string; reason: string; actor: ReleaseActor; release: s
 export const GATE_DICT: Record<string, Entry> = {
   G0: { title: '외부 자료를 모두 받지 못했습니다', reason: '일부 기관에서 변경분을 받지 못해 새 지식 기준일을 만들 수 없습니다. 현재 기준일을 유지합니다', actor: 'operator', release: '운영자 - 다시 수집', actions: [{ id: 'retry_collect', label: '다시 수집' }] },
   G1: { title: '구조 분리 실패 항목 - 이번 반영에서 제외됩니다', reason: '항목을 조·항·호 또는 사실관계·판단·근거로 나누지 못했습니다', actor: 'operator', release: '운영자 - 검토 목록에서 정정 후 다음 갱신에 다시 반영', actions: [{ id: 'open_review_list', label: '검토 목록 열기' }] },
-  G2: { title: '파일 조건을 충족하지 않습니다', reason: '50MB·300쪽 한도 초과, 암호화, 손상 또는 지원하지 않는 형식입니다', actor: 'user', release: '사용자 - 조건에 맞는 파일 또는 텍스트로 다시 입력', actions: [{ id: 'choose_other_file', label: '다른 파일 선택' }, { id: 'switch_to_text', label: '텍스트 붙여넣기로 전환' }] },
+  G2: { title: '파일 조건을 충족하지 않습니다', reason: '파일 50MB·300쪽, HTML 5MB 또는 압축 문서 XML 32MB 한도 초과, 암호화, 손상 또는 지원하지 않는 형식입니다', actor: 'user', release: '사용자 - 조건에 맞는 파일 또는 텍스트로 다시 입력', actions: [{ id: 'choose_other_file', label: '다른 파일 선택' }, { id: 'switch_to_text', label: '텍스트 붙여넣기로 전환' }] },
   G3: { title: 'URL 본문을 가져올 수 없습니다', reason: '로그인이 필요한 페이지이거나 접근이 차단되었거나 본문이 없습니다', actor: 'user', release: '사용자 - 파일 업로드 또는 텍스트 붙여넣기로 전환', actions: [{ id: 'switch_to_file', label: '파일 업로드로 전환' }, { id: 'switch_to_text', label: '텍스트 붙여넣기로 전환' }] },
   G4: { title: '이번 달 무료 분석을 모두 사용했습니다', reason: '무료 분석 3건을 모두 사용했습니다. 기존 결과는 그대로 볼 수 있습니다', actor: 'system', release: '시스템 - 월 초기화' },
   G5: { title: '분석 일시 불가', reason: '분석 서버가 응답하지 않습니다. 서버가 복구되면 다시 시도해 주세요', actor: 'operator', release: '운영자 - 서버 복구', actions: [{ id: 'recheck_status', label: '상태 다시 확인' }] },

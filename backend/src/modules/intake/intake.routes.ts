@@ -12,6 +12,7 @@ import { createRequest } from './intake.service.js';
 import { supportedFormats } from '../extract/index.js';
 import { fetchTermsPage, UrlFetchError } from './urlFetch.js';
 import { putUrlSource } from './urlSources.js';
+import { MAX_DOCUMENT_TEXT_CHARS } from './limits.js';
 
 /** multer·busboy 버전에 따라 파일명이 UTF-8 그대로 오거나 latin1 로 풀려 온다 — latin1 로 풀린 경우에만 되돌린다 */
 export function utf8FileName(name: string): string {
@@ -49,7 +50,7 @@ intakeRouter.post(
     const r = await precheck(file.buffer, originalName, supportedFormats());
     if (!r.ok) {
       await raise('G2', r.reasonCode ?? r.checks.find((c) => !c.passed)?.check ?? 'precheck_failed', subject, {
-        status: 400,
+        status: r.reasonCode === 'too_large' ? 413 : 400,
         params: { detail: r.reason },
         extra: { checks: r.checks },
         detail: { checks: r.checks },
@@ -100,7 +101,7 @@ const AnalysisBody = z.object({
   source: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('file'), uploadToken: z.string().min(1).max(64) }),
     z.object({ kind: z.literal('url'), sourceToken: z.string().min(1).max(64) }),
-    z.object({ kind: z.literal('text'), text: z.string().min(1).max(2_000_000) }),
+    z.object({ kind: z.literal('text'), text: z.string().min(1).max(MAX_DOCUMENT_TEXT_CHARS) }),
   ]),
 });
 
