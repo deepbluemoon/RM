@@ -20,6 +20,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .auth import require_bearer
 from .classifiers import CONTRACT_TYPE_KO, Classifier, ClauseText, load_classifiers
@@ -32,9 +33,76 @@ from .ollama_client import Inventory, OllamaClient, OllamaError
 from .postfilter import AssertionFilter
 
 log = logging.getLogger("crd.access")
+MAX_EVIDENCE_TEXT_CHARS = 20_000
+MAX_EVIDENCE_TOTAL_CHARS = 100_000
 if not logging.getLogger().handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)  # httpx 요청 로그 억제
+
+
+class BodySizeLimit:
+    """Content-Length 유무와 관계없이 실제 수신한 요청 본문을 제한한다."""
+
+    def __init__(self, app: ASGIApp, max_bytes: int, read_timeout_sec: float = 30):
+        self.app = app
+        self.max_bytes = max_bytes
+        self.read_timeout_sec = read_timeout_sec
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] not in ("POST", "PUT", "PATCH", "DELETE"):
+            await self.app(scope, receive, send)
+            return
+        headers = dict(scope.get("headers", []))
+        declared = headers.get(b"content-length", b"")
+        request_id = headers.get(b"x-request-id", b"").decode("ascii", "ignore") or uuid.uuid4().hex[:12]
+        started = time.perf_counter()
+
+        async def reject(status: int, detail: str) -> None:
+            response = JSONResponse({"detail": detail}, status_code=status)
+            response.headers["x-request-id"] = request_id
+            await response(scope, receive, send)
+            log.info("rid=%s %s %s status=%d latency_ms=%d", request_id, scope["method"], scope["path"],
+                     status, (time.perf_counter() - started) * 1000)
+
+        if declared.isdigit() and int(declared) > self.max_bytes:
+            await reject(413, "요청 본문이 너무 큽니다")
+            return
+
+        # 최대 max_bytes까지만 읽고, 한도를 넘기면 JSON 파싱·모델 호출 전에 413을 보낸다.
+        received: list[dict] = []
+        total = 0
+        oversized = False
+        try:
+            async with asyncio.timeout(self.read_timeout_sec):
+                while True:
+                    message = await receive()
+                    if message["type"] == "http.disconnect":
+                        return
+                    if message["type"] != "http.request":
+                        continue
+                    total += len(message.get("body", b""))
+                    if total > self.max_bytes:
+                        oversized = True
+                        break
+                    received.append(message)
+                    if not message.get("more_body", False):
+                        break
+        except TimeoutError:
+            await reject(408, "요청 본문 수신 시간이 초과되었습니다")
+            return
+        if oversized:
+            await reject(413, "요청 본문이 너무 큽니다")
+            return
+
+        messages = iter(received)
+
+        async def replay() -> dict:
+            try:
+                return next(messages)
+            except StopIteration:
+                return await receive()
+
+        await self.app(scope, replay, send)
 
 
 # ------------------------------------------------------------------ 요청 스키마
@@ -78,10 +146,10 @@ class Scores(Strict):
 
 
 class Evidence(Strict):
-    id: str
+    id: str = Field(max_length=64)
     source_type: Literal["law_article", "ftc_case", "std_terms"]
-    title: str
-    text: str
+    title: str = Field(max_length=500)
+    text: str = Field(max_length=MAX_EVIDENCE_TEXT_CHARS)
 
 
 class EmbedReq(Strict):
@@ -203,15 +271,11 @@ def create_app(
     async def access_log(request: Request, call_next):
         rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
         t0 = time.perf_counter()
-        cl = request.headers.get("content-length")
-        if cl and cl.isdigit() and int(cl) > s.max_body_bytes:
-            resp = JSONResponse({"detail": "요청 본문이 너무 큽니다"}, status_code=413)
-        else:
-            try:
-                resp = await call_next(request)
-            except Exception as e:  # 처리 못 한 오류 = 고장(500). 503 은 «준비 안 됨»(적재 중·Ollama)만 — 본문 없이 종류만 남긴다
-                logging.getLogger("crd").error("rid=%s 처리 오류 %s", rid, type(e).__name__)
-                resp = JSONResponse({"detail": "내부 오류"}, status_code=500)
+        try:
+            resp = await call_next(request)
+        except Exception as e:  # 처리 못 한 오류 = 고장(500). 503 은 «준비 안 됨»(적재 중·Ollama)만 — 본문 없이 종류만 남긴다
+            logging.getLogger("crd").error("rid=%s 처리 오류 %s", rid, type(e).__name__)
+            resp = JSONResponse({"detail": "내부 오류"}, status_code=500)
         resp.headers["x-request-id"] = rid
         log.info("rid=%s %s %s status=%d latency_ms=%d", rid, request.method, request.url.path,
                  resp.status_code, (time.perf_counter() - t0) * 1000)
@@ -313,9 +377,12 @@ def create_app(
     @app.post("/v1/judge", dependencies=auth)
     async def judge(req: JudgeReq, request: Request):
         check_text(req.clause)
+        if sum(len(ev.title) + len(ev.text) for ev in req.evidence) > MAX_EVIDENCE_TOTAL_CHARS:
+            raise HTTPException(413, "근거 텍스트가 한도를 넘습니다")
         body = req.model_dump(mode="json")
         return await state(request).llm.judge(body)
 
+    app.add_middleware(BodySizeLimit, max_bytes=s.max_body_bytes)
     return app
 
 

@@ -14,6 +14,7 @@ import { stripAssertiveSentences } from '../results/explanation.filter.js';
 import { extractDocument, type ExtractedDoc } from '../extract/index.js';
 import { getDocuments, getRequest } from '../analysis/analysis.repo.js';
 import { readRaw } from '../intake/rawStore.js';
+import { MAX_DOCUMENT_TEXT_CHARS } from '../intake/limits.js';
 import { classifyContract } from './classifier.js';
 import { splitDocuments } from './multiDoc.js';
 import type { FileFormat } from '../../domain/codes.js';
@@ -58,6 +59,17 @@ export async function runStructuring(requestId: number, signal: AbortSignal): Pr
     throwIfAborted(signal);
     const [doc] = await getDocuments(requestId);
     if (!doc) return;
+
+    // 압축 파일·OCR·URL에서 나온 본문도 붙여넣기와 같은 한도를 적용한다.
+    // 큰 문자열을 비식별화하거나 조항별로 DB/모델에 복제하기 전에 중단한다.
+    if (ex.text.length > MAX_DOCUMENT_TEXT_CHARS) {
+      await withTx(async (conn) => {
+        await conn.query("UPDATE analysis_request SET stage = 'stopped' WHERE request_id = ? AND stage <> 'stopped'", [requestId]);
+        await conn.query('UPDATE document SET is_contract = FALSE, ocr_applied = ?, raw_delete_due_at = CURRENT_TIMESTAMP WHERE request_id = ?', [ex.ocrApplied, requestId]);
+      });
+      await recordGate('G2', 'extracted_text_too_large', { requestId, userId: req.user_id, sessionId: req.session_id });
+      return;
+    }
 
     // 2.2 계약서 판별 — 원문은 메모리에서만 다룬다
     const verdict = classifyContract(ex.text);

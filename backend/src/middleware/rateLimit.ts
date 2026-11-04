@@ -14,5 +14,7 @@ export function rateLimits(api: Router): void {
   api.use('/api-keys', mk(10, 60));
   api.use('/intake/uploads', mk(10, 30));
   api.use('/intake/url-fetches', mk(10, 30));
+  // 붙여넣기·파일 분석은 비식별화와 모델 작업을 큐에 쌓으므로 접수 자체도 제한한다.
+  api.use('/analyses', mk(10, 20));
   api.use('/feedback', mk(10, 60));
 }

@@ -26,44 +26,66 @@ export interface PrecheckOutcome {
 
 /** R-05a 안내 — HWP 는 형식은 맞지만 이 서비스가 본문을 읽지 못한 경우 */
 export const HWP_VARIANT_MESSAGE = 'HWP 본문을 읽지 못했습니다 - HWPX·PDF 로 저장하거나 텍스트 붙여넣기로 입력해 주세요';
+// 업로드 HTML은 jsdom으로 파싱하므로 PDF와 동일한 50MB를 허용하지 않는다.
+export const HTML_MAX_BYTES = 5 * 1024 * 1024;
 
 /** 형식 = PDF·HWP·HWPX·DOCX·HTML(T103). 지원 목록은 extract/index.ts 등록부(supportedFormats)가 단일 지점 */
 export async function precheck(buf: Buffer, originalName: string, supported: readonly FileFormat[]): Promise<PrecheckOutcome> {
   const maxMb = policy('FILE_MAX_MB');
   const maxPages = policy('FILE_MAX_PAGES');
   const sizeOk = buf.length <= maxMb * 1024 * 1024;
+  if (!sizeOk) {
+    const skipped = '파일 크기 초과로 검사하지 않았습니다';
+    return {
+      ok: false, format: null, pages: null, sizeBytes: buf.length,
+      checks: [
+        { check: 'format', passed: false, message: skipped },
+        { check: 'size', passed: false, message: `${(buf.length / 1024 / 1024).toFixed(1)}MB / 한도 ${maxMb}MB` },
+        { check: 'pages', passed: false, message: skipped },
+        { check: 'encrypted', passed: false, message: skipped },
+        { check: 'corrupt', passed: false, message: skipped },
+      ],
+      reason: `${maxMb}MB 한도 초과`, reasonCode: 'too_large',
+    };
+  }
   const sniff = await sniffFormat(buf, originalName);
   const format = sniff.format && supported.includes(sniff.format) ? sniff.format : null;
+  const htmlTooLarge = format === 'html' && buf.length > HTML_MAX_BYTES;
   let encrypted = sniff.format === null && sniff.reason === 'encrypted_office';
   let corrupt = false;
   let pages: number | null = null;
   let variant = false;
-  if (format === 'pdf') {
+  let expandedTooLarge = false;
+  // 이미 크기를 넘은 파일은 PDF/ZIP 파서를 호출하지 않는다.
+  if (sizeOk && !htmlTooLarge && format === 'pdf') {
     try {
       pages = await pdfPageCount(buf);
     } catch (e) {
       if (e instanceof PdfError && e.kind === 'encrypted') encrypted = true;
       else corrupt = true;
     }
-  } else if (format) {
+  } else if (sizeOk && !htmlTooLarge && format) {
     const probe = await probeDocument(format, buf);
     encrypted = probe.encrypted;
     corrupt = probe.corrupt;
     pages = probe.pages;
     variant = probe.failure === 'unsupported_variant';
+    expandedTooLarge = probe.failure === 'too_large';
   }
   const pagesOk = pages === null || pages <= maxPages;
   const formatOk = (format !== null || encrypted) && !variant;
   const formatMsg = variant ? HWP_VARIANT_MESSAGE : formatOk ? `${(format ?? sniff.format ?? 'docx').toUpperCase()} 형식` : '지원하지 않는 형식입니다';
   const checks: PrecheckItem[] = [
     { check: 'format', passed: formatOk, message: formatMsg },
-    { check: 'size', passed: sizeOk, message: `${(buf.length / 1024 / 1024).toFixed(1)}MB / 한도 ${maxMb}MB` },
+    { check: 'size', passed: sizeOk && !expandedTooLarge && !htmlTooLarge, message: expandedTooLarge ? '압축 해제된 문서 본문이 한도를 넘습니다' : htmlTooLarge ? 'HTML 파일은 5MB까지입니다' : `${(buf.length / 1024 / 1024).toFixed(1)}MB / 한도 ${maxMb}MB` },
     { check: 'pages', passed: pagesOk, message: pages === null ? '쪽수 확인 대상 아님' : `${pages}쪽 / 한도 ${maxPages}쪽` },
     { check: 'encrypted', passed: !encrypted, message: encrypted ? '암호가 걸린 파일입니다' : '암호 없음' },
     { check: 'corrupt', passed: !corrupt, message: corrupt ? '파일이 손상되어 열 수 없습니다' : '정상' },
   ];
   const reasons: string[] = [];
   if (!sizeOk) reasons.push(`${maxMb}MB 한도 초과`);
+  if (expandedTooLarge) reasons.push('압축 해제된 문서 본문 한도 초과');
+  if (htmlTooLarge) reasons.push('HTML 파일 5MB 한도 초과');
   if (!pagesOk) reasons.push(`${maxPages}쪽 한도 초과`);
   if (encrypted) reasons.push('암호화');
   if (corrupt) reasons.push('손상');
@@ -76,6 +98,6 @@ export async function precheck(buf: Buffer, originalName: string, supported: rea
     sizeBytes: buf.length,
     checks,
     reason: reasons.join(' / '),
-    ...(variant && !encrypted && !corrupt && sizeOk && pagesOk ? { reasonCode: 'unsupported_variant' } : {}),
+    ...(expandedTooLarge || htmlTooLarge ? { reasonCode: 'too_large' } : variant && !encrypted && !corrupt && sizeOk && pagesOk ? { reasonCode: 'unsupported_variant' } : {}),
   };
 }

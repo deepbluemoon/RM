@@ -115,6 +115,8 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/DetectResponse' }
         '400': { $ref: '#/components/responses/Error' }
+        '408': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
         '504': { $ref: '#/components/responses/Error' }
   /v1/detect/illegal:
@@ -207,10 +209,10 @@ paths:
                     required: [id, source_type, title, text]
                     additionalProperties: false
                     properties:
-                      id: { type: string, description: 'evidence_version_id 문자열 — 설명 주장의 evidence_ids 로 되돌아온다' }
+                      id: { type: string, maxLength: 64, description: 'evidence_version_id 문자열 — 설명 주장의 evidence_ids 로 되돌아온다' }
                       source_type: { type: string, enum: [law_article, ftc_case, std_terms] }
-                      title: { type: string, example: '약관의 규제에 관한 법률 제10조' }
-                      text: { type: string }
+                      title: { type: string, maxLength: 500, example: '약관의 규제에 관한 법률 제10조' }
+                      text: { type: string, maxLength: 20000, description: '근거 전체(title+text)는 요청당 100000자까지' }
       responses:
         '200':
           description: 판정
@@ -235,6 +237,8 @@ paths:
                   model_version: { type: string }
                   knowledge_date: { type: string, format: date }
         '400': { $ref: '#/components/responses/Error' }
+        '408': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
         '504': { $ref: '#/components/responses/Error' }
   /v1/embed:
