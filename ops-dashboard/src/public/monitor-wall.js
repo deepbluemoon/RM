@@ -6,12 +6,36 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp
 const number = value => Number.isFinite(value) ? value.toLocaleString('ko-KR', { maximumFractionDigits: 1 }) : '—'
 const memory = bytes => Number.isFinite(bytes) ? bytes >= 1073741824 ? `${number(bytes / 1073741824)} GiB` : `${number(bytes / 1048576)} MiB` : '—'
 const time = at => new Date(at).toLocaleTimeString('en-GB', { hour12:false })
-const colors = { '1xx':'#a4b5c4', '2xx':'#5ae6ce', '3xx':'#a7a2ff', '4xx':'#ffc078', '5xx':'#ff8297' }
+const colors = { '1xx':'#8da3ad', '2xx':'#28ce82', '3xx':'#89a7ee', '4xx':'#f4b858', '5xx':'#ff6c7d' }
 let lastAvailable = false
 let data = null, failed = false, metric = 'cpu', page = 0, samples = [], lastSample = null
+let fleetPages = 1, fleetTimer
 try { const saved=JSON.parse(sessionStorage.getItem('rm-wall-history')||'[]'); if(Array.isArray(saved))samples=saved.filter(item=>Number.isFinite(item?.at)&&item.at>Date.now()-300000).slice(-100) } catch {}
 lastSample=samples.at(-1)?.at??null
 try { const cached=JSON.parse(sessionStorage.getItem('rm-overview-cache')||'null');if(cached&&Date.now()-cached.observedAt<20000)data=cached } catch {}
+function renderFleet(available) {
+  const containers = available ? [...data.containers].sort((a,b)=>Number(b.running)-Number(a.running)||a.name.localeCompare(b.name)) : []
+  fleetPages = Math.max(1, Math.ceil(containers.length / 3))
+  page = Math.min(page, fleetPages - 1)
+  const visible = containers.slice(page * 3, page * 3 + 3)
+  const signature = `${page}:${JSON.stringify(visible.map(item => [item.id, item.name, item.composeService, item.state, item.status, item.running]))}`
+  if ($('fleet').dataset.signature !== signature) {
+    $('fleet').dataset.signature = signature
+    $('fleet').innerHTML = visible.map(item=>{const bad=item.status?.includes('unhealthy')||['restarting','dead'].includes(item.state);return `<div class="fleet-row"><div><b title="${escape(item.name)}">${escape(item.name)}</b><small>${escape(item.composeService||item.state||'컨테이너')}</small></div><span class="badge ${bad?'bad':item.running?'':'off'}">${bad?'확인 필요':item.running?'실행 중':'중지'}</span></div>`}).join('')||'<div class="quiet">표시할 관측 데이터가 없습니다</div>'
+  }
+  $('fleet-count').textContent=`전체 ${containers.length}개 · 3개씩 표시`; $('fleet-page').textContent=`${page+1} / ${fleetPages}`
+  $('fleet-prev').disabled=page===0; $('fleet-next').disabled=page===fleetPages-1
+}
+function scheduleFleetRotation() {
+  clearTimeout(fleetTimer)
+  fleetTimer = setTimeout(() => {
+    if (fleetPages > 1 && !document.hidden) {
+      page = (page + 1) % fleetPages
+      renderFleet(lastAvailable)
+    }
+    scheduleFleetRotation()
+  }, 3000)
+}
 function render() {
   const summary = wallSummary(failed ? null : data)
   const available = summary.available
@@ -31,7 +55,7 @@ function render() {
   else if (!available && samples.at(-1)?.cpu !== null) samples.push({at,cpu:null,memory:null})
   samples = samples.filter(item => item.at >= Date.now() - 300000).slice(-100)
   try { sessionStorage.setItem('rm-wall-history',JSON.stringify(samples)) } catch {}
-  drawChart('cpu', '#5ae6ce'); drawChart('memory', '#a7a2ff')
+  drawChart('cpu', 'var(--cyan)'); drawChart('memory', 'var(--violet)')
   $('history-start').textContent = time(Date.now()-300000)
   $('history-end').textContent = time(Date.now())
   $('history-note').textContent = samples.filter(item => Number.isFinite(item.cpu) || Number.isFinite(item.memory)).length < 2 ? '관측 데이터를 모으는 중입니다' : '빈 구간은 미수집 · 좌우 차트의 세로축 단위가 다릅니다'
@@ -50,11 +74,7 @@ function render() {
   })
   const retained = available && data.containers.some(container => container.statsRetained)
   $('ranking-note').textContent = '측정 ' + ranking.measuredCount + '/' + ranking.runningCount + '개 · ' + (retained ? '일부 최근 측정값' : '1위 사용량 기준')
-  const containers = available ? [...data.containers].sort((a,b)=>Number(b.running)-Number(a.running)||a.name.localeCompare(b.name)) : []
-  const pages = Math.max(1,Math.ceil(containers.length/3)); page=Math.min(page,pages-1)
-  $('fleet').innerHTML=containers.slice(page*3,page*3+3).map(item=>{const bad=item.status?.includes('unhealthy')||['restarting','dead'].includes(item.state);return `<div class="fleet-row"><div><b title="${escape(item.name)}">${escape(item.name)}</b><small>${escape(item.composeService||item.state||'컨테이너')}</small></div><span class="badge ${bad?'bad':item.running?'':'off'}">${bad?'확인 필요':item.running?'실행 중':'중지'}</span></div>`}).join('')||'<div class="quiet">표시할 관측 데이터가 없습니다</div>'
-  $('fleet-count').textContent=`전체 ${containers.length}개 · 3개씩 표시`; $('fleet-page').textContent=`${page+1} / ${pages}`
-  $('fleet-prev').disabled=page===0; $('fleet-next').disabled=page===pages-1
+  renderFleet(available)
   const http=httpChartData(data?.statusCodes,available)
   $('http-total').textContent=http.state==='empty'?'0':number(http.total)
   if (!$('http-bar').children.length) $('http-bar').innerHTML=Object.entries(colors).map(([label,color])=>`<span data-class="${label}" style="background:${color};width:0"></span>`).join('')
@@ -70,15 +90,15 @@ function drawChart(field,color){
   const max=Math.max(field==='cpu'?10:1048576,...values)*1.15
   const paths=chartSegments(samples,field,Date.now(),max)
   $(field+'-axis').textContent=`0 – ${field==='cpu'?number(max)+'%':memory(max)}`
-  $(field+'-chart').innerHTML=[10,55,100,145].map(y=>`<line x1="0" x2="600" y1="${y}" y2="${y}" stroke="#293a45" stroke-dasharray="3 5"/>`).join('')+paths.map(points=>`<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`).join('')+(values.length<2?'<text x="300" y="85" text-anchor="middle">관측 데이터 수집 중</text>':'')
+  $(field+'-chart').innerHTML=[10,55,100,145].map(y=>`<line x1="0" x2="600" y1="${y}" y2="${y}" stroke="var(--border)" stroke-dasharray="3 5"/>`).join('')+paths.map(points=>`<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`).join('')+(values.length<2?'<text x="300" y="85" text-anchor="middle">관측 데이터 수집 중</text>':'')
 }
 async function poll(){
   try{const response=await fetch('/api/overview',{cache:'no-store',signal:AbortSignal.timeout(8000)});if(!response.ok)throw new Error('수집 실패');data=await response.json();try{sessionStorage.setItem('rm-overview-cache',JSON.stringify(data))}catch{};failed=false}catch{failed=true}
   render();setTimeout(poll,5000)
 }
 document.querySelectorAll('[data-metric]').forEach(button=>button.addEventListener('click',()=>{metric=button.dataset.metric;document.querySelectorAll('[data-metric]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));render()}))
-$('fleet-prev').addEventListener('click',()=>{page--;render()});$('fleet-next').addEventListener('click',()=>{page++;render()})
+$('fleet-prev').addEventListener('click',()=>{page--;renderFleet(lastAvailable);scheduleFleetRotation()});$('fleet-next').addEventListener('click',()=>{page++;renderFleet(lastAvailable);scheduleFleetRotation()})
 $('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{$('freshness').textContent='전체 화면을 지원하지 않습니다 · F11을 사용하세요'}})
 document.addEventListener('fullscreenchange',()=>{$('fullscreen').setAttribute('aria-label',document.fullscreenElement?'전체 화면 종료':'전체 화면으로 보기')})
 function clock(){ $('clock').textContent=time(Date.now());$('date').textContent=new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'});if(lastAvailable && Date.now()-data.observedAt>20000)render() }
-clock();setInterval(clock,1000);render();poll()
+clock();setInterval(clock,1000);render();poll();scheduleFleetRotation()

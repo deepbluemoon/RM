@@ -38,6 +38,11 @@ test('대시보드의 정상 경로와 없는 경로를 구분한다', async (t)
   assert.deepEqual(await (await fetch(`${base}/api/actions/history`)).json(), { events: [] })
   assert.deepEqual(await (await fetch(`${base}/api/reports`)).json(), { reports: [] })
 
+  const deniedRemove = await fetch(`${base}/api/containers/remove`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ containerId: 'a'.repeat(12) }) })
+  assert.equal(deniedRemove.status, 403)
+  const invalidRemove = await fetch(`${base}/api/containers/remove`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-ops-intent': 'remove-container' }, body: JSON.stringify({ containerId: 'invalid id' }) })
+  assert.equal(invalidRemove.status, 400)
+
   for (const pathname of ['/missing-route-for-test', '/missing.js', '/api/missing']) {
     const response = await fetch(`${base}${pathname}`, { redirect: 'manual' })
     assert.equal(response.status, 404, pathname)

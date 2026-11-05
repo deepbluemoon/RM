@@ -13,3 +13,27 @@
 .legend-item, .plot-caption b, .rank-label { font-size: .74rem; }
 .plot-footer { font-size: .65rem; }
 .http-bar span[hidden] { display: none; }
+@keyframes fleet-arrive { from { opacity: .4; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+.fleet-row { animation: fleet-arrive .28s ease-out both; }
+.fleet-row:nth-child(2) { animation-delay: .04s; }
+.fleet-row:nth-child(3) { animation-delay: .08s; }
+
+/* Keep the five wall sections visible on a short desktop viewport. */
+@media (min-width: 1101px) and (max-height: 800px) {
+  .wall {
+    height: 100dvh;
+    min-height: 0;
+    padding: .55rem 1.25rem .4rem;
+    gap: .45rem;
+    grid-template-rows: auto minmax(85px, .8fr) minmax(165px, 1.9fr) minmax(195px, 2fr) auto;
+  }
+  .charts, .details-grid, .trend-pair { min-height: 0; }
+  .summary article { padding: .55rem .8rem; }
+  .summary strong { font-size: 1.9rem; }
+  .status-tile strong { font-size: 1.45rem; }
+  .panel { padding: .6rem .8rem; }
+  .panel-heading { margin-bottom: .35rem; }
+  .fleet { overflow: hidden; }
+  .http-bar { margin: .45rem 0 .55rem; }
+  .http-legend { gap: .25rem .7rem; }
+}

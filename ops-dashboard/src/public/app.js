@@ -2,7 +2,8 @@ import { beginActionProgress, endActionProgress } from './action-progress.js'
 import { summarizeMetrics, formatPercent, topContainerMetrics } from './metric-display.js'
 import { httpChartData, httpResponseDetails } from './http-chart.js'
 
-const state = { httpResponseCode: null, historyFilter: 'both', overview: null, catalog: null, httpCodes: [], responseAlertId: null, expandedContainerLogs: new Set(), containerLogSources: new Map(), containerLogLines: new Map(), history: [], lastSample: null, highlightedAlertId: null, pendingAction: null, pendingRecordOperation: null, packages: null }
+const containerOrderKey = 'rm-ops-container-order-v1'
+const state = { httpResponseCode: null, historyFilter: 'both', overview: null, catalog: null, httpCodes: [], responseAlertId: null, expandedContainerLogs: new Set(), containerLogSources: new Map(), containerLogLines: new Map(), containerOrder: readContainerOrder(), history: [], lastSample: null, highlightedAlertId: null, pendingAction: null, pendingRecordOperation: null, packages: null }
 const $ = (id) => document.getElementById(id)
 const viewNames = { overview: '운영 현황', containers: '컨테이너', 'status-codes': 'HTTP 응답', 'error-codes': '오류 확인', packages: '패키지 업데이트' }
 const markupCache = new WeakMap()
@@ -20,6 +21,41 @@ function setMarkup(target, markup) {
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char])
+}
+
+function readContainerOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(containerOrderKey) || '{}')
+    return Object.fromEntries(['running', 'waiting', 'stopped'].map(key => [key, Array.isArray(saved[key]) ? saved[key].filter(id => typeof id === 'string') : []]))
+  } catch { return { running: [], waiting: [], stopped: [] } }
+}
+function saveContainerOrder() {
+  try { localStorage.setItem(containerOrderKey, JSON.stringify(state.containerOrder)) } catch {}
+}
+function containerGroupKey(container) {
+  const stateName = String(container.state || '').toLowerCase()
+  const statusName = String(container.status || '').toLowerCase()
+  return ['created', 'restarting', 'paused'].includes(stateName) || statusName.includes('health: starting') ? 'waiting' : container.running ? 'running' : 'stopped'
+}
+function orderedGroupContainers(containers, key) {
+  const positions = new Map((state.containerOrder[key] || []).map((id, index) => [id, index]))
+  return containers.filter(container => containerGroupKey(container) === key).sort((a, b) =>
+    (positions.get(a.id) ?? Infinity) - (positions.get(b.id) ?? Infinity))
+}
+function moveContainerInGroup(sourceId, targetId, before) {
+  const containers = state.overview?.containers || []
+  const source = containers.find(container => container.id === sourceId)
+  const target = containers.find(container => container.id === targetId)
+  if (!source || !target || sourceId === targetId || containerGroupKey(source) !== containerGroupKey(target)) return false
+  const key = containerGroupKey(source)
+  const ids = orderedGroupContainers(containers, key).map(container => container.id)
+  const previous = ids.join('\u0000')
+  ids.splice(ids.indexOf(sourceId), 1)
+  ids.splice(ids.indexOf(targetId) + (before ? 0 : 1), 0, sourceId)
+  if (ids.join('\u0000') === previous) return false
+  state.containerOrder[key] = ids
+  saveContainerOrder()
+  return true
 }
 
 function formatDuration(seconds) {
@@ -434,8 +470,33 @@ async function stopContainer(container, button) {
     showOperationToast(error.message, true)
   } finally {
     stoppingContainers.delete(container.id)
-    button.disabled = false
     button.textContent = '×'
+    const current = state.overview?.containers.find(item => item.id === container.id)
+    button.disabled = !current || (!current.running && containerGroupKey(current) !== 'stopped')
+  }
+}
+
+async function removeContainer(container, button) {
+  if (stoppingContainers.has(container.id) || !window.confirm(container.name + ' 컨테이너를 삭제할까요?\n컨테이너와 저장된 로그가 삭제됩니다.')) return
+  stoppingContainers.add(container.id)
+  button.disabled = true
+  button.textContent = '…'
+  try {
+    const response = await fetch('/api/containers/remove', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-ops-intent': 'remove-container' },
+      body: JSON.stringify({ containerId: container.id }),
+    })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error || '컨테이너를 삭제하지 못했습니다')
+    await refresh()
+    showOperationToast(result.warning || container.name + ' 삭제 완료', Boolean(result.warning))
+  } catch (error) {
+    showOperationToast(error.message, true)
+  } finally {
+    stoppingContainers.delete(container.id)
+    button.textContent = '×'
+    button.disabled = false
   }
 }
 
@@ -451,14 +512,14 @@ function renderContainers(containers, alerts, dockerAvailable) {
   }
   const groups = new Map([...list.querySelectorAll('[data-container-group]')].map(group => [group.dataset.containerGroup, { group, columns: group.querySelectorAll('.container-column'), count: 0 }]))
   const entries = new Map([...list.querySelectorAll('[data-container-entry]')].map((entry) => [entry.dataset.containerEntry, entry]))
-  containers.forEach((container) => {
+  const orderedContainers = [...groups.keys()].flatMap(key => orderedGroupContainers(containers, key))
+  orderedContainers.forEach((container) => {
     const stats = container.stats
     const ownAlerts = alerts.filter((alert) => alert.containerId === container.id)
-    const stateName = String(container.state || '').toLowerCase()
     const statusName = String(container.status || '').toLowerCase()
     const danger = ownAlerts.length || statusName.includes('unhealthy')
-    const preparing = ['created', 'restarting', 'paused'].includes(stateName) || statusName.includes('health: starting')
-    const group = groups.get(preparing ? 'waiting' : container.running ? 'running' : 'stopped')
+    const preparing = containerGroupKey(container) === 'waiting'
+    const group = groups.get(containerGroupKey(container))
     const index = group.count++
     const status = preparing ? '대기' : container.running ? '실행 중' : '중지'
     const statusClass = danger ? ' danger' : preparing ? ' warning' : container.running ? '' : ' stopped'
@@ -475,27 +536,35 @@ function renderContainers(containers, alerts, dockerAvailable) {
       button.dataset.containerId = container.id
       button.addEventListener('click', () => toggleContainerLogs(container.id))
       entry.append(button)
+      const moveButton = document.createElement('button')
+      moveButton.type = 'button'
+      moveButton.className = 'container-move'
+      entry.append(moveButton)
     }
     entries.delete(container.id)
     const column = group.columns[index % 2]
     if (column.children[Math.floor(index / 2)] !== entry) column.insertBefore(entry, column.children[Math.floor(index / 2)] || null)
     const row = entry.querySelector('.container-row')
     row.setAttribute('aria-expanded', String(expanded))
+    const moveButton = entry.querySelector('.container-move')
+    moveButton.setAttribute('aria-label', container.name + ' 순서 이동')
+    moveButton.title = '드래그: 원하는 위치 · 더블클릭: 다음 자리 · 방향키: 한 자리 이동'
     setMarkup(row, '<div class="row-top"><strong class="container-name">' + escapeHtml(container.name) + '</strong><span class="status' + statusClass + '">' + status + '</span></div><div class="container-id">' + escapeHtml(container.id.slice(0, 12)) + ' · ' + escapeHtml(container.image) + '</div><div class="metrics">' + metric('CPU', stats?.cpuPercent) + metric('MEM', stats?.memoryPercent) + '</div>' + ownAlerts.map((alert) => '<div class="row-alert">' + escapeHtml(alert.message || alert.code) + '</div>').join('') + '<span class="container-log-hint">' + (expanded ? '로그 열림 · 클릭해 접기' : '클릭해 실시간 로그 펼치기') + '</span>')
     let stopButton = entry.querySelector('.container-stop')
-    if (container.running && !preparing && !stopButton) {
+    if (!stopButton) {
       stopButton = document.createElement('button')
       stopButton.type = 'button'
       stopButton.className = 'container-stop'
       stopButton.textContent = '×'
-      stopButton.setAttribute('aria-label', container.name + ' 중지')
-      stopButton.title = container.name + ' 중지'
-      stopButton.addEventListener('click', () => void stopContainer(container, stopButton))
       row.after(stopButton)
-    } else if (!container.running || preparing) {
-      stopButton?.remove()
     }
-    entry.classList.toggle('can-stop', container.running && !preparing)
+    const removable = !container.running && !preparing
+    stopButton.disabled = (!container.running && !removable) || stoppingContainers.has(container.id)
+    stopButton.classList.toggle('is-delete', removable)
+    stopButton.setAttribute('aria-label', container.name + (removable ? ' 삭제' : container.running ? ' 중지' : ' 대기 중'))
+    stopButton.title = removable ? container.name + ' 삭제' : container.running ? container.name + ' 중지' : '대기 중인 컨테이너'
+    stopButton.onclick = () => void (removable ? removeContainer(container, stopButton) : stopContainer(container, stopButton))
+    entry.classList.add('has-stop')
     const panel = entry.querySelector('.inline-log-panel')
     if (!expanded) panel?.remove()
     else if (!panel) {
@@ -756,6 +825,107 @@ async function init() {
     renderHistory()
   }))
   const containerList = $('container-list')
+  const commitContainerMove = (sourceId, targetId, before) => {
+    const entries = [...containerList.querySelectorAll('[data-container-entry]')]
+    const positions = new Map(entries.map(entry => [entry.dataset.containerEntry, entry.getBoundingClientRect()]))
+    if (!moveContainerInGroup(sourceId, targetId, before)) return
+    renderContainers(state.overview.containers, state.overview.alerts || [], state.overview.dockerAvailable)
+    if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      for (const entry of entries) {
+        const previous = positions.get(entry.dataset.containerEntry)
+        const current = entry.getBoundingClientRect()
+        const x = previous.left - current.left
+        const y = previous.top - current.top
+        if (x || y) entry.animate([{ transform: `translate(${x}px, ${y}px)` }, { transform: 'translate(0, 0)' }], { duration: 320, easing: 'cubic-bezier(.2,.75,.25,1)' })
+      }
+    }
+    containerList.querySelectorAll('.container-move').forEach(handle => {
+      if (handle.closest('[data-container-entry]')?.dataset.containerEntry === sourceId) handle.focus({ preventScroll: true })
+    })
+  }
+  let draggedContainer = null
+  let dropTarget = null
+  let lastDragEndedAt = 0
+  const clearDropTarget = () => {
+    dropTarget?.entry.classList.remove('is-drop-before', 'is-drop-after')
+    dropTarget = null
+  }
+  containerList.addEventListener('pointerdown', (event) => {
+    const handle = event.target.closest('.container-move')
+    if (!handle || (event.pointerType === 'mouse' && event.button !== 0)) return
+    const entry = handle.closest('[data-container-entry]')
+    const bounds = entry.querySelector('.container-row').getBoundingClientRect()
+    draggedContainer = { id: entry.dataset.containerEntry, group: entry.closest('[data-container-group]').dataset.containerGroup, entry, handle, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, offsetX: event.clientX - bounds.left, offsetY: event.clientY - bounds.top, width: bounds.width, started: false, preview: null }
+  })
+  window.addEventListener('pointermove', (event) => {
+    if (!draggedContainer || event.pointerId !== draggedContainer.pointerId) return
+    if (!draggedContainer.started && Math.hypot(event.clientX - draggedContainer.startX, event.clientY - draggedContainer.startY) < 5) return
+    if (!draggedContainer.started) {
+      draggedContainer.started = true
+      draggedContainer.entry.classList.add('is-reordering')
+      draggedContainer.handle.setPointerCapture(event.pointerId)
+      const preview = draggedContainer.entry.querySelector('.container-row').cloneNode(true)
+      preview.classList.add('container-drag-preview')
+      preview.style.width = draggedContainer.width + 'px'
+      document.body.append(preview)
+      draggedContainer.preview = preview
+    }
+    event.preventDefault()
+    draggedContainer.preview.style.transform = `translate3d(${event.clientX - draggedContainer.offsetX}px, ${event.clientY - draggedContainer.offsetY}px, 0)`
+    const entry = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-container-entry]')
+    if (!entry || entry === draggedContainer.entry || entry.closest('[data-container-group]')?.dataset.containerGroup !== draggedContainer.group) {
+      clearDropTarget()
+      return
+    }
+    const sourceRow = draggedContainer.entry.querySelector('.container-row').getBoundingClientRect()
+    const targetRow = entry.querySelector('.container-row').getBoundingClientRect()
+    const sameRow = Math.abs(sourceRow.top - targetRow.top) < 8
+    const before = sameRow
+      ? sourceRow.left > targetRow.left
+      : event.clientY < targetRow.top + targetRow.height / 2
+    if (dropTarget?.entry === entry && dropTarget.before === before) return
+    clearDropTarget()
+    dropTarget = { entry, before }
+    entry.classList.add(before ? 'is-drop-before' : 'is-drop-after')
+  })
+  const finishContainerDrag = (event) => {
+    if (!draggedContainer || (event.pointerId !== undefined && event.pointerId !== draggedContainer.pointerId)) return
+    if (draggedContainer.started) lastDragEndedAt = performance.now()
+    const sourceId = draggedContainer.id
+    const targetId = dropTarget?.entry.dataset.containerEntry
+    const before = dropTarget?.before
+    draggedContainer.entry.classList.remove('is-reordering')
+    draggedContainer.preview?.remove()
+    clearDropTarget()
+    draggedContainer = null
+    if (event.type === 'pointerup' && targetId) commitContainerMove(sourceId, targetId, before)
+  }
+  window.addEventListener('pointerup', finishContainerDrag)
+  window.addEventListener('pointercancel', finishContainerDrag)
+  window.addEventListener('blur', finishContainerDrag)
+  containerList.addEventListener('dblclick', (event) => {
+    const handle = event.target.closest('.container-move')
+    if (!handle || performance.now() - lastDragEndedAt < 400) return
+    event.preventDefault()
+    const entry = handle.closest('[data-container-entry]')
+    const key = entry.closest('[data-container-group]').dataset.containerGroup
+    const items = orderedGroupContainers(state.overview?.containers || [], key)
+    if (items.length < 2) return
+    const index = items.findIndex(item => item.id === entry.dataset.containerEntry)
+    const next = items[(index + 1) % items.length]
+    commitContainerMove(entry.dataset.containerEntry, next.id, index === items.length - 1)
+  })
+  containerList.addEventListener('keydown', (event) => {
+    const handle = event.target.closest('.container-move')
+    if (!handle || !['ArrowUp', 'ArrowDown'].includes(event.key)) return
+    event.preventDefault()
+    const entry = handle.closest('[data-container-entry]')
+    const key = entry.closest('[data-container-group]').dataset.containerGroup
+    const items = orderedGroupContainers(state.overview?.containers || [], key)
+    const index = items.findIndex(item => item.id === entry.dataset.containerEntry)
+    const target = items[index + (event.key === 'ArrowUp' ? -1 : 1)]
+    if (target) commitContainerMove(entry.dataset.containerEntry, target.id, event.key === 'ArrowUp')
+  })
   let logDrag = null
   let suppressDraggedClick = false
   containerList.addEventListener('pointerdown', (event) => {

@@ -187,6 +187,27 @@ async function handle(req, res) {
       return sendJson(res, error.statusCode || 500, { error: error.message })
     }
   }
+  if (req.method === 'POST' && url.pathname === '/api/containers/remove') {
+    if (req.headers['x-ops-intent'] !== 'remove-container' || req.headers['sec-fetch-site'] === 'cross-site') {
+      return sendJson(res, 403, { error: '대시보드에서 삭제 요청을 보내세요' })
+    }
+    try {
+      const input = await readJsonBody(req, 2048)
+      const id = input?.containerId
+      if (typeof id !== 'string' || !/^[a-f0-9]{12,64}$/.test(id)) return sendJson(res, 400, { error: '유효하지 않은 컨테이너 ID입니다' })
+      const target = filterContainers(await listContainers()).find(container => container.id === id)
+      if (!target || !['exited', 'dead'].includes(target.state)) return sendJson(res, 409, { error: '현재 감시 범위에서 중지된 컨테이너가 아닙니다' })
+      await runDocker(['rm', id], { timeout: 35000 })
+      let warning = ''
+      try { await logArchive.remove(target) }
+      catch { warning = '컨테이너는 삭제됐지만 보관 로그를 정리하지 못했습니다' }
+      await pendingMonitorTick
+      await refreshMonitor()
+      return sendJson(res, 200, { ok: true, ...(warning ? { warning } : {}) })
+    } catch (error) {
+      return sendJson(res, error.statusCode || 500, { error: error.message })
+    }
+  }
   if (req.method === 'POST' && url.pathname === '/api/actions/run') {
     void (async () => {
       try {
