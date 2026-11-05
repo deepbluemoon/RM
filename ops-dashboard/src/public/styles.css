@@ -522,3 +522,53 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 }
 .container-entry.is-drop-before::before { top: -5px; }
 .container-entry.is-drop-after::after { bottom: -5px; }
+
+#view-overview .overview-records > summary {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-deep);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+}
+#view-overview .overview-records > summary:hover,
+#view-overview .overview-records[open] > summary { border-color: var(--accent); }
+#view-overview .overview-records > summary::marker { color: var(--accent); }
+#view-overview .operator-records { gap: 10px; margin-top: 10px; padding-top: 0; border-top: 0; }
+#view-overview .report-section-head h3 { font-size: 15px; color: var(--text); }
+#report-list .record-row { padding: 10px 12px; flex-wrap: wrap; }
+#report-list .record-row strong { font-size: 13px; overflow-wrap: anywhere; }
+#report-list .record-row small, #report-list .record-empty { font-size: 12px; }
+#report-list .record-row a, .report-download-link {
+  display: inline-block;
+  padding: 7px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 650;
+}
+.report-download-link { margin-top: 8px; }
+
+#report-list .record-row { align-items: start; }
+#report-list .report-card-open { min-width: 0; align-self: stretch; padding: 0; color: var(--text); text-align: left; }
+#report-list .report-card-open:hover { color: var(--accent); }
+#report-preview-dialog { width: min(680px, calc(100vw - 32px)); box-sizing: border-box; }
+#report-preview-id { display: block; margin-top: 4px; color: var(--muted); }
+#close-report-preview { min-width: 36px; min-height: 36px; font-size: 23px; }
+.report-preview-body {
+  max-height: min(55vh, 32rem);
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-deep);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

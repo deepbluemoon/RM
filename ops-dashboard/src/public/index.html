@@ -45,11 +45,11 @@
             <section class="panel overview-alerts" aria-labelledby="response-center-title">
               <div class="panel-head response-center-head"><div><p class="eyebrow">OPERATIONS DESK</p><h2 id="response-center-title">경고 확인 및 조치</h2><p class="response-center-description">현재 상태를 확인하고 필요한 대응을 여기서 바로 실행하세요.</p></div><span id="response-status" class="response-status">확인 중</span></div>
               <div class="response-workspace"><div class="response-queue"><div class="response-section-head"><h3>활성 경고 <span id="alert-count">-</span></h3><span>실시간 감지</span></div><div id="alert-preview" class="compact-list"></div></div><div class="response-scripts"><div class="response-section-head"><h3>대응 스크립트</h3><span>관련 경고 발생 시 활성화</span></div><div id="overview-actions" class="overview-actions"></div></div></div>
-              <details class="overview-records"><summary>실행 이력 · 진단 보고서</summary><section class="operator-records" aria-label="운영 실행 기록">
-                  <div class="record-section-head"><h3>최근 실행 이력</h3><button id="refresh-records" class="text-button" type="button">새로고침</button></div>
-                  <div id="action-history" class="record-list" aria-live="polite"><p class="record-empty">실행 이력을 불러오는 중입니다.</p></div>
+              <details class="overview-records"><summary>진단 보고서 · 실행 이력</summary><section class="operator-records" aria-label="운영 실행 기록">
                   <div class="record-section-head report-section-head"><h3>진단 보고서</h3><button id="cleanup-old-reports" class="text-button" type="button">30일 지난 보고서 정리</button></div>
                   <div id="report-list" class="record-list" aria-live="polite"><p class="record-empty">보고서를 불러오는 중입니다.</p></div>
+                  <div class="record-section-head"><h3>최근 실행 이력</h3><button id="refresh-records" class="text-button" type="button">새로고침</button></div>
+                  <div id="action-history" class="record-list" aria-live="polite"><p class="record-empty">실행 이력을 불러오는 중입니다.</p></div>
                 </section></details><div id="overview-action-result" class="action-result hidden" role="status" aria-live="polite"></div>
             </section>
             <div class="monitor-grid">
@@ -74,6 +74,10 @@
                 <div class="action-dialog-buttons"><button id="cancel-action" class="text-button" type="button">취소</button><button id="confirm-action" class="primary-action-button" type="button">검토 후 실행</button></div>
               </dialog>
               <div id="operation-toast" class="operation-toast hidden" role="status" aria-live="polite"></div>
+              <dialog id="report-preview-dialog" class="action-dialog" aria-labelledby="report-preview-title">
+                <div class="code-dialog-head"><div><h2 id="report-preview-title">진단 보고서</h2><small id="report-preview-id"></small></div><button id="close-report-preview" class="text-button" type="button" aria-label="보고서 닫기" autofocus>×</button></div>
+                <pre id="report-preview-body" class="report-preview-body" aria-live="polite"></pre>
+              </dialog>
               <dialog id="record-confirm-dialog" class="action-dialog" aria-labelledby="record-confirm-title">
                 <div class="code-dialog-head"><div><p class="eyebrow">OPERATOR REVIEW</p><h2 id="record-confirm-title">보고서 작업 확인</h2></div><button id="close-record-dialog" class="text-button" type="button">닫기</button></div>
                 <p id="record-confirm-description" class="action-dialog-description"></p>
