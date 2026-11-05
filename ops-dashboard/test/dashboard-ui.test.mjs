@@ -183,6 +183,9 @@ test('로그 레벨과 원문 이스케이프를 유지하고 열린 스트림�
   const { ui, element } = await makeUi()
   assert.match(ui.logLineMarkup('INFO <script>'), /level-info.*&lt;script&gt;/)
   assert.match(ui.logLineMarkup('WARNING retry'), /level-warning/)
+  assert.match(ui.logLineMarkup('2026-11-05T00:00:00Z {"message":"info from retry","level":"warn"}'), /level-warning/)
+  assert.match(ui.logLineMarkup('\x1b[33mWARNING\x1b[0m: retry'), /level-warning/)
+  assert.match(ui.logLineMarkup('INFO previous warning cleared'), /level-info/)
   assert.match(ui.logLineMarkup('ERROR failed'), /level-error/)
   ui.state.overview = { dockerAvailable: true, containers: [{ id: 'abc', name: 'api', running: true }], alerts: [] }
   ui.toggleContainerLogs('abc')

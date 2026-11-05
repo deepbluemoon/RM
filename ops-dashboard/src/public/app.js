@@ -391,10 +391,13 @@ function renderIo(containers, dockerAvailable) {
 }
 
 function logLineMarkup(line) {
-  const match = String(line).match(/\b(ERROR|FATAL|CRITICAL|WARN(?:ING)?|INFO)\b/i)
+  const plain = String(line).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+  const explicit = plain.match(/(?:^|[\s,{\[])["']?(?:level(?:name)?|severity|log\.level)["']?\s*[:=]\s*["']?(ERROR|FATAL|CRITICAL|WARN(?:ING)?|INFO|DEBUG|TRACE)\b/i)
+  const prefix = plain.replace(/^\d{4}-\d{2}-\d{2}T\S+\s+/, '')
+  const match = explicit || prefix.match(/^\s*(?:\[?\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\]?\s*)?(?:[\[|:-]\s*)*(ERROR|FATAL|CRITICAL|WARN(?:ING)?|INFO|DEBUG|TRACE)\b/i)
   const level = match ? match[1].toUpperCase() : ''
-  const className = level === 'INFO' ? ' level-info' : level.startsWith('WARN') ? ' level-warning' : level ? ' level-error' : ''
-  return `<div class="log-line${className}">${escapeHtml(line)}</div>`
+  const className = level === 'INFO' ? ' level-info' : level.startsWith('WARN') ? ' level-warning' : /^(ERROR|FATAL|CRITICAL)$/.test(level) ? ' level-error' : ''
+  return `<div class="log-line${className}">${escapeHtml(plain)}</div>`
 }
 
 function appendContainerLog(containerId, line) {
@@ -660,10 +663,33 @@ function renderActionHistory(events) {
   target.innerHTML = events.map((event) => `<div class="record-row"><div><strong>${escapeHtml(event.actionLabel || event.actionId)}</strong><small>${escapeHtml(new Date(event.at).toLocaleString('ko-KR'))} · ${escapeHtml(event.actorName || event.actor)} · ${escapeHtml(event.code)} · ${escapeHtml(event.target || '대상 없음')}</small>${event.rationale ? `<small>선택 근거: ${escapeHtml(event.rationale)}</small>` : ''}<small class="record-status-${event.status === 'success' ? 'success' : 'failure'}">${event.status === 'success' ? '실행 완료' : '실행 실패'}${event.includeLogs ? ' · 로그 포함' : ''}</small></div>${event.reportId ? `<a href="/api/reports/${encodeURIComponent(event.reportId)}">보고서</a>` : ''}</div>`).join('')
 }
 
+let reportPreviewRequest = 0
+async function openReportPreview(reportId) {
+  const request = ++reportPreviewRequest
+  const dialog = $('report-preview-dialog')
+  const body = $('report-preview-body')
+  $('report-preview-id').textContent = reportId
+  body.textContent = '보고서를 불러오는 중입니다.'
+  body.scrollTop = 0
+  dialog.showModal()
+  try {
+    const response = await fetch('/api/reports/' + encodeURIComponent(reportId))
+    if (!response.ok) throw new Error('보고서 조회 실패')
+    const content = await response.text()
+    if (dialog.open && request === reportPreviewRequest) body.textContent = content || '보고서 본문이 비어 있습니다.'
+  } catch {
+    if (dialog.open && request === reportPreviewRequest) body.textContent = '보고서를 불러오지 못했습니다. 닫았다가 다시 열어 주세요.'
+  }
+}
+
 function renderReports(reports) {
   const target = $('report-list')
-  if (!reports.length) { target.innerHTML = '<p class="record-empty">저장된 진단 보고서가 없습니다.</p>'; return }
-  target.innerHTML = reports.map((report) => `<div class="record-row"><div><strong>${escapeHtml(report.id)}</strong><small>${escapeHtml(new Date(report.modifiedAt).toLocaleString('ko-KR'))} · ${formatBytes(report.sizeBytes)}</small></div><span><a href="/api/reports/${encodeURIComponent(report.id)}">다운로드</a> <button type="button" data-delete-report="${escapeHtml(report.id)}">삭제</button></span></div>`).join('')
+  if (!reports.length) { setMarkup(target, '<p class="record-empty">저장된 진단 보고서가 없습니다.</p>'); return }
+  const markup = reports.map((report) => `<div class="record-row"><button type="button" class="report-card-open" data-preview-report="${escapeHtml(report.id)}"><strong>${escapeHtml(report.id)}</strong><small>${escapeHtml(new Date(report.modifiedAt).toLocaleString('ko-KR'))} · ${formatBytes(report.sizeBytes)}</small></button><span><a href="/api/reports/${encodeURIComponent(report.id)}">다운로드</a> <button type="button" data-delete-report="${escapeHtml(report.id)}">삭제</button></span></div>`).join('')
+  if (!setMarkup(target, markup)) return
+  target.querySelectorAll('[data-preview-report]').forEach((button) => {
+    button.addEventListener('click', () => void openReportPreview(button.dataset.previewReport))
+  })
   target.querySelectorAll('[data-delete-report]').forEach((button) => button.addEventListener('click', () => openRecordConfirmation('delete', button.dataset.deleteReport)))
 }
 
@@ -877,12 +903,12 @@ async function init() {
       clearDropTarget()
       return
     }
-    const sourceRow = draggedContainer.entry.querySelector('.container-row').getBoundingClientRect()
-    const targetRow = entry.querySelector('.container-row').getBoundingClientRect()
-    const sameRow = Math.abs(sourceRow.top - targetRow.top) < 8
-    const before = sameRow
-      ? sourceRow.left > targetRow.left
-      : event.clientY < targetRow.top + targetRow.height / 2
+    // Use card slots so expanded logs and pointer height cannot change the destination.
+    const slot = (card) => {
+      const column = card.parentElement
+      return [...column.children].indexOf(card) * 2 + [...column.parentElement.children].indexOf(column)
+    }
+    const before = slot(draggedContainer.entry) > slot(entry)
     if (dropTarget?.entry === entry && dropTarget.before === before) return
     clearDropTarget()
     dropTarget = { entry, before }
@@ -986,6 +1012,13 @@ async function init() {
   $('refresh-records').addEventListener('click', () => { void refreshOperatorRecords().catch((error) => showOperationToast(error.message, true)) })
   $('cleanup-old-reports').addEventListener('click', () => openRecordConfirmation('cleanup'))
   $('close-record-dialog').addEventListener('click', () => $('record-confirm-dialog').close())
+  const reportDialog = $('report-preview-dialog')
+  $('close-report-preview').addEventListener('click', () => reportDialog.close())
+  reportDialog.addEventListener('click', (event) => {
+    if (event.target !== reportDialog) return
+    const bounds = reportDialog.getBoundingClientRect()
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) reportDialog.close()
+  })
   $('cancel-record-operation').addEventListener('click', () => $('record-confirm-dialog').close())
   $('confirm-record-operation').addEventListener('click', () => { void performRecordOperation() })
   try {
