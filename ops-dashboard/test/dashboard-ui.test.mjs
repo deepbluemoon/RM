@@ -103,7 +103,7 @@ async function makeUi() {
   const window = { scrollTo() {}, location: { replace(value) { this.hash = value }, get hash() { return hash }, set hash(value) { hash = value && !value.startsWith('#') ? '#' + value : value } } }
   const source = (await fs.readFile(new URL('../src/public/app.js', import.meta.url), 'utf8'))
     .replace(/^import [^\n]*\n/gm, '')
-    .replace(/^void init\(\)\s*$/m, 'globalThis.ui = { state, renderHistory, containerKind, groupContainerKinds, showView, logLineMarkup, appendContainerLog, renderOverview, renderContainers, renderAlerts, renderActions, focusAlert, toggleContainerLogs, renderStatusCodes, openActionReview, renderActionHistory, renderReports, openRecordConfirmation }')
+    .replace(/^void init\(\)\s*$/m, 'globalThis.ui = { state, renderHistory, containerKind, groupContainerKinds, showView, logLineMarkup, appendContainerLog, renderOverview, renderContainers, moveContainerInGroup, renderAlerts, renderActions, focusAlert, toggleContainerLogs, renderStatusCodes, openActionReview, renderActionHistory, renderReports, openRecordConfirmation }')
   const context = vm.createContext({ document, window, EventSource, CSS: { escape: (value) => value }, summarizeMetrics, formatPercent, topContainerMetrics, httpChartData, httpResponseDetails, selectHttpContainer })
   vm.runInContext(source, context)
   return { ui: context.ui, element, links, window, sources }
@@ -258,10 +258,34 @@ test('좌우 컨테이너 로그는 독립적으로 열리고 갱신 시 로그 
   const columns = element('container-list').querySelectorAll('.container-column')
   assert.equal(columns[0].children[0].dataset.containerEntry, 'abc')
   assert.equal(columns[1].children[0].dataset.containerEntry, 'def')
+  assert.equal(ui.moveContainerInGroup('abc', 'def', false), true)
+  ui.renderOverview()
+  assert.equal(columns[0].children[0].dataset.containerEntry, 'def')
+  assert.equal(columns[1].children[0].dataset.containerEntry, 'abc')
+  assert.equal(element('container-list').querySelector('[data-inline-log-output="abc"]'), originalOutput)
+  assert.equal(originalOutput.scrollTop, 37)
   ui.toggleContainerLogs('abc')
   assert.equal(sources[0].closed, true)
   assert.equal(sources[1].closed, false)
   assert.equal(ui.state.expandedContainerLogs.has('def'), true)
+})
+
+test('실행 카드의 중지와 중지 카드의 삭제를 구분한다', async () => {
+  const { ui, element } = await makeUi()
+  const containers = [
+    { id: 'run', name: 'running', state: 'running', running: true },
+    { id: 'wait', name: 'starting', state: 'running', status: 'health: starting', running: true },
+    { id: 'pause', name: 'paused', state: 'paused', running: false },
+    { id: 'stop', name: 'stopped', state: 'exited', running: false },
+  ]
+  ui.state.overview = { dockerAvailable: true, containers, alerts: [] }
+  ui.renderContainers(containers, [], true)
+  for (const id of ['run', 'wait', 'pause', 'stop']) {
+    const button = element('container-list').querySelector(`[data-container-entry="${id}"]`).querySelector('.container-stop')
+    assert.ok(button, `${id} 종료 표시`)
+    assert.equal(button.disabled, id === 'pause')
+    assert.match(button.attributes['aria-label'], id === 'stop' ? /삭제$/ : id === 'pause' ? /대기 중$/ : /중지$/)
+  }
 })
 
 test('운영 현황에서 대응 스크립트는 관련 활성 경고에만 실행 버튼을 제공한다', async () => {

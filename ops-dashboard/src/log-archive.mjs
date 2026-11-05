@@ -121,10 +121,28 @@ export function createLogArchive({
     }
   }
 
+  async function remove(container) {
+    const id = String(container.id || '')
+    const name = String(container.name || '')
+    if (!SAFE_ID.test(id) || !SAFE_ID.test(name)) throw new Error('유효하지 않은 컨테이너입니다')
+    const directory = path.join(root, name)
+    let files
+    try { files = await fs.readdir(directory, { withFileTypes: true }) }
+    catch (error) { if (error.code === 'ENOENT') return; throw error }
+    for (const file of files) {
+      if (!file.isFile()) continue
+      const suffix = file.name.startsWith(`${id}.`) ? file.name.slice(id.length + 1) : ''
+      if (suffix !== 'log' && suffix !== 'cursor' && !/^\d+\.log$/.test(suffix)) continue
+      await fs.rm(path.join(directory, file.name))
+    }
+    try { await fs.rmdir(directory) }
+    catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTEMPTY') throw error }
+  }
+
   function close() {
     for (const { child } of streams.values()) child.kill('SIGTERM')
     streams.clear()
   }
 
-  return { sync, close, get activeStreams() { return streams.size } }
+  return { sync, remove, close, get activeStreams() { return streams.size } }
 }

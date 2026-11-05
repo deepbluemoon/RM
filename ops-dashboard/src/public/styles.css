@@ -458,3 +458,67 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .container-stop:hover:not(:disabled) { background: #49262b; color: #ffd5d9; }
 .container-stop:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .container-stop:disabled { cursor: wait; }
+
+/* Keep the overview directory compact while making its roles and details readable. */
+#view-overview .directory-total { font-size: 12px; }
+#view-overview .directory-group > summary > strong { font-size: 13px; }
+#view-overview .directory-group > summary > b { font-size: 11px; }
+#view-overview .directory-members > p { font-size: 12px; line-height: 1.4; }
+#view-overview .directory-member summary strong { font-size: 12px; }
+#view-overview .directory-member dl { font-size: 11px; line-height: 1.45; }
+
+.container-entry .container-row { padding: 17px 43px 9px 11px; }
+.container-entry.has-stop .row-top { padding-right: 0; }
+.container-move {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transform: translateX(-50%);
+}
+.container-move::before {
+  content: '';
+  width: 32px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--muted);
+  transition: width .2s ease, background-color .2s ease;
+}
+.container-move:hover::before, .container-move:focus-visible::before { width: 38px; background: var(--cyan); }
+.container-move:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.container-move:active { cursor: grabbing; }
+.container-stop:disabled { cursor: not-allowed; opacity: .38; }
+.container-entry.is-reordering { opacity: .45; }
+.container-drag-preview {
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  opacity: .94;
+  box-shadow: 0 20px 40px #0008, 0 0 0 1px var(--cyan);
+  will-change: transform;
+}
+.container-entry.is-drop-before::before, .container-entry.is-drop-after::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan);
+  pointer-events: none;
+}
+.container-entry.is-drop-before::before { top: -5px; }
+.container-entry.is-drop-after::after { bottom: -5px; }
